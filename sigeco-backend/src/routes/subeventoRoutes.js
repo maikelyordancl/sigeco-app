@@ -2,8 +2,22 @@ const express = require('express');
 const router = express.Router();
 const { body, query, param } = require('express-validator');
 const subeventoController = require('../controllers/subeventoController');
+const { verificarToken } = require('../controllers/authController');
 
-// GET /api/subeventos?id_evento=:id  -> Obtener subeventos de un evento
+// Proteger todas las rutas con autenticación
+router.use(verificarToken);
+
+// --- AÑADIDO: Ruta para obtener subeventos sin campaña ---
+// GET /api/subeventos/evento/:id_evento/sin-campana
+router.get(
+    '/evento/:id_evento/sin-campana',
+    [
+        param('id_evento').isInt({ gt: 0 }).withMessage('El ID del evento debe ser un número válido.')
+    ],
+    subeventoController.getSubeventosSinCampana
+);
+
+// GET /api/subeventos?id_evento=:id  -> Obtener todos los subeventos de un evento
 router.get(
     '/',
     [ query('id_evento').isInt({ min: 1 }).withMessage('El ID del evento es obligatorio y debe ser un número.') ],
@@ -34,10 +48,8 @@ router.put(
     '/:id',
     [
         param('id').isInt({ min: 1 }).withMessage('El ID del subevento en la URL debe ser válido.'),
-        // Se añaden las mismas validaciones del body que en el POST
         body('nombre').notEmpty().withMessage('El nombre del subevento es obligatorio.').trim().escape(),
         body('fecha_inicio').isISO8601().toDate().withMessage('La fecha de inicio debe ser una fecha válida.'),
-        // ...puedes añadir el resto de validaciones del body aquí si lo deseas
     ],
     subeventoController.updateSubevento
 );

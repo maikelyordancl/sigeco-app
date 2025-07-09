@@ -76,3 +76,16 @@ exports.deleteSubevento = async (req, res) => {
         res.status(500).json({ success: false, error: 'Error del servidor al eliminar el subevento.' });
     }
 };
+//Obtiene los subeventos de un evento que no tienen una campaña asociada.
+exports.getSubeventosSinCampana = async (req, res) => {
+    const { id_evento } = req.params;
+
+    try {
+        // Llama a la función del modelo que ya creamos en el Canvas
+        const subeventos = await SubeventoModel.findSubeventosSinCampana(id_evento);
+        res.json({ success: true, data: subeventos });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, error: 'Error del servidor al obtener los subeventos.' });
+    }
+};

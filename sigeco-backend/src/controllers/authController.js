@@ -2,6 +2,7 @@ const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
+// Tu función de login (sin cambios)
 exports.login = async (req, res) => {
     const { email, password } = req.body;
 
@@ -43,4 +44,23 @@ exports.login = async (req, res) => {
         console.error(error);
         res.status(500).json({ success: false, error: 'No se pudo conectar con el servidor.' });
     }
+};
+
+
+// --- NUEVO: Middleware para verificar el token JWT ---
+exports.verificarToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Formato "Bearer TOKEN"
+
+    if (!token) {
+        return res.status(401).json({ success: false, error: 'Acceso denegado. No se proporcionó token.' });
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) {
+            return res.status(403).json({ success: false, error: 'Token inválido o expirado.' });
+        }
+        req.user = user; // Guardamos los datos del usuario en el objeto de la petición
+        next(); // El token es válido, continuamos a la siguiente función (el controlador)
+    });
 };

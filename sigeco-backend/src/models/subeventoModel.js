@@ -6,6 +6,12 @@ exports.findByEventId = async (id_evento) => {
     return rows;
 };
 
+// Modelo para encontrar un subevento por su ID
+exports.findById = async (id_subevento) => {
+    const [rows] = await pool.query('SELECT * FROM subeventos WHERE id_subevento = ?', [id_subevento]);
+    return rows[0] || null;
+};
+
 // Modelo para crear un nuevo subevento
 exports.create = async (subeventoData) => {
     const {
@@ -67,4 +73,17 @@ exports.updateById = async (id, subeventoData) => {
 exports.deleteById = async (id) => {
     const [result] = await pool.query('DELETE FROM subeventos WHERE id_subevento = ?', [id]);
     return result;
+};
+
+// Modelo para encontrar subeventos sin campaña asociada
+exports.findSubeventosSinCampana = async (id_evento) => {
+    const query = `
+        SELECT s.id_subevento, s.nombre
+        FROM subeventos s
+        LEFT JOIN campanas c ON s.id_subevento = c.id_subevento
+        WHERE s.id_evento = ? AND c.id_campana IS NULL
+        ORDER BY s.fecha_inicio ASC;
+    `;
+    const [rows] = await pool.query(query, [id_evento]);
+    return rows;
 };
