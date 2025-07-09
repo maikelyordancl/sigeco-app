@@ -1,0 +1,51 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id_contacto": 1,
+      "nombre": "Juan",
+      "apellido": "Pérez",
+      "email": "juan.perez@example.com",
+      "telefono": "+56 9 1234 5678",
+      "rut": "12.345.678-9",
+      "empresa": "Empresa A",
+      "actividad": "Tecnología",
+      "profesion": "Ingeniero",
+      "pais": "Chile",
+      "recibir_mail": true,
+      "fecha_creado": "2024-01-15T10:00:00Z",
+      "fecha_modificado": "2024-02-20T12:30:00Z"
+    },
+    {
+      "id_contacto": 2,
+      "nombre": "María",
+      "apellido": "González",
+      "email": "maria.gonzalez@example.com",
+      "telefono": "+56 9 9876 5432",
+      "rut": "11.223.344-5",
+      "empresa": "Empresa B",
+      "actividad": "Finanzas",
+      "profesion": "Contadora",
+      "pais": "Argentina",
+      "recibir_mail": false,
+      "fecha_creado": "2024-02-01T08:45:00Z",
+      "fecha_modificado": "2024-02-18T14:20:00Z"
+    },
+    {
+      "id_contacto": 3,
+      "nombre": "Carlos",
+      "apellido": "López",
+      "email": "carlos.lopez@example.com",
+      "telefono": "+56 9 5643 2109",
+      "rut": "22.334.556-7",
+      "empresa": "Empresa C",
+      "actividad": "Marketing",
+      "profesion": "Publicista",
+      "pais": "México",
+      "recibir_mail": true,
+      "fecha_creado": "2023-12-10T15:10:00Z",
+      "fecha_modificado": "2024-01-25T09:00:00Z"
+    }
+  ],
+  "error": null
+}
