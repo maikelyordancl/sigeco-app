@@ -1,167 +1,224 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useState, useEffect, useCallback } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { PlusCircle, Edit, Ticket } from 'lucide-react';
-import CrearSubCampañaDialog from '@/components/dialogs/CrearSubCampañaDialog';
-// --- AÑADIDO: Importamos el layout principal ---
-import MainLayout from '@/components/Layout/MainLayout';
+import { ArrowLeft, PlusCircle, Ticket, Edit } from "lucide-react";
+import { CrearSubCampañaDialog } from "@/components/dialogs/CrearSubCampañaDialog";
+import { GestionTicketsDialog } from "@/components/dialogs/GestionTicketsDialog";
+import { EditarCampanaDialog } from "@/components/dialogs/EditarCampanaDialog"; // 1. IMPORTAMOS el nuevo diálogo
+import MainLayout from "@/components/Layout/MainLayout";
+import toast from "react-hot-toast";
 
-// Definimos los tipos de datos que esperamos del backend
-interface Campaña {
-    id_campaña: number;
-    id_evento: number;
-    id_subevento: number | null;
-    nombre: string;
-    tipo_acceso: 'Gratuito' | 'De Pago';
-    estado: 'Borrador' | 'Activa' | 'Pausada' | 'Finalizada';
+// Tipos
+interface Campana {
+  id_campana: number;
+  nombre: string;
+  tipo_acceso: "Gratuito" | "De Pago";
+  estado: "Borrador" | "Activa" | "Pausada" | "Finalizada";
+  url_amigable: string;
+  id_subevento: number | null;
+  subevento_nombre?: string;
 }
 
-// Tipo para los subeventos que cargaremos en el formulario
-interface SubeventoSimple {
-    id_subevento: number;
-    nombre: string;
-}
+const GestionCampanasPage = () => {
+  const router = useRouter();
+  const params = useParams();
+  const id_evento = params.id as string;
 
-export default function GestionCampanasPage() {
-    const [campañas, setCampañas] = useState<Campaña[]>([]);
-    const [availableSubeventos, setAvailableSubeventos] = useState<SubeventoSimple[]>([]);
-    const [isCreateDialogOpen, setCreateDialogOpen] = useState(false);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const params = useParams();
-    const id_evento = params.id as string;
+  const [campanaPrincipal, setCampanaPrincipal] = useState<Campana | null>(null);
+  const [subCampanas, setSubCampanas] = useState<Campana[]>([]);
+  const [loading, setLoading] = useState(true);
 
-    const fetchCampañas = useCallback(async () => {
-        setLoading(true);
-        try {
-            const token = localStorage.getItem('token');
-            if (!token) throw new Error("No estás autenticado.");
+  // Estados para modales
+  const [isCreateModalOpen, setCreateModalOpen] = useState(false);
+  const [isTicketsModalOpen, setTicketsModalOpen] = useState(false);
+  const [selectedCampanaId, setSelectedCampanaId] = useState<number | null>(null);
+  
+  // --- 2. AÑADIMOS NUEVOS ESTADOS para el modal de EDICIÓN ---
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [campanaToEdit, setCampanaToEdit] = useState<Campana | null>(null);
+  // --- Fin de los nuevos estados ---
 
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/campanas/evento/${id_evento}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (!response.ok) throw new Error('Error al obtener las campañas.');
-
-            const result = await response.json();
-            if (result.success) {
-                setCampañas(result.data);
-            } else {
-                setError(result.error);
-            }
-        } catch (err: any) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    }, [id_evento]);
-
-    useEffect(() => {
-        const fetchAvailableSubeventos = async () => {
-            if (!id_evento) return;
-            try {
-                const token = localStorage.getItem('token');
-                if (!token) throw new Error("No estás autenticado.");
-                
-                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/subeventos/evento/${id_evento}/sin-campana`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (!response.ok) throw new Error('No se pudieron cargar los subeventos disponibles.');
-
-                const result = await response.json();
-                if (result.success) {
-                    setAvailableSubeventos(result.data);
-                }
-            } catch (err: any) {
-                console.error("Error fetching available subevents:", err.message);
-            }
-        };
-
-        fetchCampañas();
-        fetchAvailableSubeventos();
-    }, [id_evento, fetchCampañas]);
-
-    const campañaPrincipal = campañas.find(c => c.id_subevento === null);
-    const subCampañas = campañas.filter(c => c.id_subevento !== null);
-
-    if (loading && campañas.length === 0) {
-        // --- AÑADIDO: Mostramos el mensaje de carga dentro del layout ---
-        return <MainLayout><p>Cargando campañas...</p></MainLayout>;
+  const fetchCampanas = useCallback(async () => {
+    if (!id_evento) return;
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/campanas/evento/${id_evento}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) throw new Error("No se pudieron obtener las campañas.");
+      const responseData = await res.json();
+      if (responseData.success && Array.isArray(responseData.data)) {
+        const campanas: Campana[] = responseData.data;
+        setCampanaPrincipal(campanas.find((c) => !c.id_subevento) || null);
+        setSubCampanas(campanas.filter((c) => !!c.id_subevento));
+      } else {
+        throw new Error(responseData.message || "La respuesta de la API no tiene el formato esperado.");
+      }
+    } catch (error: any) {
+      toast.error(error.message || "No se pudieron cargar las campañas.");
+      setCampanaPrincipal(null);
+      setSubCampanas([]);
+    } finally {
+      setLoading(false);
     }
-    
-    if (error) {
-        // --- AÑADIDO: Mostramos el error dentro del layout ---
-        return <MainLayout><p className="text-red-500">Error: {error}</p></MainLayout>;
-    }
+  }, [id_evento]);
 
-    return (
-        // --- AÑADIDO: Envolvemos todo el contenido con MainLayout ---
-        <MainLayout>
-            <CrearSubCampañaDialog
-                isOpen={isCreateDialogOpen}
-                onClose={() => setCreateDialogOpen(false)}
-                id_evento={parseInt(id_evento)}
-                subeventosDisponibles={availableSubeventos}
-                onSuccess={() => {
-                    setCreateDialogOpen(false);
-                    fetchCampañas();
-                }}
-            />
+  useEffect(() => {
+    fetchCampanas();
+  }, [fetchCampanas]);
 
-            <div className="container mx-auto p-4">
-                <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-3xl font-bold">Gestión de Campañas</h1>
-                    <Button onClick={() => setCreateDialogOpen(true)}>
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Crear Sub-Campaña
-                    </Button>
+  const handleOpenTicketsModal = (id_campana: number) => {
+    setSelectedCampanaId(id_campana);
+    setTicketsModalOpen(true);
+  };
+
+  // --- 3. AÑADIMOS LAS FUNCIONES para abrir y cerrar el modal de EDICIÓN ---
+  const handleOpenEditModal = (campana: Campana) => {
+    setCampanaToEdit(campana);
+    setIsEditModalOpen(true);
+  };
+
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false);
+    setCampanaToEdit(null);
+  };
+
+  const onCampañaChange = () => {
+    fetchCampanas();
+  };
+  
+  const onCampañaActualizada = () => {
+    handleCloseEditModal();
+    onCampañaChange();
+  }
+
+  const renderCard = (campana: Campana) => (
+    <Card key={campana.id_campana} className="flex flex-col shadow-md hover:shadow-lg transition-shadow">
+      <CardHeader>
+        <div className="flex justify-between items-start">
+          <CardTitle>{campana.nombre}</CardTitle>
+          <Badge
+            className={campana.estado === "Activa" ? "bg-green-600 text-white" : ""}
+          >
+            {campana.estado}
+          </Badge>
+        </div>
+        <CardDescription>
+          {campana.tipo_acceso} - {campana.subevento_nombre || "Evento Principal"}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex-grow">
+        <p className="text-sm text-gray-500 break-all">
+          URL:{" "}
+          <a
+            href={`/${campana.url_amigable}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline"
+          >
+            /{campana.url_amigable}
+          </a>
+        </p>
+      </CardContent>
+      <CardFooter className="grid grid-cols-2 gap-2 pt-4">
+        {/* --- 4. ACTIVAMOS EL BOTÓN Y LE AÑADIMOS EL onClick --- */}
+        <Button variant="outline" size="sm" onClick={() => handleOpenEditModal(campana)}>
+          <Edit className="mr-2 h-4 w-4" /> Editar
+        </Button>
+        <Button
+          variant="default"
+          size="sm"
+          onClick={() => handleOpenTicketsModal(campana.id_campana)}
+          disabled={campana.tipo_acceso === "Gratuito"}
+        >
+          <Ticket className="mr-2 h-4 w-4" /> Tickets
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+
+  return (
+    <MainLayout>
+      <div className="p-4 md:p-6">
+        <div className="flex justify-between items-center mb-6">
+          <Button variant="outline" onClick={() => router.push("/eventos/gestion")}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> Volver a Eventos
+          </Button>
+          <h1 className="text-2xl md:text-3xl font-bold text-center">Gestión de Campañas</h1>
+          <Button onClick={() => setCreateModalOpen(true)}>
+            <PlusCircle className="mr-2 h-4 w-4" /> Crear Sub-Campaña
+          </Button>
+        </div>
+        
+        {loading ? (
+           <p className="text-center py-10">Cargando campañas...</p>
+        ) : (
+          <>
+            {campanaPrincipal && (
+              <div className="mb-8">
+                <h2 className="text-2xl font-semibold mb-4 border-l-4 border-blue-600 pl-3">Campaña Principal</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {renderCard(campanaPrincipal)}
                 </div>
-
-                {campañaPrincipal && (
-                    <Card className="mb-8 bg-slate-50">
-                        <CardHeader>
-                            <CardTitle className="text-2xl">{campañaPrincipal.nombre}</CardTitle>
-                            <CardDescription>Esta es la campaña general que cubre todo el evento.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex justify-between items-center">
-                            <div>
-                                <Badge variant={campañaPrincipal.estado === 'Activa' ? 'default' : 'secondary'}>{campañaPrincipal.estado}</Badge>
-                                <Badge variant="outline" className="ml-2">{campañaPrincipal.tipo_acceso}</Badge>
-                            </div>
-                            <div className="flex gap-2">
-                                <Button variant="outline" size="sm"><Edit className="mr-2 h-4 w-4" /> Editar</Button>
-                                <Button size="sm"><Ticket className="mr-2 h-4 w-4" /> Gestionar Tickets</Button>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
-
-                <h2 className="text-2xl font-semibold mb-4">Campañas de Subeventos</h2>
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    {subCampañas.map((campaña, i) => (
-                        <Card key={`${campaña.id_campaña}-${i}`}>
-                             <CardHeader>
-                                <CardTitle>{campaña.nombre}</CardTitle>
-                                <CardDescription>Campaña para subevento específico.</CardDescription>
-                            </CardHeader>
-                            <CardContent className="flex flex-col gap-4">
-                                <div className="flex gap-2">
-                                   <Badge variant={campaña.estado === 'Activa' ? 'default' : 'secondary'}>{campaña.estado}</Badge>
-                                   <Badge variant="outline">{campaña.tipo_acceso}</Badge>
-                                </div>
-                                 <div className="flex gap-2 mt-auto">
-                                    <Button variant="outline" size="sm"><Edit className="mr-2 h-4 w-4"/> Editar</Button>
-                                    <Button size="sm"><Ticket className="mr-2 h-4 w-4"/> Gestionar Tickets</Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
-                    {subCampañas.length === 0 && <p>No hay campañas para subeventos todavía.</p>}
+              </div>
+            )}
+            <div>
+              <h2 className="text-2xl font-semibold mb-4 border-l-4 border-blue-600 pl-3">Sub-Campañas</h2>
+              {subCampanas.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {subCampanas.map(renderCard)}
                 </div>
+              ) : (
+                <div className="text-center py-10 border-dashed border-2 rounded-lg mt-4">
+                  <p className="text-gray-500">No hay sub-campañas para este evento.</p>
+                </div>
+              )}
             </div>
-        </MainLayout>
-    );
-}
+            {/* Mensaje de no encontradas */}
+          </>
+        )}
+      </div>
+
+      <CrearSubCampañaDialog
+        isOpen={isCreateModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        id_evento={parseInt(id_evento)}
+        onSubCampañaCreada={() => {
+            setCreateModalOpen(false);
+            toast.success("Sub-campaña creada. Actualizando...");
+            onCampañaChange();
+        }}
+      />
+      
+      <GestionTicketsDialog
+        isOpen={isTicketsModalOpen}
+        onClose={() => setSelectedCampanaId(null)}
+        id_campana={selectedCampanaId}
+        onTicketChange={onCampañaChange}
+      />
+      
+      {/* --- 5. RENDERIZAMOS EL DIÁLOGO DE EDICIÓN --- */}
+      <EditarCampanaDialog
+        isOpen={isEditModalOpen}
+        onClose={handleCloseEditModal}
+        campana={campanaToEdit}
+        onCampanaActualizada={onCampañaActualizada}
+      />
+    </MainLayout>
+  );
+};
+
+export default GestionCampanasPage;

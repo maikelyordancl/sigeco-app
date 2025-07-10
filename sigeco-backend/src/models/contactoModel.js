@@ -68,3 +68,12 @@ exports.deleteById = async (id) => {
     const [result] = await pool.query('DELETE FROM contactos WHERE id_contacto = ?', [id]);
     return result;
 };
+
+// --- FUNCIÓN NUEVA AÑADIDA ---
+// Modelo para encontrar un contacto por su email.
+// Esto es crucial para el nuevo endpoint de inscripción pública.
+exports.findByEmail = async (email) => {
+    const query = 'SELECT * FROM contactos WHERE email = ?';
+    const [rows] = await pool.query(query, [email]);
+    return rows[0] || null;
+};

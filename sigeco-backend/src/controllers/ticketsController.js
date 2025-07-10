@@ -39,7 +39,7 @@ exports.crearTicket = async (req, res) => {
         }
 
         // Usamos id_campaña aquí porque así se llama la columna en la BD
-        const ticketData = { id_campaña: id_campana, nombre, precio, cantidad_total };
+        const ticketData = { id_campana: id_campana, nombre, precio, cantidad_total };
         const nuevoTicket = await TicketModel.create(ticketData);
         res.status(201).json({ success: true, data: nuevoTicket });
     } catch (error) {

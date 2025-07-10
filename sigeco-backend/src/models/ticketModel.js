@@ -3,19 +3,19 @@ const pool = require('../config/db');
 
 const Ticket = {
     create: async (ticketData) => {
-        const { id_campaña, nombre, precio, cantidad_total = null } = ticketData;
+        const { id_campana, nombre, precio, cantidad_total = null } = ticketData;
         const query = `
-            INSERT INTO tipos_de_entrada (id_campaña, nombre, precio, cantidad_total)
+            INSERT INTO tipos_de_entrada (id_campana, nombre, precio, cantidad_total)
             VALUES (?, ?, ?, ?)
         `;
         // CORREGIDO: Se usa pool.query() directamente.
-        const [result] = await pool.query(query, [id_campaña, nombre, precio, cantidad_total]);
+        const [result] = await pool.query(query, [id_campana, nombre, precio, cantidad_total]);
         return { id_tipo_entrada: result.insertId, ...ticketData };
     },
 
     findByCampanaId: async (id_campana) => {
         // Nota: La columna en la BD se llama 'id_campaña', pero el parámetro es 'id_campana'.
-        const query = 'SELECT * FROM tipos_de_entrada WHERE id_campaña = ? ORDER BY precio ASC';
+        const query = 'SELECT * FROM tipos_de_entrada WHERE id_campana = ? ORDER BY precio ASC';
         // CORREGIDO: Se usa pool.query() directamente.
         const [rows] = await pool.query(query, [id_campana]);
         return rows;
