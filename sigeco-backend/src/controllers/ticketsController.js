@@ -8,7 +8,6 @@ const CampanaModel = require('../models/campanaModel');
 exports.obtenerTicketsPorCampana = async (req, res) => {
     const { id_campana } = req.params;
     try {
-        // Asumimos que el modelo también usará un método estandarizado como findByCampanaId
         const tickets = await TicketModel.findByCampanaId(id_campana);
         res.json({ success: true, data: tickets });
     } catch (error) {
@@ -34,11 +33,15 @@ exports.crearTicket = async (req, res) => {
         if (!campana) {
             return res.status(404).json({ success: false, error: 'La campaña especificada no existe.' });
         }
-        if (campana.tipo_acceso !== 'De Pago') {
-            return res.status(400).json({ success: false, error: 'No se pueden añadir tickets a una campaña de tipo "Gratuito".' });
-        }
 
-        // Usamos id_campaña aquí porque así se llama la columna en la BD
+        // --- INICIO DE LA CORRECCIÓN ---
+        // La validación ahora se basa en si el subevento asociado a la campaña
+        // tiene 'obligatorio_pago' como verdadero (1).
+        if (!campana.obligatorio_pago) {
+            return res.status(400).json({ success: false, error: 'No se pueden añadir tickets a una campaña que no requiere pago.' });
+        }
+        // --- FIN DE LA CORRECCIÓN ---
+
         const ticketData = { id_campana: id_campana, nombre, precio, cantidad_total };
         const nuevoTicket = await TicketModel.create(ticketData);
         res.status(201).json({ success: true, data: nuevoTicket });

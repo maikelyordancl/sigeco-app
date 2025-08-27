@@ -2,15 +2,28 @@ const express = require('express');
 const { body, param } = require('express-validator');
 const router = express.Router();
 const campanasController = require('../controllers/campanasController');
-
-// CORREGIDO: Importamos 'verificarToken' desde el controlador de autenticación correcto
-// y usamos llaves {} porque el archivo ahora exporta múltiples funciones.
+const formularioController = require('../controllers/formularioController'); // Importamos el nuevo controlador
 const { verificarToken } = require('../controllers/authController');
 
 // Proteger todas las rutas de campañas con autenticación JWT
 router.use(verificarToken);
 
-// --- El resto de tus rutas (sin cambios) ---
+// --- Rutas de Formulario ---
+router.get(
+    '/:id_campana/formulario',
+    [param('id_campana').isInt({ gt: 0 })],
+    formularioController.getFormulario
+);
+
+router.put(
+    '/:id_campana/formulario',
+    [
+        param('id_campana').isInt({ gt: 0 }),
+        body('campos').isArray().withMessage('La configuración de campos debe ser un array.')
+    ],
+    formularioController.updateFormulario
+);
+
 
 // POST /api/campanas - Crear una nueva sub-campaña
 router.post(
@@ -19,7 +32,7 @@ router.post(
         body('id_evento').isInt({ gt: 0 }).withMessage('El ID del evento es obligatorio.'),
         body('id_subevento').isInt({ gt: 0 }).withMessage('El ID del subevento es obligatorio.'),
         body('nombre').optional().isString().trim().notEmpty().withMessage('El nombre no puede estar vacío.'),
-        body('tipo_acceso').isIn(['Gratuito', 'De Pago']).withMessage("El tipo de acceso debe ser 'Gratuito' o 'De Pago'.")
+        body('url_amigable').isString().trim().notEmpty().withMessage('La URL amigable no puede estar vacía.').isSlug().withMessage('La URL amigable contiene caracteres no válidos.'),
     ],
     campanasController.crearSubCampana
 );
@@ -61,5 +74,67 @@ router.delete(
     ],
     campanasController.eliminarCampana
 );
+
+
+// --- INICIO DE LA NUEVA LÓGICA ---
+// POST /api/campanas/:id_campana/convocar - Añade contactos de bases de datos a una campaña
+router.post(
+    '/:id_campana/convocar',
+    [
+        param('id_campana').isInt({ gt: 0 }).withMessage('El ID de la campaña no es válido.'),
+        body('bases_origen').isArray({ min: 1 }).withMessage('Debes seleccionar al menos una base de datos.'),
+        body('bases_origen.*').isInt().withMessage('Los IDs de las bases de datos deben ser números.')
+    ],
+    campanasController.convocarContactos
+);
+
+router.put(
+    '/:id_campana/landing',
+    [
+        param('id_campana').isInt({ gt: 0 }),
+        body('landing_page_json').isJSON().withMessage('El contenido de la landing debe ser un JSON válido.')
+    ],
+    campanasController.guardarLanding
+);
+// --- FIN DE LA NUEVA LÓGICA ---
+
+// POST /api/campanas/formulario/campos - Crear un nuevo campo personalizado
+router.post(
+    '/formulario/campos',
+    [
+        body('etiqueta').notEmpty().withMessage('La etiqueta es obligatoria.'),
+        body('tipo_campo').isIn(['TEXTO_CORTO', 'PARRAFO', 'SELECCION_UNICA', 'CASILLAS', 'DESPLEGABLE', 'ARCHIVO']),
+        body('opciones').optional().isArray()
+    ],
+    formularioController.crearCampo
+);
+
+// DELETE /api/campanas/formulario/campos/:id_campo - Eliminar un campo personalizado
+router.delete(
+    '/formulario/campos/:id_campo',
+    [param('id_campo').isInt({ gt: 0 })],
+    formularioController.eliminarCampo
+);
+
+// PUT /api/campanas/formulario/campos/:id_campo - Actualizar un campo personalizado
+router.put(
+    '/formulario/campos/:id_campo',
+    [
+        param('id_campo').isInt({ gt: 0 }),
+        body('etiqueta').notEmpty().withMessage('La etiqueta es obligatoria.'),
+        body('opciones').optional().isArray()
+    ],
+    formularioController.actualizarCampo
+);
+
+// Agrega esta línea en /src/routes/campanasRoutes.js, por ejemplo, después de la ruta para obtener asistentes.
+router.get('/:id_campana/asistentes-v2', campanasController.getAsistentesConCampos);
+
+router.put('/asistentes/:id_inscripcion/estado', campanasController.updateAsistenteStatus);
+router.put('/asistentes/:id_inscripcion/nota', campanasController.updateAsistenteNota);
+router.get('/:id_campana/formulario', formularioController.getCamposPorCampana);
+router.put('/asistentes/:id_inscripcion/respuestas', campanasController.updateAsistenteRespuestas);
+
+router.put('/asistentes/:id_inscripcion', campanasController.updateAsistenteCompleto);
 
 module.exports = router;

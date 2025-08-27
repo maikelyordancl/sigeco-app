@@ -40,6 +40,23 @@ exports.fusionarBases = async (req, res) => {
     }
 };
 
+// --- **NUEVA FUNCIÓN EN EL CONTROLADOR** ---
+exports.assignContactsToBase = async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const { contactIds, baseIds } = req.body;
+
+    try {
+        const result = await BaseDatosModel.assignContacts(contactIds, baseIds);
+        res.status(200).json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
 exports.deleteBaseDatos = async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {

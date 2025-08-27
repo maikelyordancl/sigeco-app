@@ -18,6 +18,18 @@ exports.getAllContactos = async (req, res) => {
     }
 };
 
+// --- **NUEVA FUNCIÓN EN EL CONTROLADOR** ---
+// Obtener contactos sin base de datos asignada
+exports.getOrphanedContactos = async (req, res) => {
+    try {
+        const contactos = await ContactoModel.findOrphaned();
+        res.json({ success: true, data: contactos });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, error: 'Error del servidor al obtener contactos sin base.' });
+    }
+};
+
 // Crear un nuevo contacto
 exports.createContacto = async (req, res) => {
     const errors = validationResult(req);

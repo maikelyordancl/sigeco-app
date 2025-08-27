@@ -37,8 +37,8 @@ exports.importar = async (nombreBase, contactos) => {
             } else {
                 // Si no existe, lo creamos
                 const [resultContacto] = await connection.query(
-                    'INSERT INTO contactos (nombre, apellido, email, telefono, rut, empresa, actividad, profesion, pais, recibir_mail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    [contacto.nombre, contacto.apellido, contacto.email, contacto.telefono, contacto.rut, contacto.empresa, contacto.actividad, contacto.profesion, contacto.pais, true]
+                    'INSERT INTO contactos (nombre, email, telefono, rut, empresa, actividad, profesion, pais, comuna, recibir_mail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    [contacto.nombre, contacto.email, contacto.telefono, contacto.rut, contacto.empresa, contacto.actividad, contacto.profesion, contacto.pais, contacto.comuna, true]
                 );
                 contactoId = resultContacto.insertId;
             }
@@ -95,6 +95,43 @@ exports.fusionar = async (nombreBase, origen, idsBasesOrigen) => {
         await connection.rollback();
         console.error("Error en la transacción de fusión:", error);
         throw error;
+    } finally {
+        connection.release();
+    }
+};
+
+// --- **NUEVA FUNCIÓN PARA ASIGNAR CONTACTOS** ---
+exports.assignContacts = async (contactIds, baseIds) => {
+    if (!contactIds || contactIds.length === 0 || !baseIds || baseIds.length === 0) {
+        throw new Error("Se requieren IDs de contactos y bases de datos.");
+    }
+
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+        let totalAffectedRows = 0;
+        const values = [];
+        // Creamos un par [id_contacto, id_base] para cada asignación
+        for (const id_base of baseIds) {
+            for (const id_contacto of contactIds) {
+                values.push([id_contacto, id_base]);
+            }
+        }
+
+        if (values.length > 0) {
+            // Usamos INSERT IGNORE para no fallar si la asignación ya existe
+            const query = 'INSERT IGNORE INTO contactos_por_base (id_contacto, id_base) VALUES ?';
+            const [result] = await connection.query(query, [values]);
+            totalAffectedRows = result.affectedRows;
+        }
+
+        await connection.commit();
+        return { success: true, message: `${totalAffectedRows} nuevas asociaciones creadas.`, count: totalAffectedRows };
+    } catch (error) {
+        await connection.rollback();
+        console.error("Error en la transacción de asignación de contactos:", error);
+        throw new Error('Error en el servidor durante la asignación.');
     } finally {
         connection.release();
     }

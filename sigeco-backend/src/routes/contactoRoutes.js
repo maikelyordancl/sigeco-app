@@ -15,27 +15,35 @@ router.get(
     contactoController.getAllContactos
 );
 
+// GET /api/contactos/sin-base -> Obtener contactos sin base de datos
+router.get('/sin-base', contactoController.getOrphanedContactos);
+
+
+// --- INICIO DE LA MODIFICACIÓN ---
+
 // Reglas de validación reutilizables para el cuerpo de la petición
 const contactoValidationRules = [
-    body('nombre').notEmpty().withMessage('El nombre es obligatorio.').isString().withMessage('El nombre debe ser texto.').trim().escape(),
-    body('apellido').notEmpty().withMessage('El apellido es obligatorio.').isString().withMessage('El apellido debe ser texto.').trim().escape(),
+    body('nombre').optional({ checkFalsy: true }).isString().withMessage('El nombre debe ser texto.').trim().escape(),
     body('email').isEmail().withMessage('Debe ser un email válido.').normalizeEmail(),
     body('telefono').notEmpty().withMessage('El teléfono es obligatorio.').matches(/^[0-9+\s()-]+$/).withMessage('El formato del teléfono no es válido.'),
     body('rut')
-        .notEmpty().withMessage('El RUT es obligatorio.')
+        .optional({ checkFalsy: true })
         .custom(value => {
-            if (!validarRut(value)) {
+            if (value && !validarRut(value)) {
                 throw new Error('El RUT ingresado no es válido. Recuerde sin puntos y con guion.');
             }
-            return true; // Indica que la validación fue exitosa
+            return true;
         }),
     body('pais').notEmpty().withMessage('El país es obligatorio.').trim().escape(),
+    body('comuna').optional({ checkFalsy: true }).trim().escape(),
     body('recibir_mail').isBoolean().withMessage('El campo recibir_mail debe ser booleano.'),
-    // Campos opcionales
     body('empresa').optional({ checkFalsy: true }).trim().escape(),
     body('actividad').optional({ checkFalsy: true }).trim().escape(),
     body('profesion').optional({ checkFalsy: true }).trim().escape()
 ];
+
+// --- FIN DE LA MODIFICACIÓN ---
+
 
 // POST /api/contactos -> Crear un nuevo contacto
 router.post('/', contactoValidationRules, contactoController.createContacto);

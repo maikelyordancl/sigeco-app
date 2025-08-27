@@ -17,6 +17,17 @@ router.get(
     subeventoController.getSubeventosSinCampana
 );
 
+// --- AÑADIDO: Ruta para obtener subeventos sin campaña ---
+// GET /api/subeventos/evento/:id_evento/sin-campana
+router.get(
+    '/evento/:id_evento/campanas',
+    [
+        param('id_evento').isInt({ gt: 0 }).withMessage('El ID del evento debe ser un número válido.')
+    ],
+    subeventoController.getSubeventosByEvento
+);
+
+
 // GET /api/subeventos?id_evento=:id  -> Obtener todos los subeventos de un evento
 router.get(
     '/',
@@ -37,8 +48,8 @@ router.post(
         // Validaciones opcionales
         body('ciudad').optional({ nullable: true }).trim().escape(),
         body('lugar').optional({ nullable: true }).trim().escape(),
-        body('link_adicional').optional({ nullable: true }).isURL().withMessage('El link adicional debe ser una URL válida.'),
-        body('sitio_web').optional({ nullable: true }).isURL().withMessage('El sitio web debe ser una URL válida.')
+        body('link_adicional').optional({ checkFalsy: true }).isURL().withMessage('El link adicional debe ser una URL válida.'),
+        body('sitio_web').optional({ checkFalsy: true }).isURL().withMessage('El sitio web debe ser una URL válida.')
     ],
     subeventoController.createSubevento
 );
@@ -50,6 +61,8 @@ router.put(
         param('id').isInt({ min: 1 }).withMessage('El ID del subevento en la URL debe ser válido.'),
         body('nombre').notEmpty().withMessage('El nombre del subevento es obligatorio.').trim().escape(),
         body('fecha_inicio').isISO8601().toDate().withMessage('La fecha de inicio debe ser una fecha válida.'),
+        body('link_adicional').optional({ checkFalsy: true }).isURL().withMessage('El link adicional debe ser una URL válida.'),
+        body('sitio_web').optional({ checkFalsy: true }).isURL().withMessage('El sitio web debe ser una URL válida.')
     ],
     subeventoController.updateSubevento
 );

@@ -1,15 +1,36 @@
 const express = require('express');
 const dotenv = require('dotenv');
-const cors = require('cors');
+const path = require('path');
+const cors = require('cors'); 
 
-// Cargar variables de entorno
 dotenv.config();
-
 const app = express();
 
+// --- CONFIGURACIÓN DE CORS RECOMENDADA ---
+const allowedOrigins = [
+    'https://sigeco.mindshot.cl', 
+    'http://localhost:3000',      
+    'http://51.75.40.103:3091'     
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Origen no permitido por CORS'));
+    }
+  },
+  credentials: true, 
+};
+
+app.use(cors(corsOptions));
+
 // Middlewares
-app.use(cors());
 app.use(express.json());
+// --- LÍNEA AÑADIDA ---
+// Añade este middleware para parsear cuerpos de petición URL-encoded
+app.use(express.urlencoded({ extended: true }));
 
 // --- Importación de Rutas ---
 const authRoutes = require('./src/routes/authRoutes');
@@ -20,11 +41,10 @@ const baseDatosRoutes = require('./src/routes/baseDatosRoutes');
 const campanasRoutes = require('./src/routes/campanasRoutes');
 const ticketsRoutes = require('./src/routes/ticketsRoutes');
 const publicRoutes = require('./src/routes/publicRoutes');
-
+const acreditacionRoutes = require('./src/routes/acreditacionRoutes');
+const uploadRoutes = require('./src/routes/uploadRoutes');
 
 // --- Registro de Rutas en la Aplicación ---
-
-// Rutas de la API que requieren autenticación
 app.use('/api/auth', authRoutes);
 app.use('/api/eventos', eventoRoutes);
 app.use('/api/subeventos', subeventoRoutes);
@@ -32,11 +52,9 @@ app.use('/api/contactos', contactoRoutes);
 app.use('/api/basedatos', baseDatosRoutes);
 app.use('/api/campanas', campanasRoutes);
 app.use('/api/tickets', ticketsRoutes);
-
-// Rutas Públicas (no requieren token)
-// Se deben registrar después de las rutas de la API para evitar conflictos si hay rutas con nombres similares.
+app.use('/api/acreditacion', acreditacionRoutes);
 app.use('/api/public', publicRoutes);
-
+app.use('/api/upload', uploadRoutes);
 
 const PORT = process.env.PORT || 8000;
 

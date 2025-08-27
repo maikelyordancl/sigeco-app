@@ -30,6 +30,18 @@ router.post(
     baseDatosController.fusionarBases
 );
 
+// --- **NUEVA RUTA PARA ASIGNAR CONTACTOS** ---
+router.post(
+    '/asignar',
+    [
+        body('contactIds').isArray({ min: 1 }).withMessage('Se requiere al menos un contacto.'),
+        body('baseIds').isArray({ min: 1 }).withMessage('Se requiere al menos una base de datos.'),
+        body('contactIds.*').isInt().withMessage('Los IDs de contacto deben ser números.'),
+        body('baseIds.*').isInt().withMessage('Los IDs de las bases deben ser números.')
+    ],
+    baseDatosController.assignContactsToBase
+);
+
 // DELETE /api/basedatos/:id -> Eliminar una base de datos
 router.delete(
     '/:id',

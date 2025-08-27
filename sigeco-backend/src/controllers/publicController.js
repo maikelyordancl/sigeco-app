@@ -1,7 +1,21 @@
 const { validationResult } = require('express-validator');
-const CampanaModel = require('../models/campanaModel'); // Usaremos el modelo de campañas
+const CampanaModel = require('../models/campanaModel');
 const InscripcionModel = require('../models/inscripcionModel');
 const ContactoModel = require('../models/contactoModel');
+const PagoModel = require('../models/pagoModel');
+const FlowService = require('../services/flowService');
+const FormularioModel = require('../models/formularioModel'); // Para campos personalizados
+
+// Mapea el estado numérico de Flow a nuestro estado de texto
+const mapFlowStatus = (flowStatus) => {
+    switch (flowStatus) {
+        case 1: return 'Pendiente';
+        case 2: return 'Pagado';
+        case 3: return 'Fallido';
+        case 4: return 'Anulado';
+        default: return 'Fallido';
+    }
+};
 
 /**
  * Obtiene los datos públicos de una campaña para mostrar en la landing page.
@@ -21,7 +35,6 @@ exports.getDatosPublicosCampana = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Campaña no encontrada.' });
         }
 
-        // Si la campaña no está activa, no la mostramos
         if (datos.campana.estado !== 'Activa') {
             return res.status(403).json({ success: false, message: 'Esta campaña no está activa actualmente.' });
         }
@@ -35,9 +48,47 @@ exports.getDatosPublicosCampana = async (req, res) => {
 };
 
 /**
- * Crea una nueva inscripción desde un formulario público.
- * Determina el estado de asistencia ('Invitado' o 'Registrado')
- * basándose en las reglas del sub-evento asociado.
+ * Verifica si un contacto existe por su email.
+ */
+exports.verificarContactoPorEmail = async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const { email, id_campana } = req.body;
+
+    try {
+        // --- INICIO DE LA LÓGICA MODIFICADA ---
+        const campana = await CampanaModel.findById(id_campana);
+        if (!campana) {
+            return res.status(404).json({ success: false, message: 'Campaña no encontrada.' });
+        }
+
+        const contacto = await ContactoModel.findByEmail(email);
+        let inscripcion = contacto ? await InscripcionModel.findByCampanaAndContacto(id_campana, contacto.id_contacto) : null;
+
+        // Si la inscripción NO es libre, el usuario debe tener una inscripción previa.
+        if (campana.inscripcion_libre === 0 && !inscripcion) {
+            return res.status(403).json({ 
+                success: false, 
+                message: 'Este es un evento por invitación y tu correo no se encuentra en la lista de asistentes.' 
+            });
+        }
+        
+        // Si la inscripción es libre o si no es libre pero el usuario ya tiene una inscripción, se procede.
+        res.json({ success: true, data: { contacto, inscripcion } });
+        // --- FIN DE LA LÓGICA MODIFICADA ---
+
+    } catch (error) {
+        console.error('Error al verificar contacto:', error);
+        res.status(500).json({ success: false, message: 'Error interno del servidor.' });
+    }
+};
+
+/**
+ * Gestiona una inscripción pública y crea una orden de pago si es necesario.
+ * Ahora se centra en el email para crear o actualizar el contacto.
  */
 exports.crearInscripcionPublica = async (req, res) => {
     const errors = validationResult(req);
@@ -45,58 +96,168 @@ exports.crearInscripcionPublica = async (req, res) => {
         return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { id_campana, nombre, apellido, email, telefono, rut, pais, empresa, actividad } = req.body;
+    const { id_campana, id_tipo_entrada, email } = req.body;
+
+    if (!email) {
+        return res.status(400).json({ success: false, message: 'El campo "Email" es obligatorio.' });
+    }
 
     try {
-        // 1. Buscar o crear el contacto
-        let contacto = await ContactoModel.findByEmail(email);
-
-        if (!contacto) {
-            // Si el contacto no existe, lo creamos.
-            // Asumimos que no tenemos 'profesion' ni 'recibir_mail' desde este formulario.
-            const nuevoContactoData = { nombre, apellido, email, telefono, rut, pais, empresa, actividad, profesion: null, recibir_mail: true };
-            const result = await ContactoModel.create(nuevoContactoData);
-            // Construimos el objeto contacto para tener el ID
-            contacto = { id_contacto: result.id_contacto, ...nuevoContactoData };
-        }
-        
-        const id_contacto = contacto.id_contacto;
-
-        // 2. Verificar si ya existe una inscripción para este contacto en esta campaña
-        const inscripcionExistente = await InscripcionModel.findByCampanaAndContacto(id_campana, id_contacto);
-        if (inscripcionExistente) {
-            // Si ya existe, no creamos una nueva, pero podríamos actualizarla si es necesario.
-            // Por ahora, devolvemos un error de conflicto.
-            return res.status(409).json({ success: false, message: 'Este email ya está inscrito en esta campaña.' });
-        }
-        
-        // --- INICIO DE LA LÓGICA CORREGIDA ---
-        // 3. Obtener las reglas de la campaña para decidir el estado
         const campanaRules = await CampanaModel.findRulesById(id_campana);
         if (!campanaRules) {
-            return res.status(404).json({ success: false, message: 'La campaña especificada no existe.' });
+            return res.status(404).json({ success: false, message: 'Campaña no válida.' });
         }
 
-        // 4. Determinar el 'estado_asistencia' según la regla del sub-evento
-        // Si el sub-evento requiere registro (obligatorio_registro = 1), el estado es 'Registrado'.
-        // Si no (obligatorio_registro = 0), el estado por defecto es 'Invitado'.
-        const estado_asistencia = campanaRules.obligatorio_registro ? 'Registrado' : 'Invitado';
-        // --- FIN DE LA LÓGICA CORREGIDA ---
+        const ticket = campanaRules.obligatorio_pago ? await PagoModel.findTicketById(id_tipo_entrada) : null;
+        if (campanaRules.obligatorio_pago && !ticket) {
+            return res.status(404).json({ success: false, message: 'El tipo de entrada seleccionado no es válido.' });
+        }
 
-        // 5. Crear la inscripción con el estado correcto
-        const nuevaInscripcionData = {
-            id_campana,
-            id_contacto,
-            estado_asistencia: estado_asistencia, // Se usa el estado determinado por la regla
-            estado_pago: 'No Aplica' // Este flujo es para inscripciones gratuitas
-        };
+        const formConfig = await FormularioModel.findByCampanaId(id_campana);
+        const datosContacto = {};
+        const respuestasPersonalizadas = [];
 
-        const inscripcion = await InscripcionModel.create(nuevaInscripcionData);
+        for (const campo of formConfig) {
+            if (!campo.es_visible) continue;
+            const key = campo.nombre_interno;
+            let value = req.body[key];
 
-        res.status(201).json({ success: true, message: 'Inscripción realizada con éxito.', data: inscripcion });
+            if (campo.tipo_campo === 'ARCHIVO') {
+                const file = req.files && req.files.find(f => f.fieldname === key);
+                if (file) {
+                    value = `/uploads/inscripciones/${file.filename}`;
+                } else if (campo.es_obligatorio) {
+                    return res.status(400).json({ success: false, message: `El archivo para "${campo.etiqueta}" es obligatorio.` });
+                }
+            }
+            
+            // Ya no validamos aquí, la ruta se encarga. Solo recolectamos datos.
+            if (value !== undefined && value !== null && value !== '') {
+                // Separamos los datos que van a la tabla 'contactos'
+                if (campo.es_de_sistema) {
+                    datosContacto[key] = value;
+                } else { // Y los que van a 'inscripcion_respuestas'
+                    respuestasPersonalizadas.push({
+                        id_campo: campo.id_campo,
+                        valor: String(value)
+                    });
+                }
+            }
+        }
+
+        let contacto = await ContactoModel.findByEmail(email);
+        
+        // Si el contacto existe, lo actualizamos. Si no, lo creamos.
+        if (contacto) {
+            await ContactoModel.updateById(contacto.id_contacto, datosContacto);
+        } else {
+            const nuevoContacto = await ContactoModel.create({ ...datosContacto, email, recibir_mail: true });
+            contacto = { id_contacto: nuevoContacto.id_contacto };
+        }
+
+        let inscripcion = await InscripcionModel.findByCampanaAndContacto(id_campana, contacto.id_contacto);
+
+        if (inscripcion) {
+            if (inscripcion.estado_pago === 'Pagado') {
+                return res.status(409).json({ success: false, message: 'Ya tienes una entrada válida para este evento.' });
+            }
+            if (inscripcion.estado_pago === 'Fallido' || inscripcion.estado_pago === 'Pendiente') {
+                await InscripcionModel.update(inscripcion.id_inscripcion, { id_tipo_entrada: id_tipo_entrada || null });
+                await PagoModel.anularPagosAnteriores(inscripcion.id_inscripcion);
+            }
+        } else {
+            inscripcion = await InscripcionModel.create({
+                id_campana,
+                id_contacto: contacto.id_contacto,
+                id_tipo_entrada: id_tipo_entrada || null,
+                estado_asistencia: 'Confirmado',
+                estado_pago: campanaRules.obligatorio_pago ? 'Pendiente' : 'No Aplica',
+            });
+        }
+
+        if (respuestasPersonalizadas.length > 0) {
+            await FormularioModel.saveRespuestas(inscripcion.id_inscripcion, respuestasPersonalizadas);
+        }
+
+        if (campanaRules.obligatorio_pago) {
+            const ordenCompra = `sigeco-insc-${inscripcion.id_inscripcion}-${Date.now()}`;
+            const nuevoPago = await PagoModel.create({
+                id_inscripcion: inscripcion.id_inscripcion,
+                monto: ticket.precio,
+                orden_compra: ordenCompra,
+            });
+            const flowResponse = await FlowService.crearOrdenDePago({
+                orden_compra: ordenCompra,
+                monto: ticket.precio,
+                subject: `Entrada: ${ticket.nombre}`,
+                email: email,
+            });
+            await PagoModel.updateById(nuevoPago.id_pago, { token_flow: flowResponse.token });
+            return res.status(200).json({ success: true, redirectUrl: flowResponse.redirectUrl });
+        }
+
+        await InscripcionModel.update(inscripcion.id_inscripcion, { estado_asistencia: 'Confirmado' });
+        return res.status(200).json({ success: true, message: 'Inscripción confirmada correctamente.' });
 
     } catch (error) {
-        console.error('Error al crear inscripción pública:', error);
+        console.error('Error al procesar inscripción:', error);
         res.status(500).json({ success: false, message: 'Error interno del servidor.' });
+    }
+};
+
+/**
+ * Obtiene los detalles del pago por token.
+ */
+exports.getPagoByToken = async (req, res) => {
+    try {
+        const { token } = req.params;
+
+        const flowStatusResult = await FlowService.obtenerEstadoDelPago(token);
+        const nuestroEstado = mapFlowStatus(flowStatusResult.status);
+
+        const pago = await PagoModel.findByToken(token);
+        if (pago && pago.estado !== nuestroEstado) {
+            await PagoModel.updateById(pago.id_pago, { estado: nuestroEstado });
+            await InscripcionModel.update(pago.id_inscripcion, { estado_pago: nuestroEstado });
+        }
+
+        const pagoDetails = await PagoModel.findByTokenWithDetails(token);
+        if (!pagoDetails) {
+            return res.status(404).json({ success: false, message: 'Pago no encontrado.' });
+        }
+
+        res.json({ success: true, data: pagoDetails });
+
+    } catch (error) {
+        console.error('Error al obtener detalles del pago:', error);
+        res.status(500).json({ success: false, message: 'Error interno del servidor.' });
+    }
+};
+
+/**
+ * Webhook de Flow para confirmar pagos
+ */
+exports.confirmarPagoFlow = async (req, res) => {
+    try {
+        const { token } = req.body;
+        if (!token) {
+            return res.status(400).send("Token no proporcionado");
+        }
+
+        const flowStatusResult = await FlowService.obtenerEstadoDelPago(token);
+        const nuestroEstado = mapFlowStatus(flowStatusResult.status);
+
+        const pago = await PagoModel.findByToken(token);
+        if (pago) {
+            await PagoModel.updateById(pago.id_pago, { estado: nuestroEstado });
+            await InscripcionModel.update(pago.id_inscripcion, { estado_pago: nuestroEstado });
+            console.log(`Webhook: Pago ${pago.id_pago} actualizado a estado: ${nuestroEstado}`);
+        }
+
+        res.status(200).send("Confirmación recibida");
+
+    } catch (error) {
+        console.error("Error en webhook de Flow:", error);
+        res.status(500).send("Error interno");
     }
 };

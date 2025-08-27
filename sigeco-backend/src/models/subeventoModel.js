@@ -21,6 +21,11 @@ exports.create = async (subeventoData) => {
         ruta_formulario, sitio_web, obligatorio_registro, obligatorio_pago
     } = subeventoData;
 
+    // 👇 evita el '' que rompe MySQL
+    const fechaMailingParaDB = fecha_hora_mailing && fecha_hora_mailing.trim() !== ''
+        ? fecha_hora_mailing
+        : null;
+
     const query = `
         INSERT INTO subeventos (
             id_evento, nombre, fecha_inicio, fecha_fin, ciudad, lugar, link_adicional,
@@ -32,7 +37,7 @@ exports.create = async (subeventoData) => {
 
     const [result] = await pool.query(query, [
         id_evento, nombre, fecha_inicio, fecha_fin, ciudad, lugar, link_adicional,
-        texto_libre, nombre_evento_mailing, fecha_hora_mailing, asunto_mailing,
+        texto_libre, nombre_evento_mailing, fechaMailingParaDB, asunto_mailing,
         remitente_mailing, ruta_texto_mailing, ruta_imagen_mailing, ruta_formulario,
         sitio_web, obligatorio_registro, obligatorio_pago
     ]);
@@ -49,6 +54,11 @@ exports.updateById = async (id, subeventoData) => {
         sitio_web, obligatorio_registro, obligatorio_pago
     } = subeventoData;
 
+    // 👇 evita el '' que rompe MySQL
+    const fechaMailingParaDB = fecha_hora_mailing && fecha_hora_mailing.trim() !== ''
+        ? fecha_hora_mailing
+        : null;
+
     const query = `
         UPDATE subeventos SET
             nombre = ?, fecha_inicio = ?, fecha_fin = ?, ciudad = ?, lugar = ?,
@@ -61,14 +71,13 @@ exports.updateById = async (id, subeventoData) => {
 
     const [result] = await pool.query(query, [
         nombre, fecha_inicio, fecha_fin, ciudad, lugar, link_adicional,
-        texto_libre, nombre_evento_mailing, fecha_hora_mailing, asunto_mailing,
+        texto_libre, nombre_evento_mailing, fechaMailingParaDB, asunto_mailing,
         remitente_mailing, ruta_texto_mailing, ruta_imagen_mailing, ruta_formulario,
         sitio_web, obligatorio_registro, obligatorio_pago, id
     ]);
 
     return result;
 };
-
 // Modelo para eliminar un subevento por su ID
 exports.deleteById = async (id) => {
     const [result] = await pool.query('DELETE FROM subeventos WHERE id_subevento = ?', [id]);
@@ -84,6 +93,18 @@ exports.findSubeventosSinCampana = async (id_evento) => {
         WHERE s.id_evento = ? AND c.id_campana IS NULL
         ORDER BY s.fecha_inicio ASC;
     `;
+    const [rows] = await pool.query(query, [id_evento]);
+    return rows;
+};
+
+exports.getAllSubeventos = async (id_evento) => {
+    const query = `
+        SELECT s.id_subevento, s.nombre, c.id_campana
+        FROM subeventos s
+        LEFT JOIN campanas c
+            ON s.id_subevento = c.id_subevento
+        WHERE s.id_evento = ?
+        ORDER BY s.fecha_inicio ASC;`;
     const [rows] = await pool.query(query, [id_evento]);
     return rows;
 };

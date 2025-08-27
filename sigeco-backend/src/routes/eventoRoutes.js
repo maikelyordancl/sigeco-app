@@ -2,6 +2,12 @@ const express = require('express');
 const router = express.Router();
 const { body, query, param } = require('express-validator');
 const eventoController = require('../controllers/eventoController');
+// --- LÍNEA AÑADIDA ---
+const { verificarToken } = require('../controllers/authController');
+
+// --- LÍNEA AÑADIDA ---
+// Proteger todas las rutas de este fichero con autenticación
+router.use(verificarToken);
 
 // GET /api/eventos -> Obtener todos los eventos
 router.get('/', eventoController.getAllEventos);

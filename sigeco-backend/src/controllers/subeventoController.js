@@ -8,7 +8,9 @@ exports.getSubeventosByEvento = async (req, res) => {
         return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { id_evento } = req.query;
+    // --- CORRECCIÓN ---
+    // Se obtiene 'id_evento' desde req.params, que es como lo envía el frontend.
+    const id_evento = Object.keys(req.params).length ? req.params.id_evento : req.query.id_evento;
 
     try {
         const subeventos = await SubeventoModel.findByEventId(id_evento);
@@ -76,12 +78,12 @@ exports.deleteSubevento = async (req, res) => {
         res.status(500).json({ success: false, error: 'Error del servidor al eliminar el subevento.' });
     }
 };
-//Obtiene los subeventos de un evento que no tienen una campaña asociada.
+
+// Obtiene los subeventos de un evento que no tienen una campaña asociada.
 exports.getSubeventosSinCampana = async (req, res) => {
     const { id_evento } = req.params;
 
     try {
-        // Llama a la función del modelo que ya creamos en el Canvas
         const subeventos = await SubeventoModel.findSubeventosSinCampana(id_evento);
         res.json({ success: true, data: subeventos });
     } catch (error) {

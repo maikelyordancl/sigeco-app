@@ -1,7 +1,7 @@
 const { validationResult } = require('express-validator');
-// CAMBIO: La variable importada ahora se llama 'Campana' para coincidir con el modelo.
 const Campana = require('../models/campanaModel');
 const SubeventoModel = require('../models/subeventoModel');
+const InscripcionModel = require('../models/inscripcionModel');
 
 /**
  * Obtiene todas las campanas (principal y de subeventos) de un evento específico.
@@ -10,11 +10,11 @@ exports.obtenerCampanasPorEvento = async (req, res) => {
     const { id_evento } = req.params;
 
     try {
-        const campanas = await Campana.findByEventoId(id_evento);
-        if (!campanas || campanas.length === 0) {
-            return res.status(404).json({ success: false, error: 'No se encontraron campanas para este evento.' });
+        const resultado = await Campana.findByEventoId(id_evento);
+        if (!resultado) {
+            return res.status(404).json({ success: false, error: 'No se encontró el evento o no tiene campañas.' });
         }
-        res.json({ success: true, data: campanas });
+        res.json({ success: true, data: resultado });
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, error: 'Error del servidor al obtener las campanas.' });
@@ -48,7 +48,7 @@ exports.crearSubCampana = async (req, res) => {
         return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { id_evento, id_subevento, nombre, tipo_acceso } = req.body;
+    const { id_evento, id_subevento, nombre, url_amigable } = req.body;
 
     try {
         const subevento = await SubeventoModel.findById(id_subevento);
@@ -60,14 +60,17 @@ exports.crearSubCampana = async (req, res) => {
             id_evento,
             id_subevento,
             nombre: nombre || `Campana - ${subevento.nombre}`,
-            tipo_acceso: tipo_acceso || 'De Pago',
-            estado: 'Borrador'
+            estado: 'Borrador',
+            url_amigable: url_amigable
         };
 
         const nuevaCampana = await Campana.create(campanaData);
         res.status(201).json({ success: true, data: nuevaCampana });
 
     } catch (error) {
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ success: false, error: 'La URL amigable (slug) ya está en uso. Por favor, elige otra.' });
+        }
         console.error(error);
         res.status(500).json({ success: false, error: 'Error del servidor al crear la sub-campana.' });
     }
@@ -81,7 +84,7 @@ exports.actualizarCampana = async (req, res) => {
     if (!errors.isEmpty()) {
         return res.status(400).json({ success: false, errors: errors.array() });
     }
-    
+
     const { id_campana } = req.params;
     const campanaData = req.body;
 
@@ -113,4 +116,123 @@ exports.eliminarCampana = async (req, res) => {
         console.error(error);
         res.status(500).json({ success: false, error: 'Error del servidor al eliminar la campana.' });
     }
+};
+
+
+// --- INICIO DE LA NUEVA LÓGICA ---
+/**
+ * Convoca contactos desde bases de datos a una campaña.
+ */
+exports.convocarContactos = async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    const { id_campana } = req.params;
+    const { bases_origen } = req.body;
+
+    try {
+        const resultado = await InscripcionModel.convocarDesdeBase(id_campana, bases_origen);
+        res.status(201).json(resultado);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+exports.guardarLanding = async (req, res) => {
+    const { id_campana } = req.params;
+    const { landing_page_json } = req.body;
+
+    try {
+        const result = await Campana.updateLanding(id_campana, landing_page_json);
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, error: 'Campana no encontrada.' });
+        }
+        res.json({ success: true, message: 'Landing page guardada con éxito.' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, error: 'Error del servidor al guardar la landing page.' });
+    }
+};
+
+exports.getAsistentesConCampos = async (req, res) => {
+  try {
+    const asistentes = await InscripcionModel.findWithCustomFieldsByCampanaId(req.params.id_campana);
+    res.json(asistentes);
+  } catch (error) {
+    console.error('Error fetching asistentes with custom fields:', error);
+    res.status(500).json({ message: 'Error al obtener los asistentes.' });
+  }
+};
+
+exports.updateAsistenteStatus = async (req, res) => {
+    const { id_inscripcion } = req.params;
+    const { estado_asistencia } = req.body;
+    try {
+        const success = await InscripcionModel.updateStatus(id_inscripcion, estado_asistencia);
+        if (success) {
+            res.json({ message: 'Estado actualizado correctamente.' });
+        } else {
+            res.status(404).json({ message: 'Inscripción no encontrada.' });
+        }
+    } catch (error) {
+        console.error('Error updating status:', error);
+        res.status(500).json({ message: 'Error al actualizar el estado.' });
+    }
+};
+
+exports.updateAsistenteNota = async (req, res) => {
+    const { id_inscripcion } = req.params;
+    const { nota } = req.body;
+    try {
+        const success = await InscripcionModel.updateNota(id_inscripcion, nota);
+        if (success) {
+            res.json({ message: 'Nota actualizada correctamente.' });
+        } else {
+            res.status(404).json({ message: 'Inscripción no encontrada.' });
+        }
+    } catch (error) {
+        console.error('Error updating note:', error);
+        res.status(500).json({ message: 'Error al actualizar la nota.' });
+    }
+};
+
+exports.updateAsistenteRespuestas = async (req, res) => {
+    const { id_inscripcion } = req.params;
+    const { respuestas } = req.body; 
+
+    if (!Array.isArray(respuestas)) {
+        return res.status(400).json({ message: 'El cuerpo de la petición debe contener un array de "respuestas".' });
+    }
+
+    try {
+        await InscripcionModel.updateOrInsertRespuestas(id_inscripcion, respuestas);
+        res.json({ success: true, message: 'Respuestas actualizadas correctamente.' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Error al actualizar las respuestas.' });
+    }
+};
+
+exports.updateAsistenteCompleto = async (req, res) => {
+  const { id_inscripcion } = req.params;
+  const { estado_asistencia, nota, respuestas, ...datosContacto } = req.body;
+
+  try {
+    const success = await InscripcionModel.updateAsistenteCompleto(
+      id_inscripcion,
+      estado_asistencia,
+      nota,
+      respuestas,
+      datosContacto
+    );
+    if (success) {
+      res.json({ success: true, message: 'Asistente actualizado correctamente.' });
+    } else {
+      res.status(404).json({ success: false, message: 'Inscripción no encontrada.' });
+    }
+  } catch (error) {
+    console.error('Error al actualizar asistente:', error);
+    res.status(500).json({ success: false, message: 'Error interno del servidor.' });
+  }
 };

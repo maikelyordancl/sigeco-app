@@ -28,12 +28,15 @@ exports.createEvento = async (req, res) => {
         // El modelo de evento debe devolver el objeto completo, incluyendo el ID.
         if (nuevoEvento && nuevoEvento.id_evento) {
             const nombreCampana = `Campana General - ${nuevoEvento.nombre}`;
+            // --- CORRECCIÓN ---
+            // Se elimina 'tipo_acceso' ya que no existe en la tabla y no aplica
+            // para la campaña principal, que es solo informativa.
             const campanaData = {
                 id_evento: nuevoEvento.id_evento,
                 nombre: nombreCampana,
-                tipo_acceso: 'De Pago', // Por defecto, como acordamos.
                 estado: 'Borrador' // La campaña se crea inactiva por defecto.
             };
+            // --- FIN DE LA CORRECCIÓN ---
 
             // Idealmente, la creación del evento y su campaña deberían estar en una transacción
             // para asegurar que ambas operaciones se completen o ninguna lo haga.
