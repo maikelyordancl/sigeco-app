@@ -119,7 +119,7 @@ const SeleccionarContactos: React.FC<SeleccionarContactosProps> = ({ open, setOp
                       onCheckedChange={() => handleSelectContacto(contacto.id_contacto)}
                     />
                   </TableCell>
-                  <TableCell>{contacto.nombre} {contacto.apellido}</TableCell>
+                  <TableCell>{contacto.nombre}</TableCell>
                   <TableCell>{contacto.email}</TableCell>
                   <TableCell>{contacto.telefono}</TableCell>
                 </TableRow>

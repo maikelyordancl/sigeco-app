@@ -1,69 +1,66 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation"; // Importar useRouter
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "react-hot-toast";
 import MainLayout from "@/components/Layout/MainLayout";
-import { Plus, Trash } from "lucide-react";
+import { Plus, Trash, Users } from "lucide-react"; // Importar el ícono Users
+import { BaseDatos } from "@/app/contactos/types/contacto";
 import ImportarContactos from "@/app/contactos/components/ImportarContactos";
 import FusionarBases from "@/app/contactos/components/FusionarBases";
+import { apiFetch } from "@/lib/api";
 
-type BaseDatos = {
-  id_base: number;
-  nombre: string;
-  cantidad_contactos: number;
-  origen: string;
-  fecha_creado: string;
-};
 
 export default function BaseDatosContactos() {
+  const router = useRouter(); // Inicializar router
   const [basesDeDatos, setBasesDeDatos] = useState<BaseDatos[]>([]);
+  const [contactosSinBaseCount, setContactosSinBaseCount] = useState<number>(0); // Nuevo estado para el conteo
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isFusionModalOpen, setIsFusionModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [baseToDelete, setBaseToDelete] = useState<BaseDatos | null>(null);
   const [errorGlobal, setErrorGlobal] = useState<string | null>(null);
-  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
-  const fetchBasesDeDatos = async () => {
+  const fetchBasesDeDatos = useCallback(async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/basedatos`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      // Obtener las bases de datos existentes
+      const responseBases = await apiFetch(`/basedatos`);
+      const resultBases = await responseBases.json();
 
-      const result = await response.json();
-
-      if (result.success) {
-        setBasesDeDatos(result.data);
+      if (resultBases.success) {
+        setBasesDeDatos(resultBases.data);
         setErrorGlobal(null);
       } else {
-        setErrorGlobal(result.error || "Error desconocido al obtener las bases de datos.");
+        setErrorGlobal(resultBases.error || "Error desconocido al obtener las bases de datos.");
       }
+
+      // --- **NUEVA LÓGICA** ---
+      // Obtener los contactos sin base para solo contarlos
+      const responseOrphaned = await apiFetch('/contactos/sin-base');
+      const resultOrphaned = await responseOrphaned.json();
+      if (resultOrphaned.success && Array.isArray(resultOrphaned.data)) {
+          setContactosSinBaseCount(resultOrphaned.data.length);
+      }
+      // --------------------
+
     } catch {
-      setErrorGlobal("Error de red al obtener las bases de datos.");
+      setErrorGlobal("Error de red al obtener los datos.");
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchBasesDeDatos();
-  }, []);
+  }, [fetchBasesDeDatos]);
 
   const handleDeleteBase = async () => {
     if (!baseToDelete) return;
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/basedatos/${baseToDelete.id_base}`, {
+      const response = await apiFetch(`/basedatos/${baseToDelete.id_base}`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
       });
 
       const result = await response.json();
@@ -79,6 +76,8 @@ export default function BaseDatosContactos() {
       toast.error("Error de red al intentar eliminar la base de datos.");
     }
   };
+
+  const tokenForChildren = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
   return (
     <MainLayout>
@@ -101,6 +100,25 @@ export default function BaseDatosContactos() {
           <div className="text-red-500 text-center mb-4">{errorGlobal}</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* --- **NUEVA TARJETA PARA CONTACTOS SIN ASIGNAR** --- */}
+            <Card
+              className="shadow-md hover:shadow-lg transition-shadow border-dashed border-2 cursor-pointer bg-gray-50/50"
+              onClick={() => router.push('/contactos/gestion?sin-base=true')}
+            >
+              <CardHeader>
+                <CardTitle className="flex justify-between items-center text-gray-700">
+                  Contactos sin Asignar
+                  <Users size={20} />
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p>Cantidad de Contactos: {contactosSinBaseCount}</p>
+                <p className="text-sm text-gray-500 mt-2">
+                  Contactos que no pertenecen a ninguna base de datos.
+                </p>
+              </CardContent>
+            </Card>
+
             {basesDeDatos.map((base) => (
               <Card key={base.id_base} className="shadow-md hover:shadow-lg transition-shadow">
                 <CardHeader>
@@ -137,7 +155,7 @@ export default function BaseDatosContactos() {
           setOpen={setIsFusionModalOpen}
           bases={basesDeDatos}
           refresh={fetchBasesDeDatos}
-          token={token}
+          token={tokenForChildren}
         />
 
         <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>

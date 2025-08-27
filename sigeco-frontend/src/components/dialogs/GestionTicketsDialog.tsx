@@ -36,6 +36,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Edit, Trash2, X } from "lucide-react";
 import toast from "react-hot-toast";
+import { apiFetch } from "@/lib/api";
 
 // Estructura de un Ticket
 interface Ticket {
@@ -97,10 +98,8 @@ export const GestionTicketsDialog = ({
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/tickets/campana/${id_campana}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const response = await apiFetch(
+        `/tickets/campana/${id_campana}`,
       );
       if (!response.ok) throw new Error("No se pudieron cargar los tickets.");
       const result = await response.json();
@@ -127,17 +126,16 @@ export const GestionTicketsDialog = ({
   const handleSaveTicket = async (data: TicketFormData) => {
     const isEditing = editingTicketId !== null;
     const url = isEditing
-      ? `${process.env.NEXT_PUBLIC_API_URL}/tickets/${editingTicketId}`
-      : `${process.env.NEXT_PUBLIC_API_URL}/tickets/campana/${id_campana}`;
+      ? `/tickets/${editingTicketId}`
+      : `/tickets/campana/${id_campana}`;
     const method = isEditing ? "PUT" : "POST";
     const toastMessage = isEditing ? "Actualizando ticket..." : "Creando ticket...";
 
     const toastId = toast.loading(toastMessage);
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method,
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json"},
         body: JSON.stringify(data),
       });
       const result = await response.json();
@@ -170,10 +168,9 @@ export const GestionTicketsDialog = ({
       if (!ticketToDelete) return;
       const toastId = toast.loading("Eliminando ticket...");
       try {
-          const token = localStorage.getItem("token");
-          const response = await fetch(
-              `${process.env.NEXT_PUBLIC_API_URL}/tickets/${ticketToDelete.id_tipo_entrada}`,
-              { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
+          const response = await apiFetch(
+              `/tickets/${ticketToDelete.id_tipo_entrada}`,
+              { method: "DELETE" }
           );
           if (!response.ok) throw new Error("Error al eliminar el ticket.");
 
@@ -292,8 +289,8 @@ export const GestionTicketsDialog = ({
             <AlertDialogHeader>
                 <AlertDialogTitle>¿Estás absolutamente seguro?</AlertDialogTitle>
                 <AlertDialogDescription>
-                    Esta acción eliminará permanentemente el ticket <strong>"{ticketToDelete?.nombre}"</strong>. No podrás deshacer esta acción.
-                </AlertDialogDescription>
+                  Esta acción eliminará permanentemente el ticket <strong>&quot;{ticketToDelete?.nombre}&quot;</strong>. No podrás deshacer esta acción.
+              </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
                 <AlertDialogCancel onClick={() => setTicketToDelete(null)}>Cancelar</AlertDialogCancel>

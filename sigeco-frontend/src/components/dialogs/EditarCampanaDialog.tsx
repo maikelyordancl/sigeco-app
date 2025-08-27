@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import * as yup from "yup";
 import { yupResolver } from "@hookform/resolvers/yup";
 import {
@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -23,16 +24,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import toast from "react-hot-toast";
+import { apiFetch } from "@/lib/api";
 
-// Definimos la estructura de datos que esperamos de una campaña
+// --- INICIO DE LA CORRECCIÓN ---
+// Se elimina la propiedad 'tipo_acceso' de la interfaz, ya que este diálogo
+// no la necesita para editar el nombre y el estado.
 interface Campana {
   id_campana: number;
   nombre: string;
   estado: "Borrador" | "Activa" | "Pausada" | "Finalizada";
-  // Añadimos otros campos que puedan ser útiles, aunque no los editemos ahora
-  tipo_acceso: string;
   url_amigable: string;
+  inscripcion_libre: boolean;
 }
+// --- FIN DE LA CORRECCIÓN ---
 
 // Esquema de validación para el formulario
 const campanaSchema = yup.object().shape({
@@ -41,6 +45,7 @@ const campanaSchema = yup.object().shape({
     .string()
     .oneOf(["Borrador", "Activa", "Pausada", "Finalizada"])
     .required("El estado es requerido."),
+    inscripcion_libre: yup.boolean().required(),
 });
 
 type CampanaFormData = yup.InferType<typeof campanaSchema>;
@@ -63,6 +68,7 @@ export const EditarCampanaDialog = ({
     handleSubmit,
     reset,
     setValue,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<CampanaFormData>({
     resolver: yupResolver(campanaSchema),
@@ -74,6 +80,7 @@ export const EditarCampanaDialog = ({
       reset({
         nombre: campana.nombre,
         estado: campana.estado,
+        inscripcion_libre: !!campana.inscripcion_libre,
       });
     }
   }, [campana, reset]);
@@ -83,14 +90,12 @@ export const EditarCampanaDialog = ({
 
     const toastId = toast.loading("Actualizando campaña...");
     try {
-      const token = localStorage.getItem("token");
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/campanas/${campana.id_campana}`,
+      const response = await apiFetch(
+        `/campanas/${campana.id_campana}`,
         {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(data),
         }
@@ -118,6 +123,25 @@ export const EditarCampanaDialog = ({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit(handleUpdateCampana)} className="space-y-4 py-4">
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="space-y-0.5">
+                <Label htmlFor="inscripcion_libre">Permitir Inscripción Pública</Label>
+                <p className="text-xs text-muted-foreground">
+                    Si está activado, cualquiera puede inscribirse. Si no, solo los contactos previamente convocados.
+                </p>
+            </div>
+            <Controller
+                control={control}
+                name="inscripcion_libre"
+                render={({ field }) => (
+                    <Switch
+                        id="inscripcion_libre"
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                    />
+                )}
+            />
+          </div>
           <div>
             <Label htmlFor="nombre">Nombre de la Campaña</Label>
             <Input id="nombre" {...register("nombre")} />

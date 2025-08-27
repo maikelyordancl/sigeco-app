@@ -1,16 +1,13 @@
 "use client";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { BaseDatos } from "@/app/contactos/types/contacto";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useState } from "react";
 import { toast } from "react-hot-toast";
-
-type BaseDatos = {
-  id_base: number;
-  nombre: string;
-};
+import { apiFetch } from "@/lib/api";
 
 type Props = {
   open: boolean;
@@ -44,11 +41,10 @@ export default function FusionarBases({ open, setOpen, bases, refresh, token }: 
 
     try {
       // URL actualizada para apuntar al nuevo endpoint
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/basedatos/fusionar`, {
+      const response = await apiFetch(`/basedatos/fusionar`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({
           bases_origen: seleccionadas,

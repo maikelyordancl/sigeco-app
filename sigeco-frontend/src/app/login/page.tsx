@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { setTokens } from "@/lib/auth"; // Importamos nuestra nueva función
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -20,7 +21,7 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -34,18 +35,11 @@ export default function LoginPage() {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        console.log("Login exitoso:", data);
-        localStorage.setItem("token", data.data.token); // Guardamos el token JWT
-        router.push("/dashboard"); // Redirigimos al dashboard
+        // Usamos nuestra función centralizada para guardar los tokens
+        setTokens(data.data.accessToken, data.data.refreshToken);
+        router.push("/dashboard"); 
       } else {
-        // Manejo específico según el código de respuesta
-        if (response.status === 400) {
-          setError("Email y contraseña son obligatorios.");
-        } else if (response.status === 401) {
-          setError("Credenciales inválidas. Intenta de nuevo.");
-        } else {
-          setError(data.message || "Error al iniciar sesión.");
-        }
+        setError(data.error || "Error al iniciar sesión.");
       }
     } catch (err) {
       setError("No se pudo conectar con el servidor.");

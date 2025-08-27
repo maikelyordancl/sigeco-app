@@ -1,3 +1,6 @@
+import { Contacto, BaseDatos } from "./types/contacto"; 
+import { mapContacto } from "./utils";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export const fetchContactos = async (): Promise<Contacto[]> => {

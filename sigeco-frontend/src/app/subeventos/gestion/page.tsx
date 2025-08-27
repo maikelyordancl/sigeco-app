@@ -12,6 +12,7 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@
 import { toast } from "react-hot-toast";
 import MainLayout from "@/components/Layout/MainLayout";
 import { Plus, Calendar, MapPin, Link } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 
 interface Evento {
     id_evento: number;
@@ -40,6 +41,13 @@ interface Subevento {
     obligatorio_pago: boolean;
 }
 
+const formatDateForInput = (dateString?: string | null) => {
+    if (!dateString) return "";
+    // Asegurarse de que la fecha se interpreta correctamente antes de formatear
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return ""; // Devolver vacío si la fecha no es válida
+    return date.toISOString().split('T')[0];
+};
 
 const validationSchema = Yup.object().shape({
     id_evento: Yup.number()
@@ -55,7 +63,9 @@ const validationSchema = Yup.object().shape({
         }),
     ciudad: Yup.string().nullable().optional(),
     lugar: Yup.string().nullable().optional(),
-    link_adicional: Yup.string().nullable().optional().url("Debe ser una URL válida."),
+    // --- CORRECCIÓN ---
+    // Se permite una cadena vacía o una URL válida.
+    link_adicional: Yup.string().nullable().url("Debe ser una URL válida o estar vacío.").transform(value => value === '' ? null : value),
     texto_libre: Yup.string().nullable().optional(),
     nombre_evento_mailing: Yup.string().nullable().optional(),
     fecha_hora_mailing: Yup.string().nullable().optional(),
@@ -64,7 +74,7 @@ const validationSchema = Yup.object().shape({
     ruta_texto_mailing: Yup.string().nullable().optional(),
     ruta_imagen_mailing: Yup.string().nullable().optional(),
     ruta_formulario: Yup.string().nullable().optional(),
-    sitio_web: Yup.string().nullable().optional().url("Debe ser una URL válida."),
+    sitio_web: Yup.string().nullable().url("Debe ser una URL válida o estar vacío.").transform(value => value === '' ? null : value),
     obligatorio_registro: Yup.boolean()
         .required("Este campo es obligatorio.")
         .oneOf([true, false], "Debe seleccionar una opción válida."),
@@ -117,10 +127,8 @@ export default function GestionSubeventos() {
 
     useEffect(() => {
         const fetchEventos = async () => {
-            const token = localStorage.getItem("token");
             try {
-                const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/eventos`, {
-                    headers: { Authorization: `Bearer ${token}` },
+                const response = await apiFetch(`/eventos`, {
                 });
                 const data = await response.json();
 
@@ -143,36 +151,35 @@ export default function GestionSubeventos() {
     }, []);
 
     useEffect(() => {
-        if (selectedEventoId) {
-            const fetchSubeventos = async () => {
-                const token = localStorage.getItem("token");
-                try {
-                    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/subeventos?id_evento=${selectedEventoId}`, {
-                        headers: { Authorization: `Bearer ${token}` },
-                    });
+    if (selectedEventoId) {
+        const fetchSubeventos = async () => {
+            // const token = localStorage.getItem("token"); // Ya no necesitas esto aquí
+            try {
+                // 👇 2. Reemplaza fetch con apiFetch
+                const response = await apiFetch(`/subeventos?id_evento=${selectedEventoId}`);
 
-                    if (!response.ok) {
-                        setErrorGlobal(`Error HTTP: ${response.status}`);
-                        return; // Maneja el error sin lanzarlo
-                    }
-
-                    const data = await response.json();
-
-                    if (data.success) {
-                        setSubeventos(data.data);
-                    } else {
-                        setErrorGlobal(data.error || "Error al obtener los subeventos.");
-                    }
-                } catch (error) {
-                    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
-                    setErrorGlobal("Error al obtener subeventos: " + errorMessage);
-                    console.error("❌ Error al obtener subeventos:", errorMessage); // Maneja el error sin lanzarlo
+                if (!response.ok) {
+                    setErrorGlobal(`Error HTTP: ${response.status}`);
+                    return;
                 }
-            };
 
-            fetchSubeventos();
-        }
-    }, [selectedEventoId]);
+                const data = await response.json();
+
+                if (data.success) {
+                    setSubeventos(data.data);
+                } else {
+                    setErrorGlobal(data.error || "Error al obtener los subeventos.");
+                }
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+                setErrorGlobal("Error al obtener subeventos: " + errorMessage);
+                console.error("❌ Error al obtener subeventos:", errorMessage);
+            }
+        };
+
+        fetchSubeventos();
+    }
+}, [selectedEventoId]);
 
     const handleOpenModal = (subevento?: Subevento) => {
         setSelectedSubevento(subevento || null);
@@ -182,8 +189,8 @@ export default function GestionSubeventos() {
             id_subevento: subevento?.id_subevento ?? undefined,
             id_evento: selectedEventoId,
             nombre: subevento?.nombre ?? "",
-            fecha_inicio: subevento?.fecha_inicio ?? "",
-            fecha_fin: subevento?.fecha_fin ?? "",
+            fecha_inicio: formatDateForInput(subevento?.fecha_inicio),
+            fecha_fin: formatDateForInput(subevento?.fecha_fin),
             ciudad: subevento?.ciudad ?? "",
             lugar: subevento?.lugar ?? "",
             link_adicional: subevento?.link_adicional ?? "",
@@ -209,30 +216,21 @@ export default function GestionSubeventos() {
             return;
         }
 
-        const token = localStorage.getItem("token");
-        if (!token) {
-            toast.error("No hay token de autenticación.");
-            return;
-        }
-
         const isEditing = Boolean(data.id_subevento);
         const url = isEditing
-            ? `${process.env.NEXT_PUBLIC_API_URL}/subeventos/${data.id_subevento}`
-            : `${process.env.NEXT_PUBLIC_API_URL}/subeventos`;
+            ? `/subeventos/${data.id_subevento}`
+            : `/subeventos`;
 
         const method = isEditing ? "PUT" : "POST";
         const payload = { ...data, id_evento: selectedEventoId };
 
         try {
-            const response = await fetch(url, {
+            const response = await apiFetch(url, {
                 method: method,
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
-                },
                 body: JSON.stringify(payload),
             });
 
+            
             const result = await response.json();
             console.log("📥 Respuesta del servidor:", result);
 
@@ -241,9 +239,7 @@ export default function GestionSubeventos() {
                 setIsModalOpen(false);
 
                 // Una forma más simple y segura de refrescar la lista
-                const fetchResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/subeventos?id_evento=${selectedEventoId}`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                const fetchResponse = await apiFetch(`/subeventos?id_evento=${selectedEventoId}`);
                 const newData = await fetchResponse.json();
                 if (newData.success) {
                     setSubeventos(newData.data);
@@ -271,11 +267,9 @@ export default function GestionSubeventos() {
     const handleDeleteSubevento = async () => {
         if (!subeventoToDelete) return;
 
-        const token = localStorage.getItem("token");
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/subeventos/${subeventoToDelete.id_subevento}`, {
-                method: "DELETE",
-                headers: { Authorization: `Bearer ${token}` },
+            const response = await apiFetch(`/subeventos/${subeventoToDelete.id_subevento}`, {
+                method: "DELETE"
             });
             const result = await response.json();
 
@@ -347,14 +341,16 @@ export default function GestionSubeventos() {
                                             <MapPin size={16} />
                                             <span>{subevento.ciudad || "-"} - {subevento.lugar || "-"}</span>
                                         </div>
-                                        {subevento.link_adicional && (
-                                            <div className="flex items-center space-x-2">
-                                                <Link size={16} />
-                                                <a href={subevento.link_adicional} target="_blank" className="text-blue-500 underline">
-                                                    Link Adicional
-                                                </a>
-                                            </div>
-                                        )}
+                                        <div className="flex items-center space-x-2 min-h-6">
+                                            {subevento.link_adicional && (
+                                                <>
+                                                    <Link size={16} />
+                                                    <a href={subevento.link_adicional} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">
+                                                        Link Adicional
+                                                    </a>
+                                                </>
+                                            )}
+                                        </div>
                                         <div className="mt-4 flex justify-between">
                                             <Button size="sm" variant="outline" onClick={() => handleOpenModal(subevento)}>
                                                 Ver / Editar

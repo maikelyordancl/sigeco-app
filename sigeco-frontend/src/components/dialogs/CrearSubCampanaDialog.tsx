@@ -23,20 +23,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import toast from "react-hot-toast";
+import { apiFetch } from "@/lib/api";
 
-// Esquema de validación para el formulario
+// --- CORRECCIÓN: Se elimina 'tipo_acceso' del esquema de validación ---
 const schema = yup.object().shape({
   nombre: yup.string().required("El nombre de la campaña es requerido."),
-  tipo_acceso: yup
-    .string()
-    .oneOf(["Gratuito", "De Pago"])
-    .required("El tipo de acceso es requerido."),
+  url_amigable: yup.string().required("La URL amigable es requerida.").matches(/^[a-zA-Z0-9-]+$/, "La URL solo puede contener letras, números y guiones."),
   id_subevento: yup
     .number()
     .transform(value => (isNaN(value) ? undefined : value))
     .required("Debes seleccionar un sub-evento.")
     .positive("Debes seleccionar un sub-evento."),
 });
+// --- FIN DE LA CORRECCIÓN ---
 
 type FormData = yup.InferType<typeof schema>;
 
@@ -46,19 +45,28 @@ interface Subevento {
   nombre: string;
 }
 
-interface CrearSubCampañaDialogProps {
+interface CrearSubCampanaDialogProps {
   isOpen: boolean;
   onClose: () => void;
   id_evento: number;
-  onSubCampañaCreada: () => void;
+  onSubCampanaCreada: () => void;
 }
 
-export const CrearSubCampañaDialog = ({
+// Función para generar slugs
+const generarSlug = (texto: string) => {
+    return texto
+        .trim()
+        .replace(/\s+/g, '-') // Reemplazar espacios con -
+        .replace(/[^\w-]+/g, '') // Remover caracteres inválidos
+        .replace(/--+/g, '-'); // Reemplazar múltiples - con uno solo
+};
+
+export const CrearSubCampanaDialog = ({
   isOpen,
   onClose,
   id_evento,
-  onSubCampañaCreada,
-}: CrearSubCampañaDialogProps) => {
+  onSubCampanaCreada,
+}: CrearSubCampanaDialogProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [subeventos, setSubeventos] = useState<Subevento[]>([]);
 
@@ -66,25 +74,29 @@ export const CrearSubCampañaDialog = ({
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors },
     reset,
   } = useForm<FormData>({
     resolver: yupResolver(schema),
   });
 
+  const nombreCampana = watch("nombre");
+  useEffect(() => {
+      if(nombreCampana) {
+          setValue("url_amigable", generarSlug(nombreCampana), { shouldValidate: true });
+      }
+  }, [nombreCampana, setValue]);
+
   // Efecto que se dispara para buscar los sub-eventos disponibles
   useEffect(() => {
     if (isOpen && id_evento) {
       const fetchSubeventosDisponibles = async () => {
         try {
-          const token = localStorage.getItem("token");
-          // --- INICIO DE LA CORRECCIÓN ---
-          // Usamos la URL correcta de tu API: la que busca subeventos sin campaña.
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/subeventos/evento/${id_evento}/sin-campana`,
-            { headers: { Authorization: `Bearer ${token}` } }
+          const response = await apiFetch(  
+            `/subeventos/evento/${id_evento}/campanas`,
+            { method: "GET" }
           );
-          // --- FIN DE LA CORRECCIÓN ---
 
           if (!response.ok) throw new Error("No se pudieron cargar los sub-eventos.");
           
@@ -107,11 +119,10 @@ export const CrearSubCampañaDialog = ({
 
     try {
       // La ruta para crear campañas es '/api/campanas' con el método POST
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/campanas`, {
+      const response = await apiFetch(`/campanas`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
           },
           // El payload incluye id_subevento, que ahora sí lo tenemos.
           body: JSON.stringify({
@@ -133,7 +144,7 @@ export const CrearSubCampañaDialog = ({
       }
 
       toast.success("Sub-campaña creada con éxito", { id: toastId });
-      onSubCampañaCreada(); // Cierra el modal y refresca la lista
+      onSubCampanaCreada(); // Cierra el modal y refresca la lista
       
     } catch (error: any) {
       toast.error(error.message, { id: toastId });
@@ -190,20 +201,14 @@ export const CrearSubCampañaDialog = ({
               <Input id="nombre" {...register("nombre")} autoComplete="off" />
               {errors.nombre && <p className="text-red-500 text-sm mt-1">{errors.nombre.message}</p>}
             </div>
-            
+
             <div className="space-y-2">
-              <Label htmlFor="tipo_acceso">Tipo de Acceso</Label>
-              <Select onValueChange={(value) => setValue("tipo_acceso", value as "Gratuito" | "De Pago", { shouldValidate: true })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona un tipo de acceso" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="De Pago">De Pago</SelectItem>
-                  <SelectItem value="Gratuito">Gratuito</SelectItem>
-                </SelectContent>
-              </Select>
-              {errors.tipo_acceso && <p className="text-red-500 text-sm mt-1">{errors.tipo_acceso.message}</p>}
+              <Label htmlFor="url_amigable">URL Amigable (slug)</Label>
+              <Input id="url_amigable" {...register("url_amigable")} autoComplete="off" />
+              {errors.url_amigable && <p className="text-red-500 text-sm mt-1">{errors.url_amigable.message}</p>}
             </div>
+            
+            {/* --- CORRECCIÓN: Se elimina el campo 'tipo_acceso' del formulario --- */}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose}>Cancelar</Button>

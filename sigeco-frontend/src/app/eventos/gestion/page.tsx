@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as Yup from "yup";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,9 +13,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { toast } from "react-hot-toast";
 import MainLayout from "@/components/Layout/MainLayout";
-import { Plus, Calendar, MapPin, Search } from "lucide-react";
-import { EstadoEvento, Evento, estadosEvento } from "./types"
-import { mapEstado, reverseMapEstado, getBadgeColor } from "./utils"
+import { Plus, Calendar, MapPin, Search, Megaphone, Edit, Trash2 } from "lucide-react";
+import { EstadoEvento, Evento, estadosEvento } from "./types";
+import { mapEstado, reverseMapEstado, getBadgeColor } from "./utils";
+// --- 1. IMPORTAR APIFETCH ---
+import { apiFetch } from "@/lib/api";
 
 const validationSchema = Yup.object().shape({
   id_evento: Yup.number().optional(),
@@ -33,12 +36,13 @@ const validationSchema = Yup.object().shape({
 });
 
 export default function GestionEventos() {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [selectedEvento, setSelectedEvento] = useState<Evento | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [errorGlobal, setErrorGlobal] = useState<string | null>(null);  // Para errores generales
-  const [errorModal, setErrorModal] = useState<string | null>(null);    // Para errores en el modal
+  const [errorGlobal, setErrorGlobal] = useState<string | null>(null);
+  const [errorModal, setErrorModal] = useState<string | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [eventoToDelete, setEventoToDelete] = useState<Evento | null>(null);
   const [presupuesto, setPresupuesto] = useState("");
@@ -50,8 +54,8 @@ export default function GestionEventos() {
   }, [selectedEvento]);
 
   const handlePresupuestoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, ""); // Solo números
-    setPresupuesto(new Intl.NumberFormat("es-CL").format(Number(value))); // Formatea con separadores de miles
+    const value = e.target.value.replace(/\D/g, "");
+    setPresupuesto(new Intl.NumberFormat("es-CL").format(Number(value)));
   };
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<Evento>({
@@ -75,13 +79,9 @@ export default function GestionEventos() {
   }, [selectedEvento, reset]);
 
   const fetchEventos = useCallback(async () => {
-    const token = localStorage.getItem("token");
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/eventos`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      // --- 2. USAR APIFETCH ---
+      const response = await apiFetch('/eventos');
 
       if (response.ok) {
         const data = await response.json();
@@ -110,17 +110,9 @@ export default function GestionEventos() {
     }
   }, []);
 
-useEffect(() => {
-  const obtenerEventos = async () => {
-    try {
-      await fetchEventos();
-    } catch (error) {
-      console.error("Error inesperado al obtener eventos:", error);
-    }
-  };
-
-  obtenerEventos().catch((error) => console.error("Error inesperado:", error));
-}, [fetchEventos]);
+  useEffect(() => {
+    fetchEventos();
+  }, [fetchEventos]);
 
 
   const handleOpenModal = (evento?: Evento) => {
@@ -139,21 +131,12 @@ useEffect(() => {
   };
 
   const handleSaveEvento = async (data: Evento) => {
-    const token = localStorage.getItem("token");
-
-    if (!token) {
-      toast.error("No hay token de autenticación. Inicie sesión nuevamente.");
-      return;
-    }
-    
-    // Determina la URL y el método (Crear vs. Editar)
     const isEditing = !!data.id_evento;
     const url = isEditing
-      ? `${process.env.NEXT_PUBLIC_API_URL}/eventos?id=${data.id_evento}`
-      : `${process.env.NEXT_PUBLIC_API_URL}/eventos`;
+      ? `/eventos?id=${data.id_evento}`
+      : `/eventos`;
     const metodo = isEditing ? "PUT" : "POST";
 
-    // Limpia y convierte el presupuesto a número
     const presupuestoNumerico = Number(presupuesto.replace(/\./g, ""));
 
     const payload = {
@@ -163,16 +146,13 @@ useEffect(() => {
       ciudad: data.ciudad,
       lugar: data.lugar,
       presupuesto_marketing: presupuestoNumerico,
-      estado: reverseMapEstado(data.estado), // Convierte el estado de texto a número
+      estado: reverseMapEstado(data.estado),
     };
 
     try {
-      const response = await fetch(url, {
+      // --- 3. USAR APIFETCH ---
+      const response = await apiFetch(url, {
         method: metodo,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify(payload),
       });
 
@@ -181,22 +161,15 @@ useEffect(() => {
       if (response.ok && result.success) {
         setIsModalOpen(false);
         toast.success(isEditing ? "Evento actualizado con éxito." : "Evento creado con éxito.");
-        
-        // Refresca la lista de eventos para mostrar los cambios
         await fetchEventos();
-
       } else {
-        // --- MANEJO DE ERRORES MEJORADO ---
         if (result.errors && Array.isArray(result.errors)) {
-          // Si el backend envió un array de errores de validación, muéstralos.
           result.errors.forEach((err: any) => {
-            toast.error(err.msg, { duration: 2500 }); // Muestra un toast por cada error específico
+            toast.error(err.msg, { duration: 2500 });
           });
         } else {
-          // Si es otro tipo de error del servidor.
           toast.error(result.error || "Ocurrió un error al guardar el evento.");
         }
-        // --- FIN DEL MANEJO DE ERRORES ---
       }
     } catch (error) {
       toast.error("Error de red al intentar guardar el evento.");
@@ -205,32 +178,31 @@ useEffect(() => {
   };
 
   const handleDeleteEvento = async () => {
-  if (!eventoToDelete) return;
-
-  const token = localStorage.getItem("token");
-  try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/eventos/${eventoToDelete.id_evento}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    const result = await response.json();
-
-    if (response.ok && result.success) {
-      toast.success("Evento eliminado con éxito.");
-      setIsDeleteConfirmOpen(false);
-      setEventoToDelete(null);
-
-      await fetchEventos().catch(() => {
-        toast.error("Error al actualizar la lista de eventos después de eliminar.");
+    if (!eventoToDelete) return;
+  
+    try {
+      // --- 4. USAR APIFETCH ---
+      const response = await apiFetch(`/eventos/${eventoToDelete.id_evento}`, {
+        method: "DELETE",
       });
-    } else {
-      toast.error(result.error || "Error al eliminar el evento.");
+  
+      const result = await response.json();
+  
+      if (response.ok && result.success) {
+        toast.success("Evento eliminado con éxito.");
+        setIsDeleteConfirmOpen(false);
+        setEventoToDelete(null);
+  
+        await fetchEventos().catch(() => {
+          toast.error("Error al actualizar la lista de eventos después de eliminar.");
+        });
+      } else {
+        toast.error(result.error || "Error al eliminar el evento.");
+      }
+    } catch (error) {
+      toast.error("Error de red al intentar eliminar el evento. " + error);
     }
-  } catch (error) {
-    toast.error("Error de red al intentar eliminar el evento. " + error);
-  }
-};
+  };
 
   return (
     <MainLayout>
@@ -260,13 +232,11 @@ useEffect(() => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {eventos
-              // Filtrar eventos según el término de búsqueda
               .filter((evento) =>
                 evento.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 evento.ciudad.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 evento.lugar.toLowerCase().includes(searchTerm.toLowerCase())
               )
-              // Ordenar eventos según el estado y el ID (como ya tenías)
               .sort((a, b) => {
                 const prioridadEstado: Record<EstadoEvento, number> = {
                   "Activo": 1,
@@ -301,13 +271,26 @@ useEffect(() => {
                     <MapPin size={16} />
                     <span>{evento.ciudad} - {evento.lugar}</span>
                   </div>
-                  <div className="mt-4 flex justify-between">
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <Button size="sm" variant="outline" onClick={() => handleOpenModal(evento)}>
-                      Ver / Editar
+                      <Edit className="mr-2 h-4 w-4" /> Editar
                     </Button>
-                    <Button size="sm" variant="destructive" onClick={() => { setEventoToDelete(evento); setIsDeleteConfirmOpen(true); }}>
-                      Eliminar
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => router.push(`/eventos/${evento.id_evento}/campanas`)}
+                    >
+                        <Megaphone className="mr-2 h-4 w-4" /> Campañas
                     </Button>
+                     <Button
+    size="sm"
+    variant="destructive"
+    onClick={() => { setEventoToDelete(evento); setIsDeleteConfirmOpen(true); }}
+    className="ml-auto p-2"
+    disabled
+  >
+    <Trash2 className="h-4 w-4" />
+  </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -330,10 +313,7 @@ useEffect(() => {
             <form onSubmit={handleSubmit(handleSaveEvento)} className="space-y-4">
                 {(errorModal || Object.keys(errors).length > 0) && (
                   <div className="bg-red-100 text-red-700 p-3 rounded-md shadow-sm">
-                    {/* Mostrar error del servidor si existe */}
                     {errorModal && <p>{errorModal}</p>}
-
-                    {/* Mostrar errores de validación del formulario */}
                     {errors.nombre && <p>{errors.nombre.message}</p>}
                     {errors.fecha_inicio && <p>{errors.fecha_inicio.message}</p>}
                     {errors.fecha_fin && <p>{errors.fecha_fin.message}</p>}
@@ -349,35 +329,33 @@ useEffect(() => {
               <Input {...register("ciudad")} placeholder="Ciudad" />
               <Input {...register("lugar")} placeholder="Lugar" />
               <Input
-  type="text"
-  value={presupuesto}
-  onChange={handlePresupuestoChange}
-  placeholder="Presupuesto Marketing"
-/>
+                  type="text"
+                  value={presupuesto}
+                  onChange={handlePresupuestoChange}
+                  placeholder="Presupuesto Marketing"
+              />
               <Select
-              {...register("estado")}
-              value={selectedEvento?.estado} // Asegura que el estado actual se refleje
-              onValueChange={(value) => setSelectedEvento((prev) => prev ? { ...prev, estado: value as EstadoEvento } : null)}
-              disabled={!selectedEvento?.id_evento}  // Desactiva si es un nuevo evento
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Selecciona un estado" />
-              </SelectTrigger>
-              <SelectContent>
-                {estadosEvento.map((estado) => (
-                  <SelectItem key={estado} value={estado}>
-                    {estado}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  {...register("estado")}
+                  value={selectedEvento?.estado}
+                  onValueChange={(value) => setSelectedEvento((prev) => prev ? { ...prev, estado: value as EstadoEvento } : null)}
+                  disabled={!selectedEvento?.id_evento}
+              >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecciona un estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {estadosEvento.map((estado) => (
+                      <SelectItem key={estado} value={estado}>
+                        {estado}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+              </Select>
 
               <DialogFooter>
                 <Button type="submit">Guardar</Button>
               </DialogFooter>
             </form>
-
-
           </DialogContent>
         </Dialog>
 

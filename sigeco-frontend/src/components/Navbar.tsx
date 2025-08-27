@@ -5,12 +5,20 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, Menu } from "lucide-react";
+import { ChevronDown, ChevronUp, Menu, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
+import { apiFetch } from "@/lib/api";
+import { getRefreshToken, clearTokens } from "@/lib/auth";
 
-// Definir los submenús permitidos
-type MenuType = "contactos" | "eventos" | "difusion";
+type MenuType = "contactos" | "eventos" | "difusion" | "convocatoria";
 
-export default function Navbar() {
+interface NavbarProps {
+  fontSize: number;
+  increaseFontSize: () => void;
+  decreaseFontSize: () => void;
+  resetFontSize: () => void;
+}
+
+export default function Navbar({ fontSize, increaseFontSize, decreaseFontSize, resetFontSize }: NavbarProps) {
   const router = useRouter();
   const [openMenu, setOpenMenu] = useState<MenuType | null>(null);
 
@@ -18,21 +26,37 @@ export default function Navbar() {
     setOpenMenu(openMenu === menu ? null : menu);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
+  const handleLogout = async () => {
+    const refreshToken = getRefreshToken();
+    if (refreshToken) {
+        try {
+            await apiFetch('/auth/logout', {
+                method: 'POST',
+                body: JSON.stringify({ refreshToken }),
+            });
+        } catch (error) {
+            console.error("Fallo al cerrar sesión en el servidor:", error);
+        }
+    }
+    clearTokens();
     router.push("/login");
   };
+  
+  const formattedFontSize = `${Math.round(fontSize * 100)}%`;
 
   return (
     <nav className="bg-blue-600 text-white px-4 py-3 flex justify-between items-center shadow-md sticky top-0 z-50">
-      {/* Logo */}
       <div className="text-2xl font-bold cursor-pointer" onClick={() => router.push("/dashboard")}>SIGECO</div>
 
-      {/* Menú para pantallas grandes */}
       <div className="hidden md:flex space-x-6 items-center">
+        <div className="flex items-center space-x-2">
+          <span>Tamaño Fuente ({formattedFontSize})</span>
+          <Button variant="ghost" size="icon" onClick={decreaseFontSize}><ZoomOut size={20} /></Button>
+          <Button variant="ghost" size="icon" onClick={increaseFontSize}><ZoomIn size={20} /></Button>
+          <Button variant="ghost" size="icon" onClick={resetFontSize}><RotateCcw size={20} /></Button>
+        </div>
         <Button variant="ghost" onClick={() => router.push("/dashboard")}>Inicio</Button>
 
-        {/* Submenú Eventos */}
         <div className="relative">
           <Button
             variant="ghost"
@@ -66,9 +90,24 @@ export default function Navbar() {
             </div>
           )}
         </div>
-        <Button variant="ghost" onClick={() => router.push("/dashboard/convocatoria")}>Convocatoria</Button>
 
-        {/* Submenú Difusión */}
+        <div className="relative">
+          <Button
+            variant="ghost"
+            className="flex items-center space-x-1"
+            onClick={() => handleToggle("convocatoria")}
+          >
+            <span>Convocatoria</span>
+            {openMenu === "convocatoria" ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </Button>
+          {openMenu === "convocatoria" && (
+            <div className="absolute bg-white text-black shadow-lg rounded mt-2 p-2 space-y-2 animate-fade-in">
+              <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/convocatoria/influencers")}>Influencers</Button>
+              <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/convocatoria/whatsapp")}>WhatsApp</Button>
+            </div>
+          )}
+        </div>
+
         <div className="relative">
           <Button
             variant="ghost"
@@ -87,12 +126,11 @@ export default function Navbar() {
           )}
         </div>
 
-        <Button variant="ghost" onClick={() => router.push("/dashboard/acreditacion")}>Acreditación</Button>
+        <Button variant="ghost" onClick={() => router.push("/acreditacion")}>Acreditación</Button>
         <Button variant="ghost" onClick={() => router.push("/dashboard/reportes")}>Reportes</Button>
         <Button variant="destructive" onClick={handleLogout}>Cerrar Sesión</Button>
       </div>
 
-      {/* Menú hamburguesa para pantallas pequeñas */}
       <div className="md:hidden">
         <Sheet>
           <SheetTrigger asChild>
@@ -101,10 +139,15 @@ export default function Navbar() {
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="bg-blue-600 text-white w-64">
+             <div className="flex items-center space-x-2 mt-4">
+                <span>Fuente ({formattedFontSize})</span>
+               <Button variant="ghost" size="icon" onClick={decreaseFontSize}><ZoomOut size={20} /></Button>
+               <Button variant="ghost" size="icon" onClick={increaseFontSize}><ZoomIn size={20} /></Button>
+               <Button variant="ghost" size="icon" onClick={resetFontSize}><RotateCcw size={20} /></Button>
+             </div>
             <Accordion type="single" collapsible className="w-full mt-4 space-y-2">
               <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard")}>Inicio</Button>
 
-              {/* Presupuesto Submenú */}
               <AccordionItem value="presupuesto">
                 <AccordionTrigger className="text-left">Presupuesto</AccordionTrigger>
                 <AccordionContent>
@@ -115,19 +158,17 @@ export default function Navbar() {
                 </AccordionContent>
               </AccordionItem>
 
-              {/* Eventos Submenú */}
               <AccordionItem value="eventos">
                 <AccordionTrigger className="text-left">Eventos</AccordionTrigger>
                 <AccordionContent>
-                  <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/eventos/gestion")}>Gestión de Eventos</Button>
-                  <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/eventos/subeventos")}>Subeventos</Button>
+                  <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/eventos/gestion")}>Gestión de Eventos</Button>
+                  <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/subeventos/gestion")}>Subeventos</Button>
                 </AccordionContent>
               </AccordionItem>
 
               <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/contactos")}>Contactos</Button>
               <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/convocatoria")}>Convocatoria</Button>
 
-              {/* Difusión Submenú */}
               <AccordionItem value="difusion">
                 <AccordionTrigger className="text-left">Difusión</AccordionTrigger>
                 <AccordionContent>
@@ -137,7 +178,7 @@ export default function Navbar() {
                 </AccordionContent>
               </AccordionItem>
 
-              <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/acreditacion")}>Acreditación</Button>
+              <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/acreditacion")}>Acreditación</Button>
               <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/reportes")}>Reportes</Button>
 
               <Button variant="destructive" className="w-full justify-start mt-4" onClick={handleLogout}>Cerrar Sesión</Button>

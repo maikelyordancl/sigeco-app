@@ -8,12 +8,55 @@ import { Input } from "@/components/ui/input";
 import { toast } from "react-hot-toast";
 import { Contacto } from "../types/contacto";
 import { Table, TableBody, TableHead, TableHeader, TableRow, TableCell } from "@/components/ui/table";
+import { apiFetch } from "@/lib/api";
 
 type ImportarContactosProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   refreshContactos: () => void;
 };
+
+type ValidationError = {
+  type: string;
+  value: string;
+  msg: string;
+  path: string;
+  location: string;
+};
+
+const normalizeContactos = (contactos: Partial<Contacto>[]): Partial<Contacto>[] => {
+  return contactos.map(contacto => {
+    const normalizedContacto: Partial<Contacto> = {};
+
+    Object.keys(contacto).forEach(key => {
+      const typedKey = key as keyof Contacto;
+      let value = contacto[typedKey];
+
+      if (typeof value === 'string') {
+        value = value.trim();
+        switch (typedKey) {
+          case 'nombre':
+            value = value.toUpperCase();
+            break;
+          case 'email':
+            value = value.toLowerCase();
+            break;
+          case 'telefono':
+            value = value.replace(/\s+/g, '');
+            break;
+          case 'rut':
+            value = value.replace(/[.-]/g, '');
+            break;
+        }
+      }
+      // --- CORRECCIÓN APLICADA AQUÍ ---
+      (normalizedContacto as any)[typedKey] = value;
+    });
+
+    return normalizedContacto;
+  });
+};
+
 
 const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, refreshContactos }) => {
   const [file, setFile] = useState<File | null>(null);
@@ -54,8 +97,10 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
           setError("El archivo no contiene datos.");
           return;
         }
-
-        setContactosPreview(jsonData);
+        
+        const normalizedData = normalizeContactos(jsonData);
+        setContactosPreview(normalizedData);
+        
         setError(null);
       } catch {
         setError("Error al procesar el archivo. Asegúrese de que el formato sea correcto.");
@@ -80,11 +125,10 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
     setError(null);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/basedatos/importar`, {
+      const response = await apiFetch(`/basedatos/importar`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`
         },
         body: JSON.stringify({
           nombre_base: nombreBase.trim(),
@@ -103,54 +147,71 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
         setNombreBase("");
       } else {
         if (result.errors && Array.isArray(result.errors)) {
-          const errorMessages = result.errors.map((err: any) => err.msg).join(' ');
-          setError(`Error de validación: ${errorMessages}`);
+          const errorMessages = result.errors.map((err: ValidationError) => {
+            const match = err.path.match(/\[(\d+)\]/);
+            const index = match ? parseInt(match[1], 10) : -1;
+            const rowNumber = index !== -1 ? index + 2 : "desconocida";
+            
+            return `Fila ${rowNumber}: ${err.msg} (Valor: "${err.value}")`;
+          }).join('\n');
+          
+          setError(`Se encontraron los siguientes errores:\n${errorMessages}`);
         } else {
           setError(result.error || "Error al importar los contactos.");
         }
       }
-    } catch (error) {
-      setError("Error de red al intentar importar contactos.");
+    } catch (error: any) {
+        if (error.response) {
+            const result = await error.response.json();
+            if (result.errors && Array.isArray(result.errors)) {
+                const errorMessages = result.errors.map((err: ValidationError) => {
+                    const match = err.path.match(/\[(\d+)\]/);
+                    const index = match ? parseInt(match[1], 10) : -1;
+                    const rowNumber = index !== -1 ? index + 2 : "desconocida";
+                    return `Fila ${rowNumber}: ${err.msg} (Valor: "${err.value}")`;
+                }).join('<br/>');
+                
+                setError(`Se encontraron los siguientes errores:<br/>${errorMessages}`);
+            } else {
+                setError(result.error || "Error al importar los contactos.");
+            }
+        } else {
+            setError("Error de red al intentar importar contactos.");
+        }
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
   };
 
-  // --- FUNCIÓN NUEVA PARA GENERAR Y DESCARGAR LA PLANTILLA ---
   const handleDownloadTemplate = () => {
-    // 1. Definimos las cabeceras que necesita el backend
     const headers = [
-      "nombre", "apellido", "email", "telefono", "rut", 
-      "empresa", "actividad", "profesion", "pais"
+      "nombre", "email", "telefono", "rut", 
+      "empresa", "actividad", "profesion", "pais", "comuna"
     ];
     
-    // 2. Creamos datos de ejemplo para guiar al usuario
     const exampleData = [{
-      nombre: "Juan",
-      apellido: "Pérez",
+      nombre: "Juan Pérez",
       email: "juan.perez@ejemplo.com",
       telefono: "+56912345678",
       rut: "12.345.678-9",
       empresa: "Empresa Ejemplo S.A.",
       actividad: "Tecnología",
       profesion: "Ingeniero de Software",
-      pais: "Chile"
+      pais: "Chile",
+      comuna: "Coronel"
     }];
 
-    // 3. Creamos una hoja de cálculo a partir de los datos
     const worksheet = XLSX.utils.json_to_sheet(exampleData, { header: headers });
     
-    // 4. Creamos un libro de trabajo y añadimos la hoja
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Contactos");
 
-    // 5. Forzamos la descarga del archivo en el navegador del usuario
     XLSX.writeFile(workbook, "plantilla_importacion_contactos.xlsx");
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-w-6xl">
         <DialogHeader>
           <DialogTitle>Importar Contactos desde Excel</DialogTitle>
         </DialogHeader>
@@ -158,7 +219,7 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
         <div className="space-y-4">
           <Input type="file" accept=".xlsx, .xls" onChange={handleFileChange} />
           <Button onClick={handleParseFile} className="w-full">
-            Leer Archivo y Previsualizar
+            Leer, Limpiar y Previsualizar
           </Button>
 
           <button
@@ -177,7 +238,13 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
             />
           </div>
 
-          {error && <div className="text-red-500 mt-2 p-2 bg-red-50 rounded">{error}</div>}
+          {error && (
+            <div 
+              className="text-red-500 mt-2 p-2 bg-red-50 rounded whitespace-pre-wrap"
+              dangerouslySetInnerHTML={{ __html: error.replace(/\n/g, '<br />') }}
+            >
+            </div>
+          )}
 
           {contactosPreview.length > 0 && (
             <div className="mt-4">
@@ -187,22 +254,22 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
                   <TableHeader>
                     <TableRow>
                       <TableHead>Nombre</TableHead>
-                      <TableHead>Apellido</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Teléfono</TableHead>
                       <TableHead>RUT</TableHead>
                       <TableHead>País</TableHead>
+                      <TableHead>Comuna</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {contactosPreview.slice(0, 10).map((c, index) => (
                       <TableRow key={index}>
                         <TableCell>{c.nombre}</TableCell>
-                        <TableCell>{c.apellido}</TableCell>
                         <TableCell>{c.email}</TableCell>
                         <TableCell>{c.telefono}</TableCell>
                         <TableCell>{c.rut}</TableCell>
                         <TableCell>{c.pais}</TableCell>
+                        <TableCell>{c.comuna}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

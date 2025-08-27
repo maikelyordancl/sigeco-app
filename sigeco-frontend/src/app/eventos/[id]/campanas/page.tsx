@@ -12,22 +12,31 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, PlusCircle, Ticket, Edit } from "lucide-react";
-import { CrearSubCampañaDialog } from "@/components/dialogs/CrearSubCampañaDialog";
+import { ArrowLeft, PlusCircle, Ticket, Edit, Send, Settings, Users } from "lucide-react";
+import { CrearSubCampanaDialog } from "@/components/dialogs/CrearSubCampanaDialog";
 import { GestionTicketsDialog } from "@/components/dialogs/GestionTicketsDialog";
-import { EditarCampanaDialog } from "@/components/dialogs/EditarCampanaDialog"; // 1. IMPORTAMOS el nuevo diálogo
+import { EditarCampanaDialog } from "@/components/dialogs/EditarCampanaDialog";
+import { FormularioConfigDialog } from "@/components/dialogs/FormularioConfigDialog";
 import MainLayout from "@/components/Layout/MainLayout";
 import toast from "react-hot-toast";
+import { apiFetch } from "@/lib/api";
 
-// Tipos
 interface Campana {
   id_campana: number;
   nombre: string;
-  tipo_acceso: "Gratuito" | "De Pago";
   estado: "Borrador" | "Activa" | "Pausada" | "Finalizada";
   url_amigable: string;
   id_subevento: number | null;
+  inscripcion_libre: boolean;
   subevento_nombre?: string;
+  obligatorio_registro: boolean | null;
+  obligatorio_pago: boolean | null;
+  invitados?: number;
+  registrados?: number;
+  confirmados?: number;
+  asistieron?: number;
+  cancelados?: number;
+  pagados?: number;
 }
 
 const GestionCampanasPage = () => {
@@ -35,40 +44,39 @@ const GestionCampanasPage = () => {
   const params = useParams();
   const id_evento = params.id as string;
 
+  const [eventName, setEventName] = useState<string>('');
   const [campanaPrincipal, setCampanaPrincipal] = useState<Campana | null>(null);
   const [subCampanas, setSubCampanas] = useState<Campana[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Estados para modales
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
   const [isTicketsModalOpen, setTicketsModalOpen] = useState(false);
-  const [selectedCampanaId, setSelectedCampanaId] = useState<number | null>(null);
-  
-  // --- 2. AÑADIMOS NUEVOS ESTADOS para el modal de EDICIÓN ---
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isFormConfigModalOpen, setFormConfigModalOpen] = useState(false);
+
+  const [selectedCampanaId, setSelectedCampanaId] = useState<number | null>(null);
   const [campanaToEdit, setCampanaToEdit] = useState<Campana | null>(null);
-  // --- Fin de los nuevos estados ---
 
   const fetchCampanas = useCallback(async () => {
     if (!id_evento) return;
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/campanas/evento/${id_evento}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await apiFetch(`/campanas/evento/${id_evento}`);
+
       if (!res.ok) throw new Error("No se pudieron obtener las campañas.");
       const responseData = await res.json();
-      if (responseData.success && Array.isArray(responseData.data)) {
-        const campanas: Campana[] = responseData.data;
-        setCampanaPrincipal(campanas.find((c) => !c.id_subevento) || null);
-        setSubCampanas(campanas.filter((c) => !!c.id_subevento));
+      
+      if (responseData.success && responseData.data) {
+        const { eventName, campaigns } = responseData.data;
+        setEventName(eventName);
+        setCampanaPrincipal(campaigns.find((c: Campana) => !c.id_subevento) || null);
+        setSubCampanas(campaigns.filter((c: Campana) => !!c.id_subevento));
       } else {
         throw new Error(responseData.message || "La respuesta de la API no tiene el formato esperado.");
       }
     } catch (error: any) {
       toast.error(error.message || "No se pudieron cargar las campañas.");
+      setEventName('');
       setCampanaPrincipal(null);
       setSubCampanas([]);
     } finally {
@@ -85,7 +93,6 @@ const GestionCampanasPage = () => {
     setTicketsModalOpen(true);
   };
 
-  // --- 3. AÑADIMOS LAS FUNCIONES para abrir y cerrar el modal de EDICIÓN ---
   const handleOpenEditModal = (campana: Campana) => {
     setCampanaToEdit(campana);
     setIsEditModalOpen(true);
@@ -96,55 +103,102 @@ const GestionCampanasPage = () => {
     setCampanaToEdit(null);
   };
 
-  const onCampañaChange = () => {
-    fetchCampanas();
+  const handleOpenFormConfigModal = (id_campana: number) => {
+    setSelectedCampanaId(id_campana);
+    setFormConfigModalOpen(true);
   };
-  
-  const onCampañaActualizada = () => {
+
+  const onCampanaChange = () => fetchCampanas();
+
+  const onCampanaActualizada = () => {
     handleCloseEditModal();
-    onCampañaChange();
-  }
+    onCampanaChange();
+  };
+
+  const getTipoAccesoTexto = (campana: Campana) => {
+    if (campana.id_subevento === null) return "Informativa";
+    return campana.obligatorio_pago ? "De Pago" : "Gratuito";
+  };
+
+  const handleGoToConvocatoria = (id_campana: number) => {
+    router.push(`/eventos/${id_evento}/campanas/${id_campana}/convocatoria`);
+  };
+
+  const handleGoToEditor = (id_campana: number) => {
+    router.push(`/eventos/${id_evento}/campanas/${id_campana}/editor`);
+  };
+  const handleGoToAsistentes = (id_campana: number) => {
+    router.push(`/eventos/${id_evento}/campanas/${id_campana}/asistentes`);
+  };
 
   const renderCard = (campana: Campana) => (
     <Card key={campana.id_campana} className="flex flex-col shadow-md hover:shadow-lg transition-shadow">
       <CardHeader>
         <div className="flex justify-between items-start">
           <CardTitle>{campana.nombre}</CardTitle>
-          <Badge
-            className={campana.estado === "Activa" ? "bg-green-600 text-white" : ""}
-          >
-            {campana.estado}
-          </Badge>
+          <div className="flex items-center space-x-2">
+            <Badge className={campana.estado === "Activa" ? "bg-green-600 text-white" : ""}>{campana.estado}</Badge>
+         <Button variant="secondary" size="sm" onClick={() => handleGoToAsistentes(campana.id_campana)} disabled={!campana.id_subevento}>
+          <Users className="mr-2 h-4 w-4" /> Asistentes
+        </Button>
+            {!!campana.id_subevento && (
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleOpenFormConfigModal(campana.id_campana)}>
+                <Settings className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
         <CardDescription>
-          {campana.tipo_acceso} - {campana.subevento_nombre || "Evento Principal"}
+          {getTipoAccesoTexto(campana)} - {campana.subevento_nombre || "Evento Principal"}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-grow">
         <p className="text-sm text-gray-500 break-all">
           URL:{" "}
-          <a
-            href={`/${campana.url_amigable}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:underline"
-          >
-            /{campana.url_amigable}
+          <a href={`/c/${campana.url_amigable}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+            /c/{campana.url_amigable}
           </a>
         </p>
+        <div className="mt-4 border-t pt-2 text-sm">
+          <h4 className="font-semibold mb-1">Asistencia:</h4>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {!campana.obligatorio_registro && !campana.obligatorio_pago && (
+              <>
+                <p>Invitados: <span className="font-bold">{campana.invitados || 0}</span></p>
+                <p>Asistieron: <span className="font-bold">{campana.asistieron || 0}</span></p>
+              </>
+            )}
+            {campana.obligatorio_registro && !campana.obligatorio_pago && (
+              <>
+                <p>Registrados: <span className="font-bold">{campana.registrados || 0}</span></p>
+                <p>Confirmados: <span className="font-bold">{campana.confirmados || 0}</span></p>
+                <p>Asistieron: <span className="font-bold">{campana.asistieron || 0}</span></p>
+              </>
+            )}
+            {campana.obligatorio_registro && campana.obligatorio_pago && (
+              <>
+                <p>Registrados: <span className="font-bold">{campana.registrados || 0}</span></p>
+                <p>Confirmados: <span className="font-bold">{campana.confirmados || 0}</span></p>
+                <p>Pagados: <span className="font-bold text-green-600">{campana.pagados || 0}</span></p>
+                <p>Asistieron: <span className="font-bold">{campana.asistieron || 0}</span></p>
+              </>
+            )}
+            {!!campana.cancelados && <p className="text-red-600">Cancelados: <span className="font-bold">{campana.cancelados}</span></p>}
+          </div>
+        </div>
       </CardContent>
-      <CardFooter className="grid grid-cols-2 gap-2 pt-4">
-        {/* --- 4. ACTIVAMOS EL BOTÓN Y LE AÑADIMOS EL onClick --- */}
+      <CardFooter className="grid grid-cols-2 lg:grid-cols-5 gap-2 pt-4">
         <Button variant="outline" size="sm" onClick={() => handleOpenEditModal(campana)}>
-          <Edit className="mr-2 h-4 w-4" /> Editar
+          <Edit className="mr-2 h-4 w-4" /> Config.
         </Button>
-        <Button
-          variant="default"
-          size="sm"
-          onClick={() => handleOpenTicketsModal(campana.id_campana)}
-          disabled={campana.tipo_acceso === "Gratuito"}
-        >
+        <Button variant="outline" size="sm" onClick={() => handleGoToEditor(campana.id_campana)} disabled={!campana.id_subevento}>
+          <Edit className="mr-2 h-4 w-4" /> Landing
+        </Button>
+        <Button variant="default" size="sm" onClick={() => handleOpenTicketsModal(campana.id_campana)} disabled={!campana.obligatorio_pago}>
           <Ticket className="mr-2 h-4 w-4" /> Tickets
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => handleGoToConvocatoria(campana.id_campana)} disabled={!campana.id_subevento}>
+          <Send className="mr-2 h-4 w-4" /> Convocar
         </Button>
       </CardFooter>
     </Card>
@@ -157,14 +211,16 @@ const GestionCampanasPage = () => {
           <Button variant="outline" onClick={() => router.push("/eventos/gestion")}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Volver a Eventos
           </Button>
-          <h1 className="text-2xl md:text-3xl font-bold text-center">Gestión de Campañas</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-center">
+            Gestión de Campañas{eventName && `: ${eventName}`}
+          </h1>
           <Button onClick={() => setCreateModalOpen(true)}>
             <PlusCircle className="mr-2 h-4 w-4" /> Crear Sub-Campaña
           </Button>
         </div>
-        
+
         {loading ? (
-           <p className="text-center py-10">Cargando campañas...</p>
+          <p className="text-center py-10">Cargando campañas...</p>
         ) : (
           <>
             {campanaPrincipal && (
@@ -187,35 +243,39 @@ const GestionCampanasPage = () => {
                 </div>
               )}
             </div>
-            {/* Mensaje de no encontradas */}
           </>
         )}
       </div>
 
-      <CrearSubCampañaDialog
+      <CrearSubCampanaDialog
         isOpen={isCreateModalOpen}
         onClose={() => setCreateModalOpen(false)}
         id_evento={parseInt(id_evento)}
-        onSubCampañaCreada={() => {
-            setCreateModalOpen(false);
-            toast.success("Sub-campaña creada. Actualizando...");
-            onCampañaChange();
+        onSubCampanaCreada={() => {
+          setCreateModalOpen(false);
+          toast.success("Sub-campaña creada. Actualizando...");
+          onCampanaChange();
         }}
       />
-      
+
       <GestionTicketsDialog
         isOpen={isTicketsModalOpen}
-        onClose={() => setSelectedCampanaId(null)}
+        onClose={() => setTicketsModalOpen(false)}
         id_campana={selectedCampanaId}
-        onTicketChange={onCampañaChange}
+        onTicketChange={onCampanaChange}
       />
-      
-      {/* --- 5. RENDERIZAMOS EL DIÁLOGO DE EDICIÓN --- */}
+
       <EditarCampanaDialog
         isOpen={isEditModalOpen}
         onClose={handleCloseEditModal}
         campana={campanaToEdit}
-        onCampanaActualizada={onCampañaActualizada}
+        onCampanaActualizada={onCampanaActualizada}
+      />
+
+      <FormularioConfigDialog
+        isOpen={isFormConfigModalOpen}
+        onClose={() => setFormConfigModalOpen(false)}
+        id_campana={selectedCampanaId}
       />
     </MainLayout>
   );
