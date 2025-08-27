@@ -79,7 +79,7 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
   return (
     <div className="min-h-screen bg-gray-100">
       <Navbar
-        fontSize={fontSize} // Pasamos el valor actual
+        fontSize={fontSize}
         increaseFontSize={increaseFontSize}
         decreaseFontSize={decreaseFontSize}
         resetFontSize={resetFontSize}
