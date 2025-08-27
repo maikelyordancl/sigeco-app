@@ -54,10 +54,10 @@ export default function AcreditarCampanaPage() {
             fetchAsistentes();
         }
     }, [id_campana, fetchAsistentes]);
-    
+
     const filteredAsistentes = useMemo(() => {
         if (!searchTerm) return asistentes;
-        return asistentes.filter(a => 
+        return asistentes.filter(a =>
             a.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
             (a.rut && a.rut.toLowerCase().includes(searchTerm.toLowerCase())) ||
             a.email.toLowerCase().includes(searchTerm.toLowerCase())
@@ -70,7 +70,7 @@ export default function AcreditarCampanaPage() {
         const pendientes = total - acreditados;
         return { total, acreditados, pendientes };
     }, [asistentes]);
-    
+
     const handleUpdateStatus = async (id_inscripcion: number, nuevo_estado: 'Asistió' | 'Cancelado' | 'Confirmado') => {
         const originalState = [...asistentes];
         // Optimistic UI update
@@ -86,7 +86,7 @@ export default function AcreditarCampanaPage() {
             if (!response.ok) throw new Error('No se pudo actualizar el estado.');
             const result = await response.json();
             if (!result.success) throw new Error(result.error);
-            
+
             toast.success(`Asistente actualizado a: ${nuevo_estado}`);
 
         } catch (error: any) {
@@ -95,7 +95,7 @@ export default function AcreditarCampanaPage() {
             toast.error(error.message);
         }
     };
-    
+
     const getStatusBadge = (estado: Asistente['estado_asistencia']) => {
         switch (estado) {
             case 'Asistió': return <Badge className="bg-green-500">Acreditado</Badge>;
@@ -103,7 +103,7 @@ export default function AcreditarCampanaPage() {
             default: return <Badge variant="secondary">Pendiente</Badge>;
         }
     };
-    
+
     return (
         <MainLayout title="Acreditar Campaña">
             <div className="p-4 md:p-6">
@@ -118,7 +118,7 @@ export default function AcreditarCampanaPage() {
                         <CardTitle>Panel de Acreditación</CardTitle>
                     </CardHeader>
                     <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <Input 
+                        <Input
                             placeholder="Buscar por nombre, RUT, email..."
                             className="lg:col-span-2"
                             value={searchTerm}
@@ -139,6 +139,7 @@ export default function AcreditarCampanaPage() {
                     <Table>
                         <TableHeader>
                             <TableRow>
+                                <TableHead>#</TableHead> {/* Nueva columna */}
                                 <TableHead>Nombre</TableHead>
                                 <TableHead>RUT</TableHead>
                                 <TableHead>Email</TableHead>
@@ -149,33 +150,41 @@ export default function AcreditarCampanaPage() {
                         </TableHeader>
                         <TableBody>
                             {loading ? (
-                                <TableRow><TableCell colSpan={6} className="text-center h-24">Cargando...</TableCell></TableRow>
-                            ) : filteredAsistentes.map(asistente => (
-                                <TableRow key={asistente.id_inscripcion}>
-                                    <TableCell className="font-medium">{asistente.nombre} </TableCell>
-                                    <TableCell>{asistente.rut || 'No especificado'}</TableCell>
-                                    <TableCell>{asistente.email}</TableCell>
-                                    <TableCell>{asistente.tipo_entrada || 'General'}</TableCell>
-                                    <TableCell className="text-center">{getStatusBadge(asistente.estado_asistencia)}</TableCell>
-                                    <TableCell className="text-right space-x-2">
-                                        {asistente.estado_asistencia !== 'Asistió' ? (
-                                            <>
-                                                <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleUpdateStatus(asistente.id_inscripcion, 'Asistió')}>
-                                                    <UserCheck className="h-4 w-4" />
-                                                </Button>
-                                                <Button size="sm" variant="destructive" onClick={() => handleUpdateStatus(asistente.id_inscripcion, 'Cancelado')}>
-                                                    <UserX className="h-4 w-4" />
-                                                </Button>
-                                            </>
-                                        ) : (
-                                            <Button size="sm" variant="outline" onClick={() => handleUpdateStatus(asistente.id_inscripcion, 'Confirmado')}>
-                                                <RotateCcw className="h-4 w-4" /> Revertir
-                                            </Button>
-                                        )}
+                                <TableRow>
+                                    <TableCell colSpan={7} className="text-center h-24">
+                                        Cargando...
                                     </TableCell>
                                 </TableRow>
-                            ))}
+                            ) : (
+                                filteredAsistentes.map((asistente, index) => (
+                                    <TableRow key={asistente.id_inscripcion}>
+                                        <TableCell>{index + 1}</TableCell>
+                                        <TableCell className="font-medium">{asistente.nombre}</TableCell>
+                                        <TableCell>{asistente.rut || 'No especificado'}</TableCell>
+                                        <TableCell>{asistente.email}</TableCell>
+                                        <TableCell>{asistente.tipo_entrada || 'General'}</TableCell>
+                                        <TableCell className="text-center">{getStatusBadge(asistente.estado_asistencia)}</TableCell>
+                                        <TableCell className="text-right space-x-2">
+                                            {asistente.estado_asistencia !== 'Asistió' ? (
+                                                <>
+                                                    <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleUpdateStatus(asistente.id_inscripcion, 'Asistió')}>
+                                                        <UserCheck className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button size="sm" variant="destructive" onClick={() => handleUpdateStatus(asistente.id_inscripcion, 'Cancelado')}>
+                                                        <UserX className="h-4 w-4" />
+                                                    </Button>
+                                                </>
+                                            ) : (
+                                                <Button size="sm" variant="outline" onClick={() => handleUpdateStatus(asistente.id_inscripcion, 'Confirmado')}>
+                                                    <RotateCcw className="h-4 w-4" /> Revertir
+                                                </Button>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
                         </TableBody>
+
                     </Table>
                 </div>
             </div>

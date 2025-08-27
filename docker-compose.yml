@@ -12,6 +12,8 @@ services:
       - "3090:8000"
     env_file:
       - ./sigeco-backend/.env
+    volumes:
+      - /home/sigeco/sigeco-backend/uploads:/app/public/uploads
     networks:
       - sigeco-net
 
