@@ -1,0 +1,46 @@
+# Nombre del flujo de trabajo
+name: Deploy to Server
+
+# Se activa con cada push a la rama 'main'
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    # Máquina virtual donde se ejecuta el trabajo
+    runs-on: ubuntu-latest
+    
+    # Especifica el entorno de despliegue para usar sus secrets
+    environment: sigeco
+
+    steps:
+      # Acción que se conecta por SSH y ejecuta los comandos
+      - name: Deploy to Server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # 1. Moverse a la carpeta del proyecto
+            cd /home/sigeco
+            
+            # 2. Descargar los últimos cambios del repositorio
+            echo "🚚 Descargando cambios..."
+            git pull origin main
+            
+            # 3. Reconstruir las imágenes de Docker
+            echo "🛠️ Reconstruyendo imágenes..."
+            docker-compose build
+            
+            # 4. Reiniciar los servicios con los nuevos cambios
+            echo "🚀 Reiniciando contenedores..."
+            docker-compose up -d --force-recreate
+            
+            # 5. (Opcional) Limpiar imágenes viejas para ahorrar espacio
+            echo "🧹 Limpiando imágenes antiguas..."
+            docker image prune -f
+            
+            echo "✅ ¡Despliegue finalizado!"

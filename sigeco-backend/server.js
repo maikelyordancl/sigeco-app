@@ -43,6 +43,7 @@ const ticketsRoutes = require('./src/routes/ticketsRoutes');
 const publicRoutes = require('./src/routes/publicRoutes');
 const acreditacionRoutes = require('./src/routes/acreditacionRoutes');
 const uploadRoutes = require('./src/routes/uploadRoutes');
+const eventoArchivosRoutes = require('./src/routes/eventoArchivosRoutes');
 
 // --- Registro de Rutas en la Aplicación ---
 app.use('/api/auth', authRoutes);
@@ -55,6 +56,7 @@ app.use('/api/tickets', ticketsRoutes);
 app.use('/api/acreditacion', acreditacionRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/eventos', eventoArchivosRoutes);
 
 const PORT = process.env.PORT || 8000;
 

@@ -15,15 +15,32 @@ export default function MainLayout({ children, title }: MainLayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [fontSize, setFontSize] = useState(1); // Escala inicial (1 = 100%)
-
-  const increaseFontSize = () => setFontSize(prev => Math.min(prev + 0.1, 1.5));
-  const decreaseFontSize = () => setFontSize(prev => Math.max(prev - 0.1, 0.8));
-  const resetFontSize = () => setFontSize(1);
+  const [fontSize, setFontSize] = useState(1); 
 
   useEffect(() => {
-    // Aplicamos el tamaño de fuente directamente al elemento <html>
-    // Usamos 'rem' para que todos los elementos con 'rem' escalen
+    const savedFontSize = localStorage.getItem('fontSize');
+    if (savedFontSize) {
+      setFontSize(parseFloat(savedFontSize));
+    }
+  }, []);
+
+
+  const increaseFontSize = () => setFontSize(prev => {
+    const newSize = Math.min(prev + 0.1, 1.5);
+    localStorage.setItem('fontSize', newSize.toString());
+    return newSize;
+  });
+  const decreaseFontSize = () => setFontSize(prev => {
+    const newSize = Math.max(prev - 0.1, 0.8);
+    localStorage.setItem('fontSize', newSize.toString());
+    return newSize;
+  });
+  const resetFontSize = () => {
+    localStorage.setItem('fontSize', '1');
+    setFontSize(1);
+  };
+
+  useEffect(() => {
     document.documentElement.style.fontSize = `${fontSize * 16}px`;
   }, [fontSize]);
 

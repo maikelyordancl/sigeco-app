@@ -13,10 +13,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { toast } from "react-hot-toast";
 import MainLayout from "@/components/Layout/MainLayout";
-import { Plus, Calendar, MapPin, Search, Megaphone, Edit, Trash2 } from "lucide-react";
+// --- MODIFICACIÓN: Importar el nuevo ícono y el nuevo modal ---
+import { Plus, Calendar, MapPin, Search, Megaphone, Edit, Trash2, FolderArchive } from "lucide-react";
+import { GestionArchivosDialog } from "@/components/dialogs/GestionArchivosDialog";
+// --- FIN MODIFICACIÓN ---
 import { EstadoEvento, Evento, estadosEvento } from "./types";
 import { mapEstado, reverseMapEstado, getBadgeColor } from "./utils";
-// --- 1. IMPORTAR APIFETCH ---
 import { apiFetch } from "@/lib/api";
 
 const validationSchema = Yup.object().shape({
@@ -46,6 +48,12 @@ export default function GestionEventos() {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [eventoToDelete, setEventoToDelete] = useState<Evento | null>(null);
   const [presupuesto, setPresupuesto] = useState("");
+
+  // --- NUEVOS ESTADOS PARA EL MODAL DE ARCHIVOS ---
+  const [isArchivosModalOpen, setIsArchivosModalOpen] = useState<boolean>(false);
+  const [eventoParaArchivos, setEventoParaArchivos] = useState<Evento | null>(null);
+  // --- FIN NUEVOS ESTADOS ---
+
 
   useEffect(() => {
     if (selectedEvento?.presupuesto_marketing) {
@@ -80,7 +88,6 @@ export default function GestionEventos() {
 
   const fetchEventos = useCallback(async () => {
     try {
-      // --- 2. USAR APIFETCH ---
       const response = await apiFetch('/eventos');
 
       if (response.ok) {
@@ -129,6 +136,13 @@ export default function GestionEventos() {
     setPresupuesto(new Intl.NumberFormat("es-CL").format(evento ? evento.presupuesto_marketing ?? 0 : 0));
     setIsModalOpen(true);
   };
+  
+  // --- NUEVA FUNCIÓN PARA ABRIR EL MODAL DE ARCHIVOS ---
+  const handleOpenArchivosModal = (evento: Evento) => {
+    setEventoParaArchivos(evento);
+    setIsArchivosModalOpen(true);
+  };
+  // --- FIN NUEVA FUNCIÓN ---
 
   const handleSaveEvento = async (data: Evento) => {
     const isEditing = !!data.id_evento;
@@ -150,7 +164,6 @@ export default function GestionEventos() {
     };
 
     try {
-      // --- 3. USAR APIFETCH ---
       const response = await apiFetch(url, {
         method: metodo,
         body: JSON.stringify(payload),
@@ -181,7 +194,6 @@ export default function GestionEventos() {
     if (!eventoToDelete) return;
   
     try {
-      // --- 4. USAR APIFETCH ---
       const response = await apiFetch(`/eventos/${eventoToDelete.id_evento}`, {
         method: "DELETE",
       });
@@ -271,7 +283,8 @@ export default function GestionEventos() {
                     <MapPin size={16} />
                     <span>{evento.ciudad} - {evento.lugar}</span>
                   </div>
-                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {/* --- MODIFICACIÓN: Añadir botón de Archivos y ajustar grid --- */}
+                  <div className="mt-4 grid grid-cols-2 gap-2">
                     <Button size="sm" variant="outline" onClick={() => handleOpenModal(evento)}>
                       <Edit className="mr-2 h-4 w-4" /> Editar
                     </Button>
@@ -282,16 +295,22 @@ export default function GestionEventos() {
                     >
                         <Megaphone className="mr-2 h-4 w-4" /> Campañas
                     </Button>
-                     <Button
-    size="sm"
-    variant="destructive"
-    onClick={() => { setEventoToDelete(evento); setIsDeleteConfirmOpen(true); }}
-    className="ml-auto p-2"
-    disabled
-  >
-    <Trash2 className="h-4 w-4" />
-  </Button>
+                    <Button size="sm" variant="outline" onClick={() => handleOpenArchivosModal(evento)}>
+                        <FolderArchive className="mr-2 h-4 w-4" /> Archivos
+                    </Button>
+                    {/* Contenedor para alinear el botón de eliminar a la derecha */}
+                    <div className="flex justify-end">
+                         <Button
+                            size="icon" // Usamos el tamaño 'icon'
+                            variant="destructive"
+                            onClick={() => { setEventoToDelete(evento); setIsDeleteConfirmOpen(true); }}
+                            disabled
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    </div>
                   </div>
+                   {/* --- FIN MODIFICACIÓN --- */}
                 </CardContent>
               </Card>
             ))}
@@ -358,6 +377,14 @@ export default function GestionEventos() {
             </form>
           </DialogContent>
         </Dialog>
+        
+        {/* --- MODIFICACIÓN: Renderizar el nuevo modal --- */}
+        <GestionArchivosDialog 
+            isOpen={isArchivosModalOpen}
+            onClose={() => setIsArchivosModalOpen(false)}
+            evento={eventoParaArchivos}
+        />
+        {/* --- FIN MODIFICACIÓN --- */}
 
         <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
           <DialogContent>
