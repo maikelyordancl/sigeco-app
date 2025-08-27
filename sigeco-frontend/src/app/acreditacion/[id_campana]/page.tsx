@@ -73,7 +73,6 @@ export default function AcreditarCampanaPage() {
 
     const handleUpdateStatus = async (id_inscripcion: number, nuevo_estado: 'Asistió' | 'Cancelado' | 'Confirmado') => {
         const originalState = [...asistentes];
-        // Optimistic UI update
         setAsistentes(prev => prev.map(a => a.id_inscripcion === id_inscripcion ? { ...a, estado_asistencia: nuevo_estado } : a));
 
         try {
