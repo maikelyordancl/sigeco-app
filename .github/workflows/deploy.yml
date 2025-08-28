@@ -41,6 +41,6 @@ jobs:
             
             # 5. (Opcional) Limpiar imágenes viejas para ahorrar espacio
             echo "🧹 Limpiando imágenes antiguas..."
-            docker image prune -f
+            docker system prune -af --volumes || true
             
             echo "✅ ¡Despliegue finalizado!"
