@@ -18,9 +18,6 @@ router.get(
 // GET /api/contactos/sin-base -> Obtener contactos sin base de datos
 router.get('/sin-base', contactoController.getOrphanedContactos);
 
-
-// --- INICIO DE LA MODIFICACIÓN ---
-
 // Reglas de validación reutilizables para el cuerpo de la petición
 const contactoValidationRules = [
     body('nombre').optional({ checkFalsy: true }).isString().withMessage('El nombre debe ser texto.').trim().escape(),
@@ -42,9 +39,6 @@ const contactoValidationRules = [
     body('profesion').optional({ checkFalsy: true }).trim().escape()
 ];
 
-// --- FIN DE LA MODIFICACIÓN ---
-
-
 // POST /api/contactos -> Crear un nuevo contacto
 router.post('/', contactoValidationRules, contactoController.createContacto);
 
@@ -65,5 +59,6 @@ router.delete(
     contactoController.deleteContacto
 );
 
+router.get('/email/:email', contactoController.getContactoByEmail);
 
 module.exports = router;

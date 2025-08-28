@@ -67,6 +67,22 @@ exports.updateContacto = async (req, res) => {
     }
 };
 
+exports.getContactoByEmail = async (req, res) => {
+  const { email } = req.params;
+  try {
+    // La variable 'Contacto' ahora está definida gracias a la importación
+    const contacto = await ContactoModel.findByEmail(email);
+    if (contacto) {
+      res.json(contacto);
+    } else {
+      res.status(404).json({ message: 'Contacto no encontrado' });
+    }
+  } catch (error) {
+    console.error('Error al obtener contacto por email:', error);
+    res.status(500).send('Error en el servidor');
+  }
+};
+
 // Eliminar un contacto
 exports.deleteContacto = async (req, res) => {
     const errors = validationResult(req);

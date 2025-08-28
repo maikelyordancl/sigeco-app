@@ -32,7 +32,9 @@ router.post(
         body('id_evento').isInt({ gt: 0 }).withMessage('El ID del evento es obligatorio.'),
         body('id_subevento').isInt({ gt: 0 }).withMessage('El ID del subevento es obligatorio.'),
         body('nombre').optional().isString().trim().notEmpty().withMessage('El nombre no puede estar vacío.'),
-        body('url_amigable').isString().trim().notEmpty().withMessage('La URL amigable no puede estar vacía.').isSlug().withMessage('La URL amigable contiene caracteres no válidos.'),
+        body('url_amigable')
+            .isString().trim().notEmpty().withMessage('La URL amigable no puede estar vacía.')
+            .matches(/^[A-Za-z0-9-]+$/).withMessage('La URL amigable contiene caracteres no válidos.')
     ],
     campanasController.crearSubCampana
 );

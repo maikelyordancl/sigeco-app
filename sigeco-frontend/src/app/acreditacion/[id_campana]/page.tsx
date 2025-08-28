@@ -2,24 +2,19 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import MainLayout from '@/components/Layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'react-hot-toast';
-import { ArrowLeft, UserCheck, UserX, RotateCcw } from 'lucide-react';
+import { ArrowLeft, PlusCircle } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 
-interface Asistente {
-    id_inscripcion: number;
-    estado_asistencia: 'Invitado' | 'Registrado' | 'Confirmado' | 'Asistió' | 'Cancelado';
-    nombre: string;
-    rut: string;
-    email: string;
-    tipo_entrada: string | null;
-}
+import AcreditacionTable from './components/AcreditacionTable';
+import { ConfigureColumnsAcreditacion } from './components/ConfigureColumnsAcreditacion';
+import { Asistente, CampoFormulario } from './types';
+import { RegistrarEnPuertaDialog } from './components/RegistrarEnPuertaDialog';
+import { FormularioCampo as FormularioCampoPublico } from '@/app/c/[slug]/types';
+import MainLayout from '@/components/Layout/MainLayout';
 
 export default function AcreditarCampanaPage() {
     const router = useRouter();
@@ -27,20 +22,29 @@ export default function AcreditarCampanaPage() {
     const id_campana = params.id_campana as string;
 
     const [asistentes, setAsistentes] = useState<Asistente[]>([]);
+    const [campos, setCampos] = useState<CampoFormulario[]>([]);
+    const [visibleColumns, setVisibleColumns] = useState<string[]>(['nombre', 'email']);
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [campanaInfo, setCampanaInfo] = useState<any>(null);
+    const [formFieldsModal, setFormFieldsModal] = useState<FormularioCampoPublico[]>([]);
+    const [updatingId, setUpdatingId] = useState<number | null>(null); // fila en actualización
 
-    const fetchAsistentes = useCallback(async () => {
+    const fetchPageData = useCallback(async () => {
         setLoading(true);
         try {
-            const response = await apiFetch(`/acreditacion/campana/${id_campana}/asistentes_acreditacion`, {
-            });
-            if (!response.ok) throw new Error('No se pudo cargar la lista de asistentes.');
-            const result = await response.json();
-            if (result.success) {
-                setAsistentes(result.data);
+            const asistentesResponse = await apiFetch(`/campanas/${id_campana}/asistentes-v2`);
+            if (!asistentesResponse.ok) throw new Error('No se pudo cargar la lista de asistentes.');
+            const asistentesResult = await asistentesResponse.json();
+            setAsistentes(asistentesResult);
+
+            const formResponse = await apiFetch(`/campanas/${id_campana}/formulario`);
+            const formResult = await formResponse.json();
+            if (formResult.success) {
+                setCampos(formResult.data);
             } else {
-                throw new Error(result.error || 'Error al cargar los datos.');
+                 throw new Error('No se pudo cargar la configuración de columnas.');
             }
         } catch (error: any) {
             toast.error(error.message);
@@ -51,16 +55,35 @@ export default function AcreditarCampanaPage() {
 
     useEffect(() => {
         if (id_campana) {
-            fetchAsistentes();
+            const fetchModalData = async () => {
+                try {
+                    const campanaResponse = await apiFetch(`/campanas/${id_campana}`);
+                    const campanaResult = await campanaResponse.json();
+                    if(campanaResult.success) setCampanaInfo(campanaResult.data);
+                    
+                    const formModalResponse = await apiFetch(`/campanas/${id_campana}/formulario`);
+                    const formModalResult = await formModalResponse.json();
+                    if(formModalResult.success) setFormFieldsModal(formModalResult.data);
+                } catch (error) {
+                    console.error("No se pudo cargar la configuración para el registro en puerta.");
+                }
+            };
+            fetchModalData();
         }
-    }, [id_campana, fetchAsistentes]);
-
+    }, [id_campana]);
+    
+    useEffect(() => {
+        if (id_campana) {
+            fetchPageData();
+        }
+    }, [id_campana, fetchPageData]);
+    
     const filteredAsistentes = useMemo(() => {
         if (!searchTerm) return asistentes;
-        return asistentes.filter(a =>
-            a.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (a.rut && a.rut.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            a.email.toLowerCase().includes(searchTerm.toLowerCase())
+        return asistentes.filter(asistente =>
+            Object.values(asistente).some(value =>
+                String(value).toLowerCase().includes(searchTerm.toLowerCase())
+            )
         );
     }, [asistentes, searchTerm]);
 
@@ -70,13 +93,13 @@ export default function AcreditarCampanaPage() {
         const pendientes = total - acreditados;
         return { total, acreditados, pendientes };
     }, [asistentes]);
-
+    
     const handleUpdateStatus = async (id_inscripcion: number, nuevo_estado: 'Asistió' | 'Cancelado' | 'Confirmado') => {
-        const originalState = [...asistentes];
-        setAsistentes(prev => prev.map(a => a.id_inscripcion === id_inscripcion ? { ...a, estado_asistencia: nuevo_estado } : a));
+        if (updatingId !== null) return;
+        setUpdatingId(id_inscripcion);
 
+        const toastId = toast.loading('Actualizando...');
         try {
-            const token = localStorage.getItem('token');
             const response = await apiFetch(`/acreditacion/inscripcion/${id_inscripcion}/estado`, {
                 method: 'PUT',
                 body: JSON.stringify({ nuevo_estado }),
@@ -86,107 +109,117 @@ export default function AcreditarCampanaPage() {
             const result = await response.json();
             if (!result.success) throw new Error(result.error);
 
-            toast.success(`Asistente actualizado a: ${nuevo_estado}`);
+            setAsistentes(prev =>
+                prev.map(a =>
+                    a.id_inscripcion === id_inscripcion
+                        ? { ...a, estado_asistencia: nuevo_estado }
+                        : a
+                )
+            );
 
+            toast.success('Asistente actualizado', { id: toastId });
         } catch (error: any) {
-            // Revert on error
-            setAsistentes(originalState);
-            toast.error(error.message);
+            toast.error(error.message, { id: toastId });
+        } finally {
+            setUpdatingId(null);
         }
     };
-
-    const getStatusBadge = (estado: Asistente['estado_asistencia']) => {
-        switch (estado) {
-            case 'Asistió': return <Badge className="bg-green-500">Acreditado</Badge>;
-            case 'Cancelado': return <Badge variant="destructive">Denegado</Badge>;
-            default: return <Badge variant="secondary">Pendiente</Badge>;
-        }
+    
+    const handleSuccessRegistration = () => {
+        setIsModalOpen(false);
+        fetchPageData(); 
     };
-
+    
     return (
-        <MainLayout title="Acreditar Campaña">
-            <div className="p-4 md:p-6">
-                <div className="flex items-center mb-4">
-                    <Button variant="outline" onClick={() => router.push('/acreditacion')}>
-                        <ArrowLeft className="mr-2 h-4 w-4" /> Volver a la selección
+        <MainLayout>
+            <div className="p-4 md:p-6 space-y-6">
+                <div className="flex items-center justify-between">
+                    <Button variant="outline" size="sm" onClick={() => router.push('/eventos')}>
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Volver a Eventos
                     </Button>
+                    <h1 className="text-2xl font-bold text-center">{campanaInfo ? campanaInfo.nombre : 'Acreditación'}</h1>
+                    <div className="w-28"></div>
                 </div>
 
-                <Card className="mb-6">
+                <Card>
                     <CardHeader>
-                        <CardTitle>Panel de Acreditación</CardTitle>
+                        <CardTitle>Panel de Control</CardTitle>
                     </CardHeader>
-                    <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <Input
-                            placeholder="Buscar por nombre, RUT, email..."
-                            className="lg:col-span-2"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                        <div className="p-4 border rounded-lg text-center">
-                            <p className="text-sm text-gray-500">Total</p>
-                            <p className="text-2xl font-bold">{stats.total}</p>
+                    <CardContent className="flex flex-col lg:flex-row gap-4">
+                        {/* Contadores */}
+                        <div className="grid grid-cols-3 gap-4 flex-1">
+                            <div className="p-4 border rounded-lg text-center">
+                                <p className="text-sm text-gray-500">Total</p>
+                                <p className="text-2xl font-bold">{stats.total}</p>
+                            </div>
+                            <div className="p-4 border rounded-lg text-center">
+                                <p className="text-sm text-gray-500">Acreditados</p>
+                                <p className="text-2xl font-bold text-green-600">{stats.acreditados}</p>
+                            </div>
+                            <div className="p-4 border rounded-lg text-center">
+                                <p className="text-sm text-gray-500">Pendientes</p>
+                                <p className="text-2xl font-bold text-gray-600">{stats.pendientes}</p>
+                            </div>
                         </div>
-                        <div className="p-4 border rounded-lg text-center">
-                            <p className="text-sm text-gray-500">Acreditados</p>
-                            <p className="text-2xl font-bold text-green-600">{stats.acreditados}</p>
+
+                        {/* Buscador y botones */}
+                        <div className="flex flex-col flex-1 gap-2">
+                            <Input
+                                placeholder="Buscar asistente (nombre, email, rut...)"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+
+                            <div className="flex gap-2">
+                                <ConfigureColumnsAcreditacion
+                                    campos={campos}
+                                    visibleColumns={visibleColumns}
+                                    setVisibleColumns={setVisibleColumns}
+                                />
+                                {campanaInfo && !campanaInfo.obligatorio_pago && (
+                                    <Button
+                                        onClick={() => setIsModalOpen(true)}
+                                        className="bg-blue-600 hover:bg-blue-700"
+                                    >
+                                        <PlusCircle className="mr-2 h-4 w-4" /> Registrar en Puerta
+                                    </Button>
+                                )}
+                            </div>
                         </div>
                     </CardContent>
                 </Card>
 
-                <div className="border rounded-lg overflow-hidden bg-white">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>#</TableHead> {/* Nueva columna */}
-                                <TableHead>Nombre</TableHead>
-                                <TableHead>RUT</TableHead>
-                                <TableHead>Email</TableHead>
-                                <TableHead>Entrada</TableHead>
-                                <TableHead className="text-center">Estado</TableHead>
-                                <TableHead className="text-right">Acciones</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {loading ? (
-                                <TableRow>
-                                    <TableCell colSpan={7} className="text-center h-24">
-                                        Cargando...
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                filteredAsistentes.map((asistente, index) => (
-                                    <TableRow key={asistente.id_inscripcion}>
-                                        <TableCell>{index + 1}</TableCell>
-                                        <TableCell className="font-medium">{asistente.nombre}</TableCell>
-                                        <TableCell>{asistente.rut || 'No especificado'}</TableCell>
-                                        <TableCell>{asistente.email}</TableCell>
-                                        <TableCell>{asistente.tipo_entrada || 'General'}</TableCell>
-                                        <TableCell className="text-center">{getStatusBadge(asistente.estado_asistencia)}</TableCell>
-                                        <TableCell className="text-right space-x-2">
-                                            {asistente.estado_asistencia !== 'Asistió' ? (
-                                                <>
-                                                    <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleUpdateStatus(asistente.id_inscripcion, 'Asistió')}>
-                                                        <UserCheck className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button size="sm" variant="destructive" onClick={() => handleUpdateStatus(asistente.id_inscripcion, 'Cancelado')}>
-                                                        <UserX className="h-4 w-4" />
-                                                    </Button>
-                                                </>
-                                            ) : (
-                                                <Button size="sm" variant="outline" onClick={() => handleUpdateStatus(asistente.id_inscripcion, 'Confirmado')}>
-                                                    <RotateCcw className="h-4 w-4" /> Revertir
-                                                </Button>
-                                            )}
-                                        </TableCell>
-                                    </TableRow>
-                                ))
+                <div className="relative">
+                    {loading ? (
+                        <div className="text-center py-10">Cargando asistentes...</div>
+                    ) : (
+                        <>
+                            <AcreditacionTable 
+                                asistentes={filteredAsistentes}
+                                campos={campos}
+                                visibleColumns={visibleColumns}
+                                onUpdateStatus={handleUpdateStatus}
+                                updatingId={updatingId} 
+                            />
+                            {updatingId !== null && (
+                                <div className="absolute inset-0 bg-white/70 flex items-center justify-center text-xl font-bold">
+                                    Actualizando...
+                                </div>
                             )}
-                        </TableBody>
-
-                    </Table>
+                        </>
+                    )}
                 </div>
             </div>
+
+            {campanaInfo && !campanaInfo.obligatorio_pago && (
+                <RegistrarEnPuertaDialog
+                    isOpen={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
+                    onSuccess={handleSuccessRegistration}
+                    id_campana={Number(id_campana)}
+                    formFields={formFieldsModal}
+                />
+            )}
         </MainLayout>
     );
 }

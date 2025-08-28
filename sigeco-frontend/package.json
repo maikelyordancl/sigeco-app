@@ -43,6 +43,7 @@
     "react-select-country-list": "^2.2.3",
     "react-zoom-pan-pinch": "^3.7.0",
     "recharts": "^2.15.1",
+    "socket.io-client": "^4.8.1",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
     "xlsx": "^0.18.5",

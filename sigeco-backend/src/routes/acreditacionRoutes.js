@@ -25,6 +25,9 @@ router.get(
     acreditacionController.getAsistentes
 );
 
+// Nueva ruta para registrar un asistente en puerta
+router.post('/registrar-en-puerta/:id_campana', acreditacionController.registrarEnPuerta);
+
 
 // PUT /api/acreditacion/inscripcion/:id_inscripcion/estado -> Actualiza el estado de un asistente
 router.put(

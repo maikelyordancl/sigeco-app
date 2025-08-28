@@ -81,12 +81,11 @@ const Inscripcion = {
     // --- INICIO DE LAS NUEVAS FUNCIONES CORREGIDAS ---
 
     findWithCustomFieldsByCampanaId: async (id_campana) => {
-        // CORRECCIÓN: Se usa 'pool' en lugar de 'db'
         const [campos] = await pool.execute(
             `SELECT fc.id_campo, fc.nombre_interno, fc.etiqueta 
-           FROM campana_formulario_config cfc
-           JOIN formulario_campos fc ON cfc.id_campo = fc.id_campo
-           WHERE cfc.id_campana = ? AND fc.es_de_sistema = 0`,
+       FROM campana_formulario_config cfc
+       JOIN formulario_campos fc ON cfc.id_campo = fc.id_campo
+       WHERE cfc.id_campana = ? AND fc.es_de_sistema = 0`,
             [id_campana]
         );
 
@@ -98,22 +97,23 @@ const Inscripcion = {
         }
 
         const query = `
-          SELECT 
-            i.id_inscripcion, i.estado_asistencia, i.estado_pago, i.nota,
-            c.id_contacto, c.nombre, c.email, c.telefono, c.rut, c.empresa, c.actividad, c.profesion, c.pais, c.comuna,
-            p.id_pago, p.monto, p.estado AS estado_transaccion,
-            te.nombre AS tipo_entrada
-            ${customFieldsSelect ? `, ${customFieldsSelect}` : ''}
-          FROM inscripciones i
-          JOIN contactos c ON i.id_contacto = c.id_contacto
-          LEFT JOIN inscripcion_respuestas ir ON i.id_inscripcion = ir.id_inscripcion
-          LEFT JOIN pagos p ON i.id_inscripcion = p.id_inscripcion
-          LEFT JOIN tipos_de_entrada te ON i.id_tipo_entrada = te.id_tipo_entrada
-          WHERE i.id_campana = ?
-          GROUP BY i.id_inscripcion
-        `;
+      SELECT 
+        ROW_NUMBER() OVER (ORDER BY i.fecha_inscripcion ASC) as '#',
+        i.id_inscripcion, i.estado_asistencia, i.estado_pago, i.nota,
+        c.id_contacto, c.nombre, c.email, c.telefono, c.rut, c.empresa, c.actividad, c.profesion, c.pais, c.comuna,
+        p.id_pago, p.monto, p.estado AS estado_transaccion,
+        te.nombre AS tipo_entrada
+        ${customFieldsSelect ? `, ${customFieldsSelect}` : ''}
+      FROM inscripciones i
+      JOIN contactos c ON i.id_contacto = c.id_contacto
+      LEFT JOIN inscripcion_respuestas ir ON i.id_inscripcion = ir.id_inscripcion
+      LEFT JOIN pagos p ON i.id_inscripcion = p.id_inscripcion
+      LEFT JOIN tipos_de_entrada te ON i.id_tipo_entrada = te.id_tipo_entrada
+      WHERE i.id_campana = ?
+      GROUP BY i.id_inscripcion
+      ORDER BY i.fecha_inscripcion ASC
+    `;
 
-        // CORRECCIÓN: Se usa 'pool' en lugar de 'db'
         const [rows] = await pool.execute(query, [id_campana]);
         return rows;
     },

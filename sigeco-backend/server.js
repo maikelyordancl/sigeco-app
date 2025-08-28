@@ -27,13 +27,11 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // Middlewares
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(express.json());
 // --- LÍNEA AÑADIDA ---
 // Añade este middleware para parsear cuerpos de petición URL-encoded
 app.use(express.urlencoded({ extended: true }));
 
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // --- Importación de Rutas ---
 const authRoutes = require('./src/routes/authRoutes');
 const eventoRoutes = require('./src/routes/eventoRoutes');

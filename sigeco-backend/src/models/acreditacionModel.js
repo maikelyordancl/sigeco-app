@@ -1,8 +1,11 @@
 const pool = require('../config/db');
+const ContactoModel = require('./contactoModel');      // Ajusta la ruta según tu proyecto
+const InscripcionModel = require('./inscripcionModel');
+const FormularioModel = require('./formularioModel');
+
 
 /**
  * Obtiene todos los eventos activos que tienen al menos una sub-campaña activa y acreditable.
- * Una campaña es acreditable si no es la campaña principal (id_subevento no es nulo).
  */
 exports.findEventosConCampanasAcreditables = async () => {
     const query = `
@@ -17,14 +20,13 @@ exports.findEventosConCampanasAcreditables = async () => {
         FROM eventos e
         JOIN campanas c ON e.id_evento = c.id_evento
         JOIN subeventos s ON c.id_subevento = s.id_subevento
-        WHERE e.estado = 1 -- Solo eventos 'Activo'
-          AND c.estado = 'Activa' -- Solo campañas 'Activa'
+        WHERE e.estado = 1
+          AND c.estado = 'Activa'
           AND c.id_subevento IS NOT NULL
         ORDER BY e.fecha_inicio DESC, c.nombre ASC;
     `;
     const [rows] = await pool.query(query);
 
-    // Agrupar campañas por evento
     const eventos = rows.reduce((acc, row) => {
         let evento = acc.find(e => e.id_evento === row.id_evento);
         if (!evento) {
@@ -48,7 +50,6 @@ exports.findEventosConCampanasAcreditables = async () => {
     return eventos;
 };
 
-
 /**
  * Busca todos los asistentes de una campaña específica para el módulo de acreditación.
  */
@@ -65,7 +66,7 @@ exports.findAcreditacionAsistentesPorCampana = async (id_campana) => {
         JOIN contactos c ON i.id_contacto = c.id_contacto
         LEFT JOIN tipos_de_entrada te ON i.id_tipo_entrada = te.id_tipo_entrada
         WHERE i.id_campana = ?
-          AND i.estado_asistencia NOT IN ('Cancelado') -- Excluimos a los cancelados de la lista de acreditación
+          AND i.estado_asistencia NOT IN ('Cancelado')
         ORDER BY c.nombre;
     `;
     const [rows] = await pool.query(query, [id_campana]);
@@ -84,7 +85,6 @@ exports.updateEstadoAsistencia = async (id_inscripcion, nuevo_estado) => {
     const [result] = await pool.query(query, [nuevo_estado, id_inscripcion]);
     return result;
 };
-
 
 /**
  * Busca todos los asistentes de una campaña, incluyendo sus respuestas a campos personalizados.
@@ -120,9 +120,71 @@ exports.findAsistentesPorCampana = async (id_campana) => {
     `;
     const [rows] = await pool.query(query, [id_campana]);
 
-    // Parseamos el string JSON de respuestas a un objeto real
     return rows.map(row => ({
         ...row,
         respuestas_personalizadas: row.respuestas_personalizadas ? JSON.parse(row.respuestas_personalizadas) : []
     }));
+};
+
+/**
+ * Registra un asistente en puerta, incluyendo creación de contacto, inscripción y respuestas personalizadas.
+ */
+exports.registrarEnPuerta = async (
+    id_campana,
+    id_tipo_entrada = null,
+    datosContacto,
+    respuestas = [],
+    estado_asistencia = 'Confirmado',
+    registrado_puerta = 1
+) => {
+    try {
+        // --- 1. Crear o actualizar contacto ---
+        let contacto = await ContactoModel.findByEmail(datosContacto.email);
+
+        if (contacto) {
+            await ContactoModel.updateById(contacto.id_contacto, datosContacto);
+        } else {
+            const nuevoContacto = await ContactoModel.create({ ...datosContacto, recibir_mail: true });
+            contacto = { id_contacto: nuevoContacto.id_contacto };
+        }
+
+        // --- 2. Crear o actualizar inscripción ---
+        let inscripcion = await InscripcionModel.findByCampanaAndContacto(id_campana, contacto.id_contacto);
+
+        if (inscripcion) {
+            await InscripcionModel.update(inscripcion.id_inscripcion, {
+                estado_asistencia,
+                registrado_puerta,
+                id_tipo_entrada: id_tipo_entrada || inscripcion.id_tipo_entrada,
+                estado_pago: inscripcion.estado_pago || 'No Aplica'
+            });
+        } else {
+            inscripcion = await InscripcionModel.create({
+                id_campana,
+                id_contacto: contacto.id_contacto,
+                id_tipo_entrada,
+                estado_asistencia,
+                registrado_puerta,
+                estado_pago: 'No Aplica'
+            });
+        }
+
+        // --- 3. Guardar respuestas dinámicas ---
+        if (respuestas.length > 0) {
+            // respuestas = [{ id_campo: 51, valor: "Single" }, ...]
+            await FormularioModel.saveRespuestas(inscripcion.id_inscripcion, respuestas);
+        }
+
+        // --- 4. Retornar datos para frontend ---
+        return {
+            id_inscripcion: inscripcion.id_inscripcion,
+            id_contacto: contacto.id_contacto,
+            estado_asistencia,
+            registrado_puerta
+        };
+
+    } catch (error) {
+        console.error("Error en el modelo registrarEnPuerta:", error);
+        throw error;
+    }
 };

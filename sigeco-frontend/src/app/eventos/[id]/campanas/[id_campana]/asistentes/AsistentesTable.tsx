@@ -29,7 +29,6 @@ import { Asistente, CampoFormulario } from './types';
 import { ConfigurarColumnas } from './ConfigurarColumnas';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-
 interface AsistentesTableProps {
   data: Asistente[];
   onEdit: (asistente: Asistente) => void;
@@ -38,11 +37,11 @@ interface AsistentesTableProps {
   onEstadoChange: (id_inscripcion: number, nuevoEstado: string) => void;
 }
 
-const multiWordGlobalFilter: FilterFn<Asistente> = (row, columnId, filterValue, addMeta) => {
-    const searchWords = String(filterValue).toLowerCase().split(' ').filter(Boolean);
-    if (searchWords.length === 0) return true;
-    const rowSearchableString = Object.values(row.original).join(' ').toLowerCase();
-    return searchWords.every(word => rowSearchableString.includes(word));
+const multiWordGlobalFilter: FilterFn<Asistente> = (row, columnId, filterValue) => {
+  const searchWords = String(filterValue).toLowerCase().split(' ').filter(Boolean);
+  if (searchWords.length === 0) return true;
+  const rowSearchableString = Object.values(row.original).join(' ').toLowerCase();
+  return searchWords.every(word => rowSearchableString.includes(word));
 };
 
 const getColumnasVisiblesDesdeCookie = (id_campana: string): VisibilityState | null => {
@@ -68,27 +67,32 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
-  
   const [isInitialVisibilitySet, setIsInitialVisibilitySet] = useState(false);
 
+  // --- Mapear "#" del backend a "numero_fila"
+  const dataConNumeroFila = useMemo(() => {
+    return data.map(row => ({
+      ...row,
+      numero_fila: row['#'],
+    }));
+  }, [data]);
+
+  // --- Inicializar visibilidad de columnas
   useEffect(() => {
     if (data.length > 0 && !isInitialVisibilitySet) {
       const savedVisibility = getColumnasVisiblesDesdeCookie(id_campana);
-      
       if (savedVisibility) {
         setColumnVisibility(savedVisibility);
       } else {
         const defaultState: VisibilityState = {};
-        
         const todasLasClaves = data.reduce((acc, row) => {
           Object.keys(row).forEach(key => acc.add(key));
           return acc;
         }, new Set<string>());
 
-        const columnasVisiblesPorDefecto = ['nombre', 'email', 'telefono', 'empresa', 'estado_asistencia'];
-        
+        const columnasVisiblesPorDefecto = ['numero_fila', 'nombre', 'email', 'telefono', 'empresa', 'estado_asistencia'];
         todasLasClaves.forEach(key => {
-            defaultState[key] = columnasVisiblesPorDefecto.includes(key);
+          defaultState[key] = columnasVisiblesPorDefecto.includes(key);
         });
 
         setColumnVisibility(defaultState);
@@ -103,15 +107,20 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
     }
   }, [id_campana, columnVisibility, isInitialVisibilitySet]);
 
-
+  // --- Columnas
   const columns = useMemo<ColumnDef<Asistente>[]>(() => {
-    if (data.length === 0) return [];
-    
+    if (dataConNumeroFila.length === 0) return [];
+
     const campoEtiquetaMap = new Map(
       camposFormulario.map(campo => [campo.nombre_interno, campo.etiqueta])
     );
 
     const columnasPrefijo: ColumnDef<Asistente>[] = [
+      {
+        accessorKey: 'numero_fila',
+        header: '#',
+        enableHiding: false,
+      },
       {
         id: 'actions',
         header: 'Editar',
@@ -129,43 +138,34 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
     ];
 
     const columnaSufijo: ColumnDef<Asistente> = {
-        accessorKey: 'estado_asistencia',
-        header: 'Estado',
-        enableHiding: false,
-        cell: ({ row }) => {
-          const { id_inscripcion, estado_asistencia } = row.original;
-          const estados = ["Invitado", "Registrado", "Confirmado", "Por Confirmar", "No Asiste", "Asistió", "Cancelado"];
-
-          return (
-            <Select
-              value={estado_asistencia}
-              // --- CORRECCIÓN DE AMBOS ERRORES AQUÍ ---
-              onValueChange={(nuevoEstado: string) => {
-                onEstadoChange(id_inscripcion, nuevoEstado);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Cambiar estado..." />
-              </SelectTrigger>
-              <SelectContent>
-                {estados.map(estado => (
-                  <SelectItem key={estado} value={estado}>{estado}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          );
-        },
+      accessorKey: 'estado_asistencia',
+      header: 'Estado',
+      enableHiding: false,
+      cell: ({ row }) => {
+        const { id_inscripcion, estado_asistencia } = row.original;
+        const estados = ["Invitado", "Registrado", "Confirmado", "Por Confirmar", "No Asiste", "Asistió", "Cancelado"];
+        return (
+          <Select value={estado_asistencia} onValueChange={(nuevoEstado: string) => onEstadoChange(id_inscripcion, nuevoEstado)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Cambiar estado..." />
+            </SelectTrigger>
+            <SelectContent>
+              {estados.map(estado => <SelectItem key={estado} value={estado}>{estado}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        );
+      },
     };
 
-    const todasLasClaves = data.reduce((acc, row) => {
-        Object.keys(row).forEach(key => acc.add(key));
-        return acc;
+    const todasLasClaves = dataConNumeroFila.reduce((acc, row) => {
+      Object.keys(row).forEach(key => acc.add(key));
+      return acc;
     }, new Set<string>());
 
-    const clavesFijas = ['id_inscripcion', 'id_contacto', 'actions', 'nombre', 'email', 'telefono', 'empresa', 'estado_asistencia', 'nota'];
+    const clavesFijas = ['id_inscripcion', 'id_contacto', 'actions', 'nombre', 'email', 'telefono', 'empresa', 'estado_asistencia', 'nota', 'numero_fila'];
 
     const columnasDinamicas: ColumnDef<Asistente>[] = Array.from(todasLasClaves)
-      .filter(key => !clavesFijas.includes(key))
+      .filter(key => !clavesFijas.includes(key) && key !== '#') // Excluir "#" para no duplicar
       .map(key => ({
         accessorKey: key,
         header: campoEtiquetaMap.get(key) || key.replace(/_/g, ' ').replace(/(?:^|\s)\S/g, a => a.toUpperCase()),
@@ -173,16 +173,13 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
 
     return [...columnasPrefijo, ...columnasDinamicas, columnaSufijo];
 
-  }, [data, onEdit, camposFormulario, onEstadoChange]);
+  }, [dataConNumeroFila, onEdit, camposFormulario, onEstadoChange]);
 
+  // --- Tabla
   const table = useReactTable({
-    data,
+    data: dataConNumeroFila,
     columns,
-    state: {
-      sorting,
-      globalFilter,
-      columnVisibility,
-    },
+    state: { sorting, globalFilter, columnVisibility },
     globalFilterFn: multiWordGlobalFilter,
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
@@ -190,7 +187,6 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    initialState: {}
   });
 
   return (
@@ -207,19 +203,19 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
       <div className="rounded-md border">
         <Table>
           <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
+            {table.getHeaderGroups().map(headerGroup => (
               <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
+                {headerGroup.headers.map(header => (
                   <TableHead 
                     key={header.id} 
                     onClick={header.column.getToggleSortingHandler()}
                     className={header.id === 'estado_asistencia' ? 'w-[200px]' : ''}
                   >
                     {flexRender(header.column.columnDef.header, header.getContext())}
-                     {{
-                        asc: ' 🔼',
-                        desc: ' 🔽',
-                      }[header.column.getIsSorted() as string] ?? null}
+                    {{
+                      asc: ' 🔼',
+                      desc: ' 🔽',
+                    }[header.column.getIsSorted() as string] ?? null}
                   </TableHead>
                 ))}
               </TableRow>
@@ -227,24 +223,21 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows.length > 0 ? (
-                table.getRowModel().rows.map((row) => (
+              table.getRowModel().rows.map(row => (
                 <TableRow key={row.id}>
-                    {row.getVisibleCells().map((cell) => (
-                    <TableCell 
-                      key={cell.id}
-                      className={cell.column.id === 'estado_asistencia' ? 'w-[200px]' : ''}
-                    >
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  {row.getVisibleCells().map(cell => (
+                    <TableCell key={cell.id} className={cell.column.id === 'estado_asistencia' ? 'w-[200px]' : ''}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
-                    ))}
+                  ))}
                 </TableRow>
-                ))
+              ))
             ) : (
-                <TableRow>
-                    <TableCell colSpan={columns.length} className="h-24 text-center">
-                        No hay resultados.
-                    </TableCell>
-                </TableRow>
+              <TableRow>
+                <TableCell colSpan={columns.length} className="h-24 text-center">
+                  No hay resultados.
+                </TableCell>
+              </TableRow>
             )}
           </TableBody>
         </Table>
