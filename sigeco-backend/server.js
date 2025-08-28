@@ -33,6 +33,7 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // Añade este middleware para parsear cuerpos de petición URL-encoded
 app.use(express.urlencoded({ extended: true }));
 
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // --- Importación de Rutas ---
 const authRoutes = require('./src/routes/authRoutes');
 const eventoRoutes = require('./src/routes/eventoRoutes');
