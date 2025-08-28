@@ -184,7 +184,7 @@ export const RegistrarEnPuertaDialog = ({
                 <div key={fieldName} className="grid gap-2">
                   <Label htmlFor={fieldName} className="font-medium">{fieldName.toUpperCase()}</Label>
                   <Input {...register(fieldName)} id={fieldName} className="w-full" />
-                  {errors[fieldName]?.message && (
+                  {typeof errors[fieldName]?.message === 'string' && (
                     <span className="text-red-500 text-sm">{errors[fieldName]?.message}</span>
                   )}
                 </div>
