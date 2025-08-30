@@ -138,10 +138,12 @@ const ContactoForm: React.FC<ContactoFormProps> = ({ open, setOpen, contacto, re
 
           <div>
             <Controller
-              name="pais"
-              control={control}
-              render={({ field }) => <CountrySelector {...field} />}
-            />
+  name="pais"
+  control={control}
+  render={({ field }) => (
+    <CountrySelector {...field} control={control} />
+  )}
+/>
             {errors.pais && <p className="text-red-500">{(errors.pais as any).value?.message || errors.pais.message}</p>}
           </div>
           <Input {...register("comuna")} placeholder="Comuna (Opcional)" />
