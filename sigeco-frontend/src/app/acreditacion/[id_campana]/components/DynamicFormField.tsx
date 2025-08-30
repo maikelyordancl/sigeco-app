@@ -1,127 +1,100 @@
 "use client";
 
-import { UseFormRegister, Controller, Control } from 'react-hook-form';
-import { FormularioCampo } from '@/app/c/[slug]/types';
+import { useFormContext } from 'react-hook-form';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
+import { CampoFormulario, TipoCampo } from '../types';
 
 interface DynamicFormFieldProps {
-  field: FormularioCampo;
-  register: UseFormRegister<any>;
-  control: Control<any>;
-  defaultValue?: any;
-  error?: any;
+  campo: CampoFormulario;
 }
 
-export const DynamicFormField = ({ field, register, control, defaultValue, error }: DynamicFormFieldProps) => {
-  if (!field.es_visible) return null;
+export default function DynamicFormField({ campo }: DynamicFormFieldProps) {
+  const { register, control, formState: { errors }, setValue, watch } = useFormContext();
+  const error = errors[campo.nombre_interno];
+  const id = `campo-${campo.id_campo}`;
+  const value = watch(campo.nombre_interno);
 
-  const fieldName = field.nombre_interno;
+  const renderField = () => {
+    switch (campo.tipo_campo as TipoCampo) {
+      case 'TEXTO_CORTO':
+        return <Input id={id} {...register(campo.nombre_interno, { required: campo.es_obligatorio })} />;
+
+      case 'PARRAFO':
+        return <Textarea id={id} {...register(campo.nombre_interno, { required: campo.es_obligatorio })} />;
+
+      case 'DESPLEGABLE':
+        return (
+          <Select value={value || ""} onValueChange={(val) => setValue(campo.nombre_interno, val)}>
+            <SelectTrigger>
+              <SelectValue placeholder={campo.etiqueta} />
+            </SelectTrigger>
+            <SelectContent>
+              {campo.opciones?.split(',').map((opcion) => (
+                <SelectItem key={opcion.trim()} value={opcion.trim()}>
+                  {opcion.trim()}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+
+      case 'SELECCION_UNICA':
+        return (
+          <RadioGroup value={value} onValueChange={(val) => setValue(campo.nombre_interno, val)}>
+            {campo.opciones?.split(',').map((opcion) => (
+              <div key={opcion.trim()} className="flex items-center space-x-2">
+                <RadioGroupItem id={`${id}-${opcion.trim()}`} value={opcion.trim()} />
+                <Label htmlFor={`${id}-${opcion.trim()}`}>{opcion.trim()}</Label>
+              </div>
+            ))}
+          </RadioGroup>
+        );
+
+      case 'CASILLAS':
+        return (
+          <div className="space-y-2 rounded-md border p-2 mt-1">
+            {campo.opciones?.split(',').map((opt, i) => (
+              <div key={i} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`${id}-${i}`}
+                  checked={(value as string[])?.includes(opt.trim()) || false}
+                  onCheckedChange={(checked) => {
+                    const currentValues = (value as string[]) || [];
+                    if (checked) {
+                      setValue(campo.nombre_interno, [...currentValues, opt.trim()]);
+                    } else {
+                      setValue(campo.nombre_interno, currentValues.filter(v => v !== opt.trim()));
+                    }
+                  }}
+                />
+                <Label htmlFor={`${id}-${i}`}>{opt.trim()}</Label>
+              </div>
+            ))}
+          </div>
+        );
+
+      case 'ARCHIVO':
+        return <Input id={id} type="file" {...register(campo.nombre_interno, { required: campo.es_obligatorio })} />;
+
+      default:
+        return <Input id={id} {...register(campo.nombre_interno, { required: campo.es_obligatorio })} />;
+    }
+  };
 
   return (
-    <div className="grid gap-2">
-      <Label htmlFor={fieldName}>
-        {field.etiqueta}{field.es_obligatorio ? '*' : ''}
-      </Label>
-
-      {field.tipo_campo === 'TEXTO_CORTO' && (
-        <Input
-          id={fieldName}
-          {...register(fieldName)}
-          type={fieldName === 'email' ? 'email' : 'text'}
-          className={`w-full ${fieldName === 'email' && defaultValue ? 'bg-gray-100' : ''}`}
-          readOnly={fieldName === 'email' && defaultValue}
-        />
+    <div className="mb-3">
+      {campo.tipo_campo !== 'CASILLAS' && <Label htmlFor={id}>{campo.etiqueta}</Label>}
+      {renderField()}
+      {error && (
+        <p className="text-red-500 text-sm mt-1">
+          {typeof error.message === 'string' ? error.message : 'Este campo es requerido'}
+        </p>
       )}
-
-      {field.tipo_campo === 'PARRAFO' && (
-        <Textarea id={fieldName} {...register(fieldName)} className="w-full" />
-      )}
-
-      {field.tipo_campo === 'DESPLEGABLE' && (
-        <Controller
-          name={fieldName}
-          control={control}
-          defaultValue={defaultValue || ''}
-          render={({ field: controllerField }) => (
-            <Select onValueChange={controllerField.onChange} value={controllerField.value}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecciona una opción..." />
-              </SelectTrigger>
-              <SelectContent>
-                {field.opciones?.map((opt: { id_opcion: number; etiqueta_opcion: string }) => (
-                  <SelectItem key={opt.id_opcion} value={opt.etiqueta_opcion}>
-                    {opt.etiqueta_opcion}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        />
-      )}
-
-      {field.tipo_campo === 'SELECCION_UNICA' && (
-        <Controller
-          name={fieldName}
-          control={control}
-          defaultValue={defaultValue || ''}
-          render={({ field: controllerField }) => (
-            <div className="space-y-2 rounded-md border p-2 mt-1">
-              {field.opciones?.map((opt: { id_opcion: number; etiqueta_opcion: string }) => (
-                <div key={opt.id_opcion} className="flex items-center space-x-2">
-                  <input
-                    type="radio"
-                    id={`${fieldName}-${opt.id_opcion}`}
-                    {...controllerField}
-                    value={opt.etiqueta_opcion}
-                    checked={controllerField.value === opt.etiqueta_opcion}
-                    className="form-radio h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
-                  />
-                  <Label htmlFor={`${fieldName}-${opt.id_opcion}`}>{opt.etiqueta_opcion}</Label>
-                </div>
-              ))}
-            </div>
-          )}
-        />
-      )}
-
-      {field.tipo_campo === 'CASILLAS' && (
-        <Controller
-          name={fieldName}
-          control={control}
-          defaultValue={defaultValue || []}
-          render={({ field: controllerField }) => (
-            <div className="space-y-2 rounded-md border p-2 mt-1">
-              {field.opciones?.map((opt: { id_opcion: number; etiqueta_opcion: string }) => (
-                <div key={opt.id_opcion} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`${fieldName}-${opt.id_opcion}`}
-                    checked={(controllerField.value as string[])?.includes(opt.etiqueta_opcion)}
-                    onCheckedChange={(checked) => {
-                      const currentValues = (controllerField.value as string[]) || [];
-                      if (checked) {
-                        controllerField.onChange([...currentValues, opt.etiqueta_opcion]);
-                      } else {
-                        controllerField.onChange(currentValues.filter((v: string) => v !== opt.etiqueta_opcion));
-                      }
-                    }}
-                  />
-                  <Label htmlFor={`${fieldName}-${opt.id_opcion}`}>{opt.etiqueta_opcion}</Label>
-                </div>
-              ))}
-            </div>
-          )}
-        />
-      )}
-
-      {field.tipo_campo === 'ARCHIVO' && (
-        <Input id={fieldName} {...register(fieldName)} type="file" />
-      )}
-
-      {error && <p className="text-red-500 text-xs mt-1">{error.message}</p>}
     </div>
   );
-};
+}

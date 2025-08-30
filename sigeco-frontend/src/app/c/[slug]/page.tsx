@@ -13,7 +13,10 @@ import { AlertTriangle, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import Select, { SingleValue } from 'react-select';
+import countryList from 'react-select-country-list';
+
+import { SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from "@/components/ui/checkbox";
 import toast from 'react-hot-toast';
@@ -33,9 +36,7 @@ type FormDataShape = {
     [key: string]: string | string[] | FileList | null | undefined;
 };
 
-
 // --- INICIO DE LA MODIFICACIÓN ---
-
 const generarSchemaValidacion = (campos: FormularioCampo[]) => {
     const shape: { [key: string]: yup.AnySchema } = {};
     campos.forEach(campo => {
@@ -66,22 +67,19 @@ const generarSchemaValidacion = (campos: FormularioCampo[]) => {
             default:
                 validator = yup.string();
         }
-        
-        // El campo 'nombre' ya no es obligatorio a nivel de base.
-        // Solo el email es estrictamente requerido por el sistema.
+
         if (campo.nombre_interno === 'email') {
-             validator = validator.required(`El campo "${campo.etiqueta}" es obligatorio.`);
+            validator = validator.required(`El campo "${campo.etiqueta}" es obligatorio.`);
         } else if (campo.es_obligatorio && !['CASILLAS', 'ARCHIVO'].includes(campo.tipo_campo)) {
-             validator = validator.required(`El campo "${campo.etiqueta}" es obligatorio.`);
+            validator = validator.required(`El campo "${campo.etiqueta}" es obligatorio.`);
         } else if (!campo.es_obligatorio) {
-             validator = validator.nullable().transform((value: string | null) => (value === '' ? null : value));
+            validator = validator.nullable().transform((value: string | null) => (value === '' ? null : value));
         }
 
         shape[campo.nombre_interno] = validator;
     });
     return yup.object().shape(shape);
 };
-
 
 const FormularioDinamico = ({ formConfig, onSubmit, isSubmitting, defaultValues }: { formConfig: FormularioCampo[], onSubmit: (data: FormDataShape) => void, isSubmitting: boolean, defaultValues?: Record<string, any> }) => {
     const validationSchema = generarSchemaValidacion(formConfig);
@@ -91,14 +89,38 @@ const FormularioDinamico = ({ formConfig, onSubmit, isSubmitting, defaultValues 
     });
 
     const renderCampo = (campo: FormularioCampo) => {
-        if (!campo.es_visible) return null; 
-        
+        if (!campo.es_visible) return null;
+
         const fieldName = campo.nombre_interno;
         const error = errors[fieldName];
         const isEmailField = fieldName === 'email';
-        
-        // Cambiamos la etiqueta para el campo 'nombre'
         const etiqueta = fieldName === 'nombre' ? 'Nombre Completo' : campo.etiqueta;
+
+        // Campo país usando react-select-country-list
+        if (fieldName === 'pais') {
+            return (
+                <div key={campo.id_campo}>
+                    <Label htmlFor={fieldName}>{etiqueta}{campo.es_obligatorio ? '*' : ''}</Label>
+                    <Controller
+                        name={fieldName}
+                        control={control}
+                        render={({ field }) => {
+                            const options = countryList().getData();
+                            return (
+                                <Select
+                                    {...field}
+                                    options={options}
+                                    value={options.find(option => option.value === field.value) || null}
+                                    onChange={(option: SingleValue<{ label: string; value: string }>) => field.onChange(option?.value)}
+                                    placeholder="Selecciona un país..."
+                                />
+                            )
+                        }}
+                    />
+                    {error && <p className="text-red-500 text-xs mt-1">{(error as any).message}</p>}
+                </div>
+            );
+        }
 
         return (
             <div key={campo.id_campo}>
@@ -111,16 +133,27 @@ const FormularioDinamico = ({ formConfig, onSubmit, isSubmitting, defaultValues 
                         name={fieldName}
                         control={control}
                         render={({ field }) => (
-                            <Select onValueChange={field.onChange} defaultValue={field.value as string}>
-                                <SelectTrigger><SelectValue placeholder={`Selecciona una opción...`} /></SelectTrigger>
+                            <>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecciona una opción..." />
+                                </SelectTrigger>
                                 <SelectContent>
-                                    {campo.opciones?.map(opt => <SelectItem key={opt.id_opcion} value={opt.etiqueta_opcion}>{opt.etiqueta_opcion}</SelectItem>)}
+                                    {campo.opciones?.map(opt => (
+                                        <SelectItem
+                                            key={opt.id_opcion}
+                                            value={opt.etiqueta_opcion}
+                                            onClick={() => field.onChange(opt.etiqueta_opcion)}
+                                        >
+                                            {opt.etiqueta_opcion}
+                                        </SelectItem>
+                                    ))}
                                 </SelectContent>
-                            </Select>
+                            </>
                         )}
                     />
                 )}
-                 {campo.tipo_campo === 'SELECCION_UNICA' && (
+
+                {campo.tipo_campo === 'SELECCION_UNICA' && (
                     <Controller
                         name={fieldName}
                         control={control}
@@ -186,6 +219,9 @@ const FormularioDinamico = ({ formConfig, onSubmit, isSubmitting, defaultValues 
         </form>
     );
 };
+
+// --- El resto del archivo permanece igual ---
+
 const ListaTickets = ({ tickets, onSelectTicket }: { tickets: TicketData[], onSelectTicket: (ticket: TicketData) => void }) => {
     const formatCurrency = (value: number) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(value);
 
@@ -213,9 +249,7 @@ const ProcesoInscripcion = ({ campana, tickets, formulario }: { campana: Campana
     const [prefilledData, setPrefilledData] = useState<Record<string, any> | null>(null);
 
     useEffect(() => {
-        if (!campana.obligatorio_pago) {
-            setStep('form');
-        }
+        if (!campana.obligatorio_pago) setStep('form');
     }, [campana.obligatorio_pago]);
 
     const handleSelectTicket = (ticket: TicketData) => {
@@ -276,20 +310,14 @@ const ProcesoInscripcion = ({ campana, tickets, formulario }: { campana: Campana
 
         const data = new FormData();
         data.append('id_campana', campana.id_campana.toString());
-        if (selectedTicket) {
-            data.append('id_tipo_entrada', selectedTicket.id_tipo_entrada.toString());
-        }
+        if (selectedTicket) data.append('id_tipo_entrada', selectedTicket.id_tipo_entrada.toString());
 
         for (const key in formData) {
             if (Object.prototype.hasOwnProperty.call(formData, key)) {
                 const value = formData[key];
-                if (value instanceof FileList && value.length > 0) {
-                    data.append(key, value[0]);
-                } else if (Array.isArray(value)) {
-                    data.append(key, JSON.stringify(value));
-                } else if (value !== null && value !== undefined) {
-                    data.append(key, String(value));
-                }
+                if (value instanceof FileList && value.length > 0) data.append(key, value[0]);
+                else if (Array.isArray(value)) data.append(key, JSON.stringify(value));
+                else if (value !== null && value !== undefined) data.append(key, String(value));
             }
         }
 
@@ -316,9 +344,7 @@ const ProcesoInscripcion = ({ campana, tickets, formulario }: { campana: Campana
     };
 
     if (campana.obligatorio_pago) {
-        if (step === 'selection') {
-            return <ListaTickets tickets={tickets} onSelectTicket={handleSelectTicket} />;
-        }
+        if (step === 'selection') return <ListaTickets tickets={tickets} onSelectTicket={handleSelectTicket} />;
         if (step === 'email_check') {
             return (
                 <div className="space-y-4">
@@ -337,11 +363,11 @@ const ProcesoInscripcion = ({ campana, tickets, formulario }: { campana: Campana
     if (step === 'form') {
         return (
             <div>
-                 {campana.obligatorio_pago && (
-                      <Button variant="ghost" size="sm" onClick={handleBackToSelection} className="mb-4 -ml-4">
-                           <ArrowLeft className="mr-2 h-4 w-4" /> Volver a seleccionar ticket
-                      </Button>
-                 )}
+                {campana.obligatorio_pago && (
+                    <Button variant="ghost" size="sm" onClick={handleBackToSelection} className="mb-4 -ml-4">
+                        <ArrowLeft className="mr-2 h-4 w-4" /> Volver a seleccionar ticket
+                    </Button>
+                )}
                 <h4 className="font-semibold text-lg border-b pb-2 mb-4">Completa tus datos</h4>
                 <FormularioDinamico
                     formConfig={formulario}
@@ -367,11 +393,8 @@ const PageContent = () => {
         try {
             const pathParts = window.location.pathname.split('/').filter(part => part);
             const lastPart = pathParts.pop();
-            if (lastPart) {
-                setSlug(lastPart);
-            } else {
-                throw new Error("No se pudo encontrar el identificador de la campaña en la URL.");
-            }
+            if (lastPart) setSlug(lastPart);
+            else throw new Error("No se pudo encontrar el identificador de la campaña en la URL.");
         } catch (e) {
             setError("No se pudo acceder a la URL para determinar la campaña.");
             setLoading(false);
@@ -388,11 +411,9 @@ const PageContent = () => {
                     const result = await response.json();
                     if (!response.ok || !result.success) throw new Error(result.message || 'No se pudo cargar la información.');
                     setData(result.data);
-                    
+
                     const jsonString = result.data.campana.landing_page_json;
-                    if (jsonString && jsonString !== "null") {
-                        setLandingJson(jsonString);
-                    }
+                    if (jsonString && jsonString !== "null") setLandingJson(jsonString);
                 } catch (err: any) {
                     setError(err.message);
                 } finally {

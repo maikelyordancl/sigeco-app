@@ -1,45 +1,33 @@
 "use client";
+import 'react-phone-number-input/style.css';
+import PhoneInput from 'react-phone-number-input';
+import { Controller, Control } from 'react-hook-form';
+import { Label } from './label';
 
-import React, { useMemo } from 'react';
-import Select from 'react-select';
-import countryList from 'react-select-country-list';
-
+// Corregido: Se definen las props que el componente espera
 interface CountrySelectorProps {
-  value?: { label: string; value: string };
-  onChange: (value: { label: string; value: string } | null) => void;
+  name: string;
+  control: Control<any>;
+  required?: boolean;
 }
 
-export const CountrySelector: React.FC<CountrySelectorProps> = ({ value, onChange }) => {
-  const options = useMemo(() => countryList().getData(), []);
-
-  const customStyles = {
-    control: (provided: any) => ({
-      ...provided,
-      minHeight: '36px',
-      height: '36px',
-      boxShadow: 'none',
-      borderColor: 'hsl(var(--input))',
-      '&:hover': {
-        borderColor: 'hsl(var(--ring))',
-      },
-    }),
-    valueContainer: (provided: any) => ({
-      ...provided,
-      height: '36px',
-      padding: '0 6px'
-    }),
-    input: (provided: any) => ({
-      ...provided,
-      margin: '0px',
-    }),
-    indicatorSeparator: () => ({
-      display: 'none',
-    }),
-    indicatorsContainer: (provided: any) => ({
-      ...provided,
-      height: '36px',
-    }),
-  };
-
-  return <Select options={options} value={value} onChange={onChange} styles={customStyles} placeholder="Selecciona un país..." />;
+export const CountrySelector = ({ name, control, required = false }: CountrySelectorProps) => {
+  return (
+    <div>
+      <Controller
+        name={name}
+        control={control}
+        rules={{ required: required }}
+        render={({ field }) => (
+          <PhoneInput
+            {...field}
+            international
+            defaultCountry="CL"
+            className="input"
+            placeholder="Ingrese número de teléfono"
+          />
+        )}
+      />
+    </div>
+  );
 };

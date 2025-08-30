@@ -129,6 +129,20 @@ exports.findAsistentesPorCampana = async (id_campana) => {
 /**
  * Registra un asistente en puerta, incluyendo creación de contacto, inscripción y respuestas personalizadas.
  */
+const capitalizarPalabras = (texto) => {
+  if (!texto) return '';
+  return texto
+    .toLowerCase()
+    .split(' ')
+    .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1))
+    .join(' ');
+};
+
+const capitalizarFrase = (texto) => {
+  if (!texto) return '';
+  return texto.charAt(0).toUpperCase() + texto.slice(1).toLowerCase();
+};
+
 exports.registrarEnPuerta = async (
     id_campana,
     id_tipo_entrada = null,
@@ -138,6 +152,14 @@ exports.registrarEnPuerta = async (
     registrado_puerta = 1
 ) => {
     try {
+        // --- Capitalizar campos ---
+        if (datosContacto.nombre) datosContacto.nombre = capitalizarPalabras(datosContacto.nombre);
+        if (datosContacto.email) datosContacto.email = datosContacto.email.toLowerCase();
+        if (datosContacto.empresa) datosContacto.empresa = capitalizarPalabras(datosContacto.empresa);
+        if (datosContacto.actividad) datosContacto.actividad = capitalizarPalabras(datosContacto.actividad);
+        if (datosContacto.profesion) datosContacto.profesion = capitalizarPalabras(datosContacto.profesion);
+        if (datosContacto.comuna) datosContacto.comuna = capitalizarPalabras(datosContacto.comuna);
+
         // --- 1. Crear o actualizar contacto ---
         let contacto = await ContactoModel.findByEmail(datosContacto.email);
 
@@ -171,7 +193,6 @@ exports.registrarEnPuerta = async (
 
         // --- 3. Guardar respuestas dinámicas ---
         if (respuestas.length > 0) {
-            // respuestas = [{ id_campo: 51, valor: "Single" }, ...]
             await FormularioModel.saveRespuestas(inscripcion.id_inscripcion, respuestas);
         }
 

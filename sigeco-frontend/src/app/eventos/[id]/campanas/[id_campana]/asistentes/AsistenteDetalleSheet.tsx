@@ -11,6 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ExternalLink } from "lucide-react";
+import Select from "react-select";
+import countryList from "react-select-country-list";
 
 type Props = {
     isOpen: boolean;
@@ -42,7 +44,6 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
                 const initialValues: Record<string, any> = {};
                 data.data.forEach((field: any) => {
                     if (field.tipo_campo === 'CASILLAS' && typeof asistente[field.nombre_interno] === 'string') {
-                        // --- CORRECCIÓN AQUÍ ---
                         initialValues[field.nombre_interno] = asistente[field.nombre_interno].split(',').map((s: string) => s.trim());
                     } else {
                         initialValues[field.nombre_interno] = asistente[field.nombre_interno] || "";
@@ -73,7 +74,6 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
         handleChange(fieldName, newValues);
     };
 
-
     const handleSave = async () => {
         try {
             const baseFields = ['nombre', 'email', 'telefono', 'rut', 'empresa', 'actividad', 'profesion', 'pais', 'comuna'];
@@ -83,7 +83,7 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
             if (formulario) {
                 formulario.forEach((field: any) => {
                     let value = formValues[field.nombre_interno];
-                    
+
                     if (Array.isArray(value)) {
                         value = value.join(', ');
                     }
@@ -91,7 +91,7 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
                     if (field.es_de_sistema && baseFields.includes(field.nombre_interno)) {
                         datosContacto[field.nombre_interno] = value;
                     } else {
-                         respuestas.push({ id_campo: field.id_campo, valor: value === '' ? null : value });
+                        respuestas.push({ id_campo: field.id_campo, valor: value === '' ? null : value });
                     }
                 });
             }
@@ -165,9 +165,9 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
                         ))}
                     </div>
                 );
-            
+
             case 'ARCHIVO':
-                 return value ? (
+                return value ? (
                     <a href={value} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center">
                         Ver Archivo <ExternalLink className="ml-2 h-4 w-4" />
                     </a>
@@ -175,6 +175,18 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
 
             case 'TEXTO_CORTO':
             default:
+                // --- Campo especial: pais ---
+                if (field.nombre_interno === 'pais') {
+                    const options = countryList().getData(); // [{ value, label }]
+                    const selected = options.find(opt => opt.value === value) || null;
+                    return (
+                        <Select
+                            value={selected}
+                            options={options}
+                            onChange={(selectedOption) => handleChange(field.nombre_interno, selectedOption?.value)}
+                        />
+                    );
+                }
                 return <Input type="text" value={value} onChange={(e) => handleChange(field.nombre_interno, e.target.value)} className="border p-2 rounded" />;
         }
     };
@@ -233,3 +245,4 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
         </Dialog>
     );
 }
+    

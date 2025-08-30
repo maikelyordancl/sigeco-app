@@ -58,7 +58,10 @@ exports.registrarEnPuerta = async (req, res) => {
     // Validaciones de express-validator
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-        return res.status(400).json({ success: false, errors: errors.array() });
+        return res.status(400).json({ 
+            success: false, 
+            errors: errors.array() 
+        });
     }
 
     try {
@@ -81,7 +84,10 @@ exports.registrarEnPuerta = async (req, res) => {
 
         // Validación mínima de email
         if (!email || email.trim() === '') {
-            return res.status(400).json({ success: false, message: 'El campo email es obligatorio.' });
+            return res.status(400).json({ 
+                success: false, 
+                message: 'El campo email es obligatorio.' 
+            });
         }
 
         // Datos de contacto

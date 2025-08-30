@@ -1,70 +1,54 @@
 "use client";
-
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Settings2 } from "lucide-react";
 import { CampoFormulario } from "../types";
-import { MixerHorizontalIcon } from "@radix-ui/react-icons";
 
-interface Props {
-  campos: CampoFormulario[];
+interface ConfigureColumnsProps {
+  camposFormulario: CampoFormulario[];
   visibleColumns: string[];
-  setVisibleColumns: (columns: string[]) => void;
+  toggleColumnVisibility: (nombre_interno: string) => void;
 }
 
 export function ConfigureColumnsAcreditacion({
-  campos,
+  camposFormulario,
   visibleColumns,
-  setVisibleColumns,
-}: Props) {
-  const toggleColumn = (columnName: string) => {
-    let newVisibleColumns: string[];
+  toggleColumnVisibility
+}: ConfigureColumnsProps) {
 
-    if (visibleColumns.includes(columnName)) {
-      // Quitar columna
-      newVisibleColumns = visibleColumns.filter((col) => col !== columnName);
-    } else {
-      // Añadir columna manteniendo el orden original según `campos`
-      newVisibleColumns = [
-        ...visibleColumns,
-        columnName,
-      ].sort(
-        (a, b) =>
-          campos.findIndex((c) => c.nombre_interno === a) -
-          campos.findIndex((c) => c.nombre_interno === b)
-      );
-    }
+  // Columnas que no se pueden ocultar
+  const unhideableColumns = ['nombre', 'email'];
 
-    setVisibleColumns(newVisibleColumns);
-    // Guardar en localStorage usando la primera columna como referencia de campaña (coherente con page.tsx)
-    localStorage.setItem(
-      `visible_columns_campana_${campos[0]?.id_campo || ""}`,
-      JSON.stringify(newVisibleColumns)
-    );
-  };
+  // Campos de sistema que sí queremos que se puedan configurar (mostrar/ocultar)
+  const configurableSystemFields = [
+    'rut',
+    'empresa',
+    'actividad',
+    'profesion',
+    'pais',
+    'comuna', // <-- ¡Añadido aquí!
+    'estado_asistencia'
+  ];
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="ml-auto">
-          <MixerHorizontalIcon className="mr-2 h-4 w-4" /> Alternar Columnas
+        <Button variant="outline" size="sm">
+          <Settings2 className="mr-2 h-4 w-4" />
+          Configurar Columnas
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Seleccionar Columnas</DropdownMenuLabel>
+      <DropdownMenuContent>
+        <DropdownMenuLabel>Campos Visibles</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {campos.map((campo) => (
+        {camposFormulario
+          .filter(campo => !campo.es_de_sistema || configurableSystemFields.includes(campo.nombre_interno) || unhideableColumns.includes(campo.nombre_interno))
+          .map(campo => (
           <DropdownMenuCheckboxItem
             key={campo.id_campo}
-            className="capitalize"
             checked={visibleColumns.includes(campo.nombre_interno)}
-            onCheckedChange={() => toggleColumn(campo.nombre_interno)}
+            onCheckedChange={() => toggleColumnVisibility(campo.nombre_interno)}
+            disabled={unhideableColumns.includes(campo.nombre_interno)}
           >
             {campo.etiqueta}
           </DropdownMenuCheckboxItem>
