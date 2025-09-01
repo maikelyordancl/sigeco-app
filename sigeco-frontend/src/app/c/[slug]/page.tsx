@@ -13,7 +13,8 @@ import { AlertTriangle, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import Select, { SingleValue } from 'react-select';
+import { SingleValue } from 'react-select';
+import { Select } from "@/components/ui/select";
 import countryList from 'react-select-country-list';
 
 import { SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -89,127 +90,129 @@ const FormularioDinamico = ({ formConfig, onSubmit, isSubmitting, defaultValues 
     });
 
     const renderCampo = (campo: FormularioCampo) => {
-        if (!campo.es_visible) return null;
+    if (!campo.es_visible) return null;
 
-        const fieldName = campo.nombre_interno;
-        const error = errors[fieldName];
-        const isEmailField = fieldName === 'email';
-        const etiqueta = fieldName === 'nombre' ? 'Nombre Completo' : campo.etiqueta;
+    const fieldName = campo.nombre_interno;
+    const error = errors[fieldName];
+    const isEmailField = fieldName === 'email';
+    const etiqueta = fieldName === 'nombre' ? 'Nombre Completo' : campo.etiqueta;
 
-        // Campo país usando react-select-country-list
-        if (fieldName === 'pais') {
-            return (
-                <div key={campo.id_campo}>
-                    <Label htmlFor={fieldName}>{etiqueta}{campo.es_obligatorio ? '*' : ''}</Label>
-                    <Controller
-                        name={fieldName}
-                        control={control}
-                        render={({ field }) => {
-                            const options = countryList().getData();
-                            return (
-                                <Select
-                                    {...field}
-                                    options={options}
-                                    value={options.find(option => option.value === field.value) || null}
-                                    onChange={(option: SingleValue<{ label: string; value: string }>) => field.onChange(option?.value)}
-                                    placeholder="Selecciona un país..."
-                                />
-                            )
-                        }}
-                    />
-                    {error && <p className="text-red-500 text-xs mt-1">{(error as any).message}</p>}
-                </div>
-            );
-        }
-
+    // CORRECCIÓN 1: Reestructurar el campo 'país' para usar el patrón de shadcn/ui
+    if (fieldName === 'pais') {
+        const options = countryList().getData();
         return (
             <div key={campo.id_campo}>
                 <Label htmlFor={fieldName}>{etiqueta}{campo.es_obligatorio ? '*' : ''}</Label>
-
-                {campo.tipo_campo === 'TEXTO_CORTO' && <Input id={fieldName} {...register(fieldName)} type={isEmailField ? 'email' : 'text'} readOnly={isEmailField && defaultValues?.[fieldName]} className={isEmailField && defaultValues?.[fieldName] ? 'bg-gray-100' : ''} />}
-                {campo.tipo_campo === 'PARRAFO' && <Textarea id={fieldName} {...register(fieldName)} />}
-                {campo.tipo_campo === 'DESPLEGABLE' && (
-                    <Controller
-                        name={fieldName}
-                        control={control}
-                        render={({ field }) => (
-                            <>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Selecciona una opción..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {campo.opciones?.map(opt => (
-                                        <SelectItem
-                                            key={opt.id_opcion}
-                                            value={opt.etiqueta_opcion}
-                                            onClick={() => field.onChange(opt.etiqueta_opcion)}
-                                        >
-                                            {opt.etiqueta_opcion}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </>
-                        )}
-                    />
-                )}
-
-                {campo.tipo_campo === 'SELECCION_UNICA' && (
-                    <Controller
-                        name={fieldName}
-                        control={control}
-                        render={({ field }) => (
-                            <div className="space-y-2 rounded-md border p-2 mt-1">
-                                {campo.opciones?.map(opt => (
-                                    <div key={opt.id_opcion} className="flex items-center space-x-2">
-                                        <input
-                                            type="radio"
-                                            id={`${fieldName}-${opt.id_opcion}`}
-                                            {...field}
-                                            value={opt.etiqueta_opcion}
-                                            checked={field.value === opt.etiqueta_opcion}
-                                            className="form-radio h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
-                                        />
-                                        <Label htmlFor={`${fieldName}-${opt.id_opcion}`}>{opt.etiqueta_opcion}</Label>
-                                    </div>
+                <Controller
+                    name={fieldName}
+                    control={control}
+                    render={({ field }) => (
+                        <Select onValueChange={field.onChange} value={field.value as string}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Selecciona un país..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {options.map((option: { value: string; label: string }) => (
+                                    <SelectItem key={option.value} value={option.value}>
+                                        {option.label}
+                                    </SelectItem>
                                 ))}
-                            </div>
-                        )}
-                    />
-                )}
-                {campo.tipo_campo === 'CASILLAS' && (
-                    <Controller
-                        name={fieldName}
-                        control={control}
-                        defaultValue={[]}
-                        render={({ field }) => (
-                            <div className="space-y-2 rounded-md border p-2 mt-1">
-                                {campo.opciones?.map(opt => (
-                                    <div key={opt.id_opcion} className="flex items-center space-x-2">
-                                        <Checkbox
-                                            id={`${fieldName}-${opt.id_opcion}`}
-                                            checked={(field.value as string[])?.includes(opt.etiqueta_opcion)}
-                                            onCheckedChange={(checked) => {
-                                                const currentValues = (field.value as string[]) || [];
-                                                if (checked) {
-                                                    field.onChange([...currentValues, opt.etiqueta_opcion]);
-                                                } else {
-                                                    field.onChange(currentValues.filter((value: string) => value !== opt.etiqueta_opcion));
-                                                }
-                                            }}
-                                        />
-                                        <Label htmlFor={`${fieldName}-${opt.id_opcion}`}>{opt.etiqueta_opcion}</Label>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    />
-                )}
-                {campo.tipo_campo === 'ARCHIVO' && <Input id={fieldName} {...register(fieldName)} type="file" />}
+                            </SelectContent>
+                        </Select>
+                    )}
+                />
                 {error && <p className="text-red-500 text-xs mt-1">{(error as any).message}</p>}
             </div>
         );
-    };
+    }
 
+    return (
+        <div key={campo.id_campo}>
+            <Label htmlFor={fieldName}>{etiqueta}{campo.es_obligatorio ? '*' : ''}</Label>
+
+            {campo.tipo_campo === 'TEXTO_CORTO' && <Input id={fieldName} {...register(fieldName)} type={isEmailField ? 'email' : 'text'} readOnly={isEmailField && defaultValues?.[fieldName]} className={isEmailField && defaultValues?.[fieldName] ? 'bg-gray-100' : ''} />}
+            {campo.tipo_campo === 'PARRAFO' && <Textarea id={fieldName} {...register(fieldName)} />}
+            
+            {campo.tipo_campo === 'DESPLEGABLE' && (
+                <Controller
+                    name={fieldName}
+                    control={control}
+                    render={({ field }) => (
+                        <Select onValueChange={field.onChange} value={field.value as string}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Selecciona una opción..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {campo.opciones?.map(opt => (
+                                    <SelectItem
+                                        key={opt.id_opcion || opt.etiqueta_opcion}
+                                        value={opt.etiqueta_opcion}
+                                    >
+                                        {opt.etiqueta_opcion}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+                />
+            )}
+
+            {campo.tipo_campo === 'SELECCION_UNICA' && (
+                <Controller
+                    name={fieldName}
+                    control={control}
+                    render={({ field }) => (
+                        <div className="space-y-2 rounded-md border p-2 mt-1">
+                            {campo.opciones?.map(opt => (
+                                <div key={opt.id_opcion} className="flex items-center space-x-2">
+                                    <input
+                                        type="radio"
+                                        id={`${fieldName}-${opt.id_opcion}`}
+                                        {...field}
+                                        value={opt.etiqueta_opcion}
+                                        checked={field.value === opt.etiqueta_opcion}
+                                        className="form-radio h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
+                                    />
+                                    <Label htmlFor={`${fieldName}-${opt.id_opcion}`}>{opt.etiqueta_opcion}</Label>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                />
+            )}
+            {campo.tipo_campo === 'CASILLAS' && (
+                <Controller
+                    name={fieldName}
+                    control={control}
+                    defaultValue={[]}
+                    render={({ field }) => (
+                        <div className="space-y-2 rounded-md border p-2 mt-1">
+                            {campo.opciones?.map(opt => (
+                                <div key={opt.id_opcion} className="flex items-center space-x-2">
+                                    <Checkbox
+                                        id={`${fieldName}-${opt.id_opcion}`}
+                                        checked={(field.value as string[])?.includes(opt.etiqueta_opcion)}
+                                        onCheckedChange={(checked) => {
+                                            const currentValues = (field.value as string[]) || [];
+                                            if (checked) {
+                                                field.onChange([...currentValues, opt.etiqueta_opcion]);
+                                            } else {
+                                                field.onChange(currentValues.filter((value: string) => value !== opt.etiqueta_opcion));
+                                            }
+                                        }}
+                                    />
+                                    <Label htmlFor={`${fieldName}-${opt.id_opcion}`}>{opt.etiqueta_opcion}</Label>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                />
+            )}
+            {campo.tipo_campo === 'ARCHIVO' && <Input id={fieldName} {...register(fieldName)} type="file" />}
+            {error && <p className="text-red-500 text-xs mt-1">{(error as any).message}</p>}
+        </div>
+    );
+};
     return (
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {formConfig.map(renderCampo)}
@@ -363,11 +366,11 @@ const ProcesoInscripcion = ({ campana, tickets, formulario }: { campana: Campana
     if (step === 'form') {
         return (
             <div>
-                {campana.obligatorio_pago && (
+                {campana.obligatorio_pago ? (
                     <Button variant="ghost" size="sm" onClick={handleBackToSelection} className="mb-4 -ml-4">
                         <ArrowLeft className="mr-2 h-4 w-4" /> Volver a seleccionar ticket
                     </Button>
-                )}
+                ) : null}
                 <h4 className="font-semibold text-lg border-b pb-2 mb-4">Completa tus datos</h4>
                 <FormularioDinamico
                     formConfig={formulario}
