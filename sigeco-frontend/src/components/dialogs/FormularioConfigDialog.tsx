@@ -197,7 +197,7 @@ export const FormularioConfigDialog = ({ isOpen, onClose, id_campana }: Formular
         const toastId = toast.loading(isEditing ? "Actualizando campo..." : "Añadiendo campo...");
         
         const url = isEditing
-            ? `}/campanas/formulario/campos/${fieldId}`
+            ? `/campanas/formulario/campos/${fieldId}`
             : `/campanas/formulario/campos`;
         
         const method = isEditing ? 'PUT' : 'POST';

@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const crypto = require('crypto');
 
 /**
  * Obtiene la configuración completa del formulario para una campaña,
@@ -99,39 +100,67 @@ exports.saveRespuestas = async (id_inscripcion, respuestas) => {
 };
 
 /**
- * Crea un nuevo campo de formulario personalizado y sus opciones si aplica.
- * Utiliza una transacción para garantizar la atomicidad.
+ * Crea un campo personalizado y sus opciones asociadas.
+ * La operación completa se envuelve en una transacción para garantizar la atomicidad.
+ *
+ * @async
+ * @param {object} campoData - Datos del campo a crear.
+ * @param {string} campoData.etiqueta - Etiqueta visible del campo.
+ * @param {string} campoData.tipo_campo - Tipo de campo ('TEXTO', 'DESPLEGABLE', etc.).
+ * @param {Array<{etiqueta_opcion: string}>} [campoData.opciones] - Opciones para campos tipo selector.
+ * @returns {Promise<object>} El registro del campo recién creado.
+ * @throws {Error} Relanza el error en caso de fallo para que sea manejado por el servicio que lo invoca.
  */
 exports.createCampoPersonalizado = async (campoData) => {
     const { etiqueta, tipo_campo, opciones } = campoData;
-    const nombre_interno = `custom_${etiqueta.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`;
+
+    // Genera un nombre interno (slug) único y seguro a partir de la etiqueta.
+    // Necesario para evitar conflictos y caracteres inválidos en atributos HTML o claves de objeto.
+    const cleanEtiqueta = etiqueta
+        .toLowerCase()
+        .normalize('NFD') // Separa letras de sus tildes 
+        .replace(/[\u0300-\u036f]/g, '') // Elimina los tildes y diacríticos
+        .replace(/ñ/g, 'n') // Reemplazar la ñ
+        .replace(/[^a-z0-9\s]/g, '') // Elimina caracteres no alfanuméricos, sin espacios
+        .trim() // Quitar espacios al inicio y fin
+        .replace(/\s+/g, '_'); // Reemplazar espacios con guiones bajos
+
+    const truncatedEtiqueta = cleanEtiqueta.substring(0, 60);
+    const shortId = crypto.randomBytes(4).toString('hex');
+    const nombre_interno = `custom_${truncatedEtiqueta}_${shortId}_${Date.now()}`;
 
     const connection = await pool.getConnection();
     await connection.beginTransaction();
 
     try {
-        // 1. Insertar el campo principal
+        // Inserta el campo principal.
         const [resultCampo] = await connection.query(
             'INSERT INTO formulario_campos (nombre_interno, etiqueta, tipo_campo, es_de_sistema, es_fijo) VALUES (?, ?, ?, 0, 0)',
             [nombre_interno, etiqueta, tipo_campo]
         );
         const newCampoId = resultCampo.insertId;
 
-        // 2. Insertar opciones si existen
+        // Inserción masiva de opciones, si existen.
         if (opciones && opciones.length > 0) {
             const opcionesValues = opciones.map(opt => [newCampoId, opt.etiqueta_opcion]);
             await connection.query('INSERT INTO campo_opciones (id_campo, etiqueta_opcion) VALUES ?', [opcionesValues]);
         }
         
+        // La operación fue exitosa, confirmar cambios.
         await connection.commit();
+        
+        // Retornar la entidad recién creada.
         const [newCampo] = await pool.query('SELECT * FROM formulario_campos WHERE id_campo = ?', [newCampoId]);
         return newCampo[0];
 
     } catch (error) {
+        // Rollback ante cualquier error durante la transacción.
         await connection.rollback();
-        console.error("Error en la transacción de creación de campo:", error);
+        console.error("Error en transacción createCampoPersonalizado:", error);
+        // Propagar el error hacia la capa de servicio/controlador.
         throw new Error('Error al crear el campo personalizado.');
     } finally {
+        // Asegurar siempre la liberación de la conexión de vuelta al pool.
         connection.release();
     }
 };

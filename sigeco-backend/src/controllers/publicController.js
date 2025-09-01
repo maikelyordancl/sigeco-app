@@ -70,12 +70,12 @@ exports.verificarContactoPorEmail = async (req, res) => {
 
         // Si la inscripción NO es libre, el usuario debe tener una inscripción previa.
         if (campana.inscripcion_libre === 0 && !inscripcion) {
-            return res.status(403).json({ 
-                success: false, 
-                message: 'Este es un evento por invitación y tu correo no se encuentra en la lista de asistentes.' 
+            return res.status(403).json({
+                success: false,
+                message: 'Este es un evento por invitación y tu correo no se encuentra en la lista de asistentes.'
             });
         }
-        
+
         // Si la inscripción es libre o si no es libre pero el usuario ya tiene una inscripción, se procede.
         res.json({ success: true, data: { contacto, inscripcion } });
         // --- FIN DE LA LÓGICA MODIFICADA ---
@@ -102,6 +102,12 @@ exports.crearInscripcionPublica = async (req, res) => {
         return res.status(400).json({ success: false, message: 'El campo "Email" es obligatorio.' });
     }
 
+    // CAMBIO 1: Validación temprana de id_campana (parámetro obligatorio)
+    if (!id_campana) {
+        return res.status(400).json({ success: false, message: 'El campo "id_campana" es obligatorio.' });
+    }
+    // FIN CAMBIO 1
+
     try {
         const campanaRules = await CampanaModel.findRulesById(id_campana);
         if (!campanaRules) {
@@ -113,7 +119,10 @@ exports.crearInscripcionPublica = async (req, res) => {
             return res.status(404).json({ success: false, message: 'El tipo de entrada seleccionado no es válido.' });
         }
 
-        const formConfig = await FormularioModel.findByCampanaId(id_campana);
+        // CAMBIO 1 (parte 2): Asegurar que formConfig sea un arreglo para evitar errores en el bucle
+        const formConfig = (await FormularioModel.findByCampanaId(id_campana)) || [];
+        // FIN CAMBIO 1 (parte 2)
+
         const datosContacto = {};
         const respuestasPersonalizadas = [];
 
@@ -130,7 +139,7 @@ exports.crearInscripcionPublica = async (req, res) => {
                     return res.status(400).json({ success: false, message: `El archivo para "${campo.etiqueta}" es obligatorio.` });
                 }
             }
-            
+
             // Ya no validamos aquí, la ruta se encarga. Solo recolectamos datos.
             if (value !== undefined && value !== null && value !== '') {
                 // Separamos los datos que van a la tabla 'contactos'
@@ -146,7 +155,7 @@ exports.crearInscripcionPublica = async (req, res) => {
         }
 
         let contacto = await ContactoModel.findByEmail(email);
-        
+
         // Si el contacto existe, lo actualizamos. Si no, lo creamos.
         if (contacto) {
             await ContactoModel.updateById(contacto.id_contacto, datosContacto);
@@ -186,14 +195,33 @@ exports.crearInscripcionPublica = async (req, res) => {
                 monto: ticket.precio,
                 orden_compra: ordenCompra,
             });
-            const flowResponse = await FlowService.crearOrdenDePago({
-                orden_compra: ordenCompra,
-                monto: ticket.precio,
-                subject: `Entrada: ${ticket.nombre}`,
-                email: email,
-            });
-            await PagoModel.updateById(nuevoPago.id_pago, { token_flow: flowResponse.token });
-            return res.status(200).json({ success: true, redirectUrl: flowResponse.redirectUrl });
+
+            // CAMBIO 2: Manejo explícito de errores al crear la orden de pago en Flow
+            try {
+                const flowResponse = await FlowService.crearOrdenDePago({
+                    orden_compra: ordenCompra,
+                    monto: ticket.precio,
+                    subject: `Entrada: ${ticket.nombre}`,
+                    email: email,
+                });
+                await PagoModel.updateById(nuevoPago.id_pago, { token_flow: flowResponse.token });
+                return res.status(200).json({ success: true, redirectUrl: flowResponse.redirectUrl });
+            } catch (flowError) {
+                console.error('Error al crear orden de pago en Flow:', flowError);
+
+                let errorMsg = 'No se pudo crear la orden de pago.';
+                if (flowError.message) {
+                    errorMsg = flowError.message;
+                } else if (flowError.response && flowError.response.data) {
+                    errorMsg = flowError.response.data.message || JSON.stringify(flowError.response.data);
+                }
+
+                // Si tu tabla soporta, guarda detalle:
+                // await PagoModel.updateById(nuevoPago.id_pago, { estado: 'Error', detalle_error: errorMsg });
+
+                return res.status(500).json({ success: false, message: errorMsg });
+            }
+            // FIN CAMBIO 2
         }
 
         await InscripcionModel.update(inscripcion.id_inscripcion, { estado_asistencia: 'Confirmado' });
