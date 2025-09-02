@@ -211,7 +211,7 @@ const RegistrarEnPuertaDialog = ({
           if (campoConfig && value) {
             respuestas.push({
               id_campo: campoConfig.id_campo,
-              valor: Array.isArray(value) ? value.join(", ") : value,
+              valor: Array.isArray(value) ? JSON.stringify(value) : value,
             });
           }
         }

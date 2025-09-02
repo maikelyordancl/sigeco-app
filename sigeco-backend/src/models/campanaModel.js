@@ -3,7 +3,7 @@
  * Utiliza un pool de conexiones para interactuar con la base de datos MySQL.
  */
 const pool = require('../config/db');
-
+const FormularioModel = require('./formularioModel');
 const Campana = {
     /**
      * Crea una nueva campaña en la base de datos.
@@ -117,13 +117,13 @@ const Campana = {
             const eventName = eventoRows.length > 0 ? eventoRows[0].nombre : '';
             return { eventName, campaigns: [] };
         }
-    
+
         const eventName = rows[0].evento_nombre;
         const campaigns = rows.map(row => {
             const { evento_nombre, ...campaignData } = row;
             return campaignData;
         });
-    
+
         return { eventName, campaigns };
     },
 
@@ -203,7 +203,7 @@ const Campana = {
 
         // Si la campaña requiere pago, obtener los tipos de entrada (tickets)
         if (campanaData.obligatorio_pago) {
-             const ticketsQuery = 'SELECT id_tipo_entrada, nombre, precio, cantidad_total, cantidad_vendida FROM tipos_de_entrada WHERE id_campana = ? ORDER BY precio ASC';
+            const ticketsQuery = 'SELECT id_tipo_entrada, nombre, precio, cantidad_total, cantidad_vendida FROM tipos_de_entrada WHERE id_campana = ? ORDER BY precio ASC';
             const [ticketRows] = await pool.query(ticketsQuery, [campanaData.id_campana]);
             tickets = ticketRows;
         }
@@ -241,6 +241,53 @@ const Campana = {
         const [result] = await pool.query(query, [landing_page_json, id_campana]);
         return result;
     },
+    /**
+ * Busca los datos públicos de una campaña por su ID.
+ * Similar a findPublicDataBySlug pero usando id_campana.
+ */
+    findPublicDataById: async (id_campana) => {
+
+        const campanaQuery = `
+        SELECT
+            c.id_campana, c.id_subevento, c.nombre, c.estado, c.url_amigable,
+            c.inscripcion_libre,
+            c.landing_page_json,
+            e.nombre AS evento_nombre, e.fecha_inicio, e.fecha_fin, e.ciudad, e.lugar,
+            s.nombre AS subevento_nombre, s.obligatorio_registro, s.obligatorio_pago
+        FROM campanas c
+        JOIN eventos e ON c.id_evento = e.id_evento
+        LEFT JOIN subeventos s ON c.id_subevento = s.id_subevento
+        WHERE c.id_campana = ? AND c.estado = 'Activa';
+    `;
+        const [campanas] = await pool.query(campanaQuery, [id_campana]);
+
+        if (campanas.length === 0) return null;
+
+        const campanaData = campanas[0];
+        let tickets = [];
+
+        campanaData.tipo_acceso = campanaData.obligatorio_pago ? 'De Pago' : 'Gratuito';
+
+        if (campanaData.obligatorio_pago) {
+            const ticketsQuery = `
+            SELECT id_tipo_entrada, nombre, precio, cantidad_total, cantidad_vendida
+            FROM tipos_de_entrada
+            WHERE id_campana = ?
+            ORDER BY precio ASC
+        `;
+            const [ticketRows] = await pool.query(ticketsQuery, [campanaData.id_campana]);
+            tickets = ticketRows;
+        }
+
+        const formularioConfig = await FormularioModel.findByCampanaId(campanaData.id_campana);
+
+        return {
+            campana: campanaData,
+            tickets: tickets,
+            formulario: formularioConfig
+        };
+    },
+
 };
 
 module.exports = Campana;

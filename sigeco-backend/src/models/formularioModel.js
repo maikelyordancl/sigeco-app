@@ -82,22 +82,29 @@ exports.updateByCampanaId = async (id_campana, campos) => {
  * Guarda las respuestas de un formulario de inscripción.
  */
 exports.saveRespuestas = async (id_inscripcion, respuestas) => {
-    const connection = await pool.getConnection();
     try {
+        console.log('Guardando respuestas para inscripcion:', id_inscripcion);
+        console.log('Respuestas recibidas:', respuestas);
+
         for (const respuesta of respuestas) {
-            await connection.query(
-                'INSERT INTO inscripcion_respuestas (id_inscripcion, id_campo, valor) VALUES (?, ?, ?)',
-                [id_inscripcion, respuesta.id_campo, respuesta.valor]
+            const { id_campo, valor } = respuesta;
+            console.log(`Guardando campo ${id_campo} con valor:`, valor);
+
+            await pool.query(
+                `INSERT INTO inscripcion_respuestas (id_inscripcion, id_campo, valor)
+                 VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE valor = VALUES(valor)`,
+                [id_inscripcion, id_campo, JSON.stringify(valor)]
             );
         }
-        return { success: true };
+
+        console.log('Respuestas guardadas exitosamente.');
     } catch (error) {
-        console.error("Error al guardar respuestas del formulario:", error);
+        console.error('Error al guardar respuestas del formulario:', error);
         throw new Error('Error al guardar las respuestas.');
-    } finally {
-        connection.release();
     }
 };
+
 
 /**
  * Crea un campo personalizado y sus opciones asociadas.

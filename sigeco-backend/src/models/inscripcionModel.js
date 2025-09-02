@@ -194,14 +194,13 @@ const Inscripcion = {
             // 3. Actualizar/Insertar respuestas de campos personalizados
             if (respuestas && respuestas.length > 0) {
                 for (const resp of respuestas) {
-                    if (resp.valor !== undefined && resp.valor !== null) {
-                        const valorAGuardar = resp.valor === '' ? null : resp.valor;
+                    // Elimina el condicional 'if (resp.valor !== undefined && resp.valor !== null)'
+                    const valorAGuardar = resp.valor === '' ? null : resp.valor;
 
-                        await connection.query(
-                            'INSERT INTO inscripcion_respuestas (id_inscripcion, id_campo, valor) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE valor = VALUES(valor)',
-                            [id_inscripcion, resp.id_campo, valorAGuardar]
-                        );
-                    }
+                    await connection.query(
+                        'INSERT INTO inscripcion_respuestas (id_inscripcion, id_campo, valor) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE valor = VALUES(valor)',
+                        [id_inscripcion, resp.id_campo, valorAGuardar]
+                    );
                 }
             }
 

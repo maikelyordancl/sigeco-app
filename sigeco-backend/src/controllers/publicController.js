@@ -5,6 +5,7 @@ const ContactoModel = require('../models/contactoModel');
 const PagoModel = require('../models/pagoModel');
 const FlowService = require('../services/flowService');
 const FormularioModel = require('../models/formularioModel'); // Para campos personalizados
+const emailService = require('../services/emailService'); // Importar el nuevo servicio de correo
 
 // Mapea el estado numérico de Flow a nuestro estado de texto
 const mapFlowStatus = (flowStatus) => {
@@ -102,11 +103,9 @@ exports.crearInscripcionPublica = async (req, res) => {
         return res.status(400).json({ success: false, message: 'El campo "Email" es obligatorio.' });
     }
 
-    // CAMBIO 1: Validación temprana de id_campana (parámetro obligatorio)
     if (!id_campana) {
         return res.status(400).json({ success: false, message: 'El campo "id_campana" es obligatorio.' });
     }
-    // FIN CAMBIO 1
 
     try {
         const campanaRules = await CampanaModel.findRulesById(id_campana);
@@ -119,10 +118,7 @@ exports.crearInscripcionPublica = async (req, res) => {
             return res.status(404).json({ success: false, message: 'El tipo de entrada seleccionado no es válido.' });
         }
 
-        // CAMBIO 1 (parte 2): Asegurar que formConfig sea un arreglo para evitar errores en el bucle
         const formConfig = (await FormularioModel.findByCampanaId(id_campana)) || [];
-        // FIN CAMBIO 1 (parte 2)
-
         const datosContacto = {};
         const respuestasPersonalizadas = [];
 
@@ -140,12 +136,10 @@ exports.crearInscripcionPublica = async (req, res) => {
                 }
             }
 
-            // Ya no validamos aquí, la ruta se encarga. Solo recolectamos datos.
             if (value !== undefined && value !== null && value !== '') {
-                // Separamos los datos que van a la tabla 'contactos'
                 if (campo.es_de_sistema) {
                     datosContacto[key] = value;
-                } else { // Y los que van a 'inscripcion_respuestas'
+                } else {
                     respuestasPersonalizadas.push({
                         id_campo: campo.id_campo,
                         valor: String(value)
@@ -156,7 +150,6 @@ exports.crearInscripcionPublica = async (req, res) => {
 
         let contacto = await ContactoModel.findByEmail(email);
 
-        // Si el contacto existe, lo actualizamos. Si no, lo creamos.
         if (contacto) {
             await ContactoModel.updateById(contacto.id_contacto, datosContacto);
         } else {
@@ -196,7 +189,6 @@ exports.crearInscripcionPublica = async (req, res) => {
                 orden_compra: ordenCompra,
             });
 
-            // CAMBIO 2: Manejo explícito de errores al crear la orden de pago en Flow
             try {
                 const flowResponse = await FlowService.crearOrdenDePago({
                     orden_compra: ordenCompra,
@@ -208,23 +200,31 @@ exports.crearInscripcionPublica = async (req, res) => {
                 return res.status(200).json({ success: true, redirectUrl: flowResponse.redirectUrl });
             } catch (flowError) {
                 console.error('Error al crear orden de pago en Flow:', flowError);
-
-                let errorMsg = 'No se pudo crear la orden de pago.';
-                if (flowError.message) {
-                    errorMsg = flowError.message;
-                } else if (flowError.response && flowError.response.data) {
-                    errorMsg = flowError.response.data.message || JSON.stringify(flowError.response.data);
-                }
-
-                // Si tu tabla soporta, guarda detalle:
-                // await PagoModel.updateById(nuevoPago.id_pago, { estado: 'Error', detalle_error: errorMsg });
-
+                let errorMsg = flowError.message || 'No se pudo crear la orden de pago.';
                 return res.status(500).json({ success: false, message: errorMsg });
             }
-            // FIN CAMBIO 2
         }
 
         await InscripcionModel.update(inscripcion.id_inscripcion, { estado_asistencia: 'Confirmado' });
+
+        // --- ENVÍO DE CORREO USANDO id_campana ---
+        const campanaData = await CampanaModel.findPublicDataById(id_campana); // <- Cambiado
+        if (campanaData && campanaData.campana) {
+            const { evento_nombre, fecha_inicio, fecha_fin, lugar } = campanaData.campana;
+            const eventData = {
+                event_name: evento_nombre,
+                event_start_date: fecha_inicio,
+                event_end_date: fecha_fin,
+                event_location: lugar
+            };
+
+            if (campanaRules.obligatorio_pago && campanaRules.estado_pago === 'Pagado') {
+                await emailService.sendConfirmationEmail(email, datosContacto.nombre, eventData);
+            } else if (!campanaRules.obligatorio_pago) {
+                await emailService.sendConfirmationEmail(email, datosContacto.nombre, eventData);
+            }
+        }
+
         return res.status(200).json({ success: true, message: 'Inscripción confirmada correctamente.' });
 
     } catch (error) {

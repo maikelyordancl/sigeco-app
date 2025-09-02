@@ -43,10 +43,17 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
 
                 const initialValues: Record<string, any> = {};
                 data.data.forEach((field: any) => {
-                    if (field.tipo_campo === 'CASILLAS' && typeof asistente[field.nombre_interno] === 'string') {
-                        initialValues[field.nombre_interno] = asistente[field.nombre_interno].split(',').map((s: string) => s.trim());
+                    const valueFromBackend = asistente[field.nombre_interno];
+                    if (field.tipo_campo === 'CASILLAS' && typeof valueFromBackend === 'string') {
+                        try {
+                            // Intenta parsear como JSON.
+                            initialValues[field.nombre_interno] = JSON.parse(valueFromBackend);
+                        } catch (e) {
+                            // Si falla, asume que es una cadena separada por comas (para datos antiguos).
+                            initialValues[field.nombre_interno] = valueFromBackend.split(',').map((s: string) => s.trim());
+                        }
                     } else {
-                        initialValues[field.nombre_interno] = asistente[field.nombre_interno] || "";
+                        initialValues[field.nombre_interno] = valueFromBackend || "";
                     }
                 });
                 setFormValues(initialValues);
@@ -208,20 +215,20 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
                         ))}
 
                         <hr className="my-6 border-gray-300" />
-                        
+
                         <div className="flex flex-col">
-                           <Label className="text-sm font-medium mb-2">Estado de Asistencia</Label>
+                            <Label className="text-sm font-medium mb-2">Estado de Asistencia</Label>
                             <select value={estadoAsistencia} onChange={(e) => setEstadoAsistencia(e.target.value)} className="border p-2 rounded w-full">
-                               <option value="Invitado">Invitado</option>
-                               <option value="Registrado">Registrado</option>
-                               <option value="Confirmado">Confirmado</option>
-                               <option value="Por Confirmar">Por Confirmar</option>
-                               <option value="No Asiste">No Asiste</option>
-                               <option value="Asistió">Asistió</option>
-                               <option value="Cancelado">Cancelado</option>
-                           </select>
+                                <option value="Invitado">Invitado</option>
+                                <option value="Registrado">Registrado</option>
+                                <option value="Confirmado">Confirmado</option>
+                                <option value="Por Confirmar">Por Confirmar</option>
+                                <option value="No Asiste">No Asiste</option>
+                                <option value="Asistió">Asistió</option>
+                                <option value="Cancelado">Cancelado</option>
+                            </select>
                         </div>
-                        
+
                         <div className="flex flex-col">
                             <Label className="text-sm font-medium mb-2">Notas</Label>
                             <Textarea
@@ -245,4 +252,3 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
         </Dialog>
     );
 }
-    
