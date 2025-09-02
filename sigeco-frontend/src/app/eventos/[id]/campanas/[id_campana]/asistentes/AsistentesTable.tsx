@@ -28,6 +28,7 @@ import { Input } from '@/components/ui/input';
 import { Asistente, CampoFormulario } from './types';
 import { ConfigurarColumnas } from './ConfigurarColumnas';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { apiFetch } from '@/lib/api';
 
 interface AsistentesTableProps {
   data: Asistente[];
@@ -109,7 +110,7 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
 
   const handleDelete = async (id_inscripcion: number) => {
   try {
-    const res = await fetch(`/api/campanas/asistentes/${id_inscripcion}`, {
+    const res = await apiFetch(`/api/campanas/asistentes/${id_inscripcion}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
