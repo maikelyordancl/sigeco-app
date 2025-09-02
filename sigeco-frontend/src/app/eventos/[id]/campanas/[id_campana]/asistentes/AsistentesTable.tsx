@@ -110,7 +110,7 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
 
   const handleDelete = async (id_inscripcion: number) => {
   try {
-    const res = await apiFetch(`/api/campanas/asistentes/${id_inscripcion}`, {
+    const res = await apiFetch(`/campanas/asistentes/${id_inscripcion}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
