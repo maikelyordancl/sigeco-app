@@ -12,7 +12,7 @@ import {
   VisibilityState,
   FilterFn,
 } from '@tanstack/react-table';
-import { Pencil } from 'lucide-react';
+import { Pencil, Trash } from 'lucide-react';
 import Cookies from 'js-cookie';
 
 import {
@@ -107,6 +107,28 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
     }
   }, [id_campana, columnVisibility, isInitialVisibilitySet]);
 
+  const handleDelete = async (id_inscripcion: number) => {
+  try {
+    const res = await fetch(`/api/campanas/asistentes/${id_inscripcion}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error('Error al eliminar la inscripción');
+    }
+
+    // 🔥 Opcional: recargar la lista de asistentes o quitar el registro del estado
+    alert('Inscripción eliminada correctamente');
+  } catch (error) {
+    console.error(error);
+    alert('Hubo un problema al eliminar la inscripción');
+  }
+};
+
+
   // --- Columnas
   const columns = useMemo<ColumnDef<Asistente>[]>(() => {
     if (dataConNumeroFila.length === 0) return [];
@@ -125,9 +147,22 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
         id: 'actions',
         header: 'Editar',
         cell: ({ row }) => (
-          <Button variant="ghost" size="icon" onClick={() => onEdit(row.original)}>
-            <Pencil className="h-4 w-4" />
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="icon" onClick={() => onEdit(row.original)}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="destructive"
+              onClick={() => {
+                if (window.confirm(`¿Seguro que deseas eliminar la inscripción de "${row.original.nombre}"?`)) {
+                  handleDelete(row.original.id_inscripcion);
+                }
+              }}
+            >
+              <Trash className="h-4 w-4" />
+            </Button>
+          </div>
         ),
         enableHiding: false,
       },
@@ -206,8 +241,8 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
             {table.getHeaderGroups().map(headerGroup => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map(header => (
-                  <TableHead 
-                    key={header.id} 
+                  <TableHead
+                    key={header.id}
                     onClick={header.column.getToggleSortingHandler()}
                     className={header.id === 'estado_asistencia' ? 'w-[200px]' : ''}
                   >

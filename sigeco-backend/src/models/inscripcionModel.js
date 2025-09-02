@@ -214,7 +214,16 @@ const Inscripcion = {
         } finally {
             connection.release();
         }
-    }
+    },
+
+    deleteById: async (id_inscripcion) => {
+        const [result] = await pool.execute(
+            'DELETE FROM inscripciones WHERE id_inscripcion = ?',
+            [id_inscripcion]
+        );
+        return result.affectedRows > 0;
+    },
+
 
 };
 

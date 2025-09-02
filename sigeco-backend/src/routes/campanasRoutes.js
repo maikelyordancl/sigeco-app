@@ -138,5 +138,10 @@ router.get('/:id_campana/formulario', formularioController.getCamposPorCampana);
 router.put('/asistentes/:id_inscripcion/respuestas', campanasController.updateAsistenteRespuestas);
 
 router.put('/asistentes/:id_inscripcion', campanasController.updateAsistenteCompleto);
+router.delete(
+    '/asistentes/:id_inscripcion',
+    [param('id_inscripcion').isInt({ gt: 0 }).withMessage('El ID de la inscripción debe ser un número válido.')],
+    campanasController.deleteAsistente
+);
 
 module.exports = router;

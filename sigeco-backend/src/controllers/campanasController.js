@@ -236,3 +236,24 @@ exports.updateAsistenteCompleto = async (req, res) => {
     res.status(500).json({ success: false, message: 'Error interno del servidor.' });
   }
 };
+
+/**
+ * Elimina un asistente (inscripción) de una campaña.
+ */
+exports.deleteAsistente = async (req, res) => {
+  const { id_inscripcion } = req.params;
+
+  try {
+    const success = await InscripcionModel.deleteById(id_inscripcion);
+
+    if (!success) {
+      return res.status(404).json({ success: false, message: 'Inscripción no encontrada.' });
+    }
+
+    res.json({ success: true, message: 'Asistente eliminado correctamente.' });
+  } catch (error) {
+    console.error('Error al eliminar asistente:', error);
+    res.status(500).json({ success: false, message: 'Error interno del servidor.' });
+  }
+};
+

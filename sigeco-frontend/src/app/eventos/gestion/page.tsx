@@ -298,7 +298,6 @@ export default function GestionEventos() {
                     <Button size="sm" variant="outline" onClick={() => handleOpenArchivosModal(evento)}>
                         <FolderArchive className="mr-2 h-4 w-4" /> Archivos
                     </Button>
-                    {/* Contenedor para alinear el botón de eliminar a la derecha */}
                     <div className="flex justify-end">
                          <Button
                             size="icon" // Usamos el tamaño 'icon'
