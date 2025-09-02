@@ -9,7 +9,6 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import { Editor, Frame, Element } from "@craftjs/core";
 import { AlertTriangle, ArrowLeft } from 'lucide-react';
 
-// Importaciones de componentes de UI
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
