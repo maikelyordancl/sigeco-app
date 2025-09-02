@@ -10,16 +10,6 @@ const InfoCard = ({ campana }: { campana: CampanaData['campana'] }) => {
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
-    <Card className="mb-8 shadow-sm border">
-      <CardHeader>
-        <CardTitle className="text-2xl">{campana.nombre}</CardTitle>
-        <CardDescription className="flex items-center pt-2">
-          <Badge variant={campana.tipo_acceso === 'De Pago' ? 'destructive' : 'default'}>
-            {campana.tipo_acceso}
-          </Badge>
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
         <div className="space-y-3">
           <div className="flex items-center text-gray-700">
             <Calendar className="h-5 w-5 mr-3 text-gray-500" />
@@ -30,8 +20,6 @@ const InfoCard = ({ campana }: { campana: CampanaData['campana'] }) => {
             <span>{campana.ciudad}, {campana.lugar}</span>
           </div>
         </div>
-      </CardContent>
-    </Card>
   );
 };
 
@@ -49,14 +37,18 @@ export const LandingPagePresenter = ({ data, children, form }: LandingPagePresen
   return (
     <div className="bg-white min-h-full">
       <header className="bg-white shadow-sm border-b">
-        <div className="container mx-auto py-6 px-4">
-          <h1 className="text-3xl font-bold text-gray-800">{campana.evento_nombre}</h1>
-          <p className="text-lg text-gray-600">{campana.subevento_nombre || 'Evento Principal'}</p>
-        </div>
-      </header>
+    <div className="container mx-auto py-6 px-4">
+      <h1 className="text-3xl font-bold text-gray-800">{campana.evento_nombre}</h1>
+      <p className="text-lg text-gray-600">{campana.subevento_nombre || 'Evento Principal'}</p>
+      
+      {/* Mueve el InfoCard aquí adentro con un margen superior */}
+      <div className="mt-4">
+        <InfoCard campana={campana} />
+      </div>
+    </div>
+</header>
       <main className={`container mx-auto py-8 px-4 grid grid-cols-1 ${isSubCampaign ? 'md:grid-cols-3' : ''} gap-8`}>
         <div className={isSubCampaign ? 'md:col-span-2' : ''}>
-          <InfoCard campana={campana} />
           {children}
         </div>
         

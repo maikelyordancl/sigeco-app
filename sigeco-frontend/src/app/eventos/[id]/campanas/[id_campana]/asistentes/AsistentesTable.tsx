@@ -14,6 +14,7 @@ import {
 } from '@tanstack/react-table';
 import { Pencil, Trash } from 'lucide-react';
 import Cookies from 'js-cookie';
+import toast, { Toaster } from 'react-hot-toast';
 
 import {
   Table,
@@ -70,23 +71,26 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [isInitialVisibilitySet, setIsInitialVisibilitySet] = useState(false);
 
+  // --- Estado local para manejar eliminaciones
+  const [dataState, setDataState] = useState(data);
+
   // --- Mapear "#" del backend a "numero_fila"
   const dataConNumeroFila = useMemo(() => {
-    return data.map(row => ({
+    return dataState.map(row => ({
       ...row,
       numero_fila: row['#'],
     }));
-  }, [data]);
+  }, [dataState]);
 
   // --- Inicializar visibilidad de columnas
   useEffect(() => {
-    if (data.length > 0 && !isInitialVisibilitySet) {
+    if (dataState.length > 0 && !isInitialVisibilitySet) {
       const savedVisibility = getColumnasVisiblesDesdeCookie(id_campana);
       if (savedVisibility) {
         setColumnVisibility(savedVisibility);
       } else {
         const defaultState: VisibilityState = {};
-        const todasLasClaves = data.reduce((acc, row) => {
+        const todasLasClaves = dataState.reduce((acc, row) => {
           Object.keys(row).forEach(key => acc.add(key));
           return acc;
         }, new Set<string>());
@@ -100,7 +104,7 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
       }
       setIsInitialVisibilitySet(true);
     }
-  }, [data, id_campana, isInitialVisibilitySet]);
+  }, [dataState, id_campana, isInitialVisibilitySet]);
 
   useEffect(() => {
     if (isInitialVisibilitySet) {
@@ -108,27 +112,22 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
     }
   }, [id_campana, columnVisibility, isInitialVisibilitySet]);
 
+  // --- Función para eliminar asistente
   const handleDelete = async (id_inscripcion: number) => {
-  try {
-    const res = await apiFetch(`/campanas/asistentes/${id_inscripcion}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    try {
+      const res = await apiFetch(`/campanas/asistentes/${id_inscripcion}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Error al eliminar');
 
-    if (!res.ok) {
-      throw new Error('Error al eliminar la inscripción');
+      // 🔥 Remover de la tabla
+      setDataState(prev => prev.filter(a => a.id_inscripcion !== id_inscripcion));
+
+      // 🔥 Mostrar toast de éxito
+      toast.success('Inscripción eliminada correctamente');
+    } catch (error) {
+      console.error(error);
+      toast.error('Hubo un problema al eliminar la inscripción');
     }
-
-    // 🔥 Opcional: recargar la lista de asistentes o quitar el registro del estado
-    alert('Inscripción eliminada correctamente');
-  } catch (error) {
-    console.error(error);
-    alert('Hubo un problema al eliminar la inscripción');
-  }
-};
-
+  };
 
   // --- Columnas
   const columns = useMemo<ColumnDef<Asistente>[]>(() => {
@@ -201,14 +200,13 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
     const clavesFijas = ['id_inscripcion', 'id_contacto', 'actions', 'nombre', 'email', 'telefono', 'empresa', 'estado_asistencia', 'nota', 'numero_fila'];
 
     const columnasDinamicas: ColumnDef<Asistente>[] = Array.from(todasLasClaves)
-      .filter(key => !clavesFijas.includes(key) && key !== '#') // Excluir "#" para no duplicar
+      .filter(key => !clavesFijas.includes(key) && key !== '#')
       .map(key => ({
         accessorKey: key,
         header: campoEtiquetaMap.get(key) || key.replace(/_/g, ' ').replace(/(?:^|\s)\S/g, a => a.toUpperCase()),
       }));
 
     return [...columnasPrefijo, ...columnasDinamicas, columnaSufijo];
-
   }, [dataConNumeroFila, onEdit, camposFormulario, onEstadoChange]);
 
   // --- Tabla
@@ -227,6 +225,7 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
 
   return (
     <div>
+
       <div className="flex items-center justify-between py-4">
         <Input
           placeholder="Buscar en toda la tabla..."
