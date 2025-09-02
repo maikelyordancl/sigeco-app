@@ -37,7 +37,7 @@ type FormDataShape = {
     [key: string]: string | string[] | FileList | null | undefined;
 };
 
-// --- INICIO DE LA MODIFICACIÓN ---
+// --- Generar esquema de validación ---
 const generarSchemaValidacion = (campos: FormularioCampo[]) => {
     const shape: { [key: string]: yup.AnySchema } = {};
     campos.forEach(campo => {
@@ -82,139 +82,141 @@ const generarSchemaValidacion = (campos: FormularioCampo[]) => {
     return yup.object().shape(shape);
 };
 
-const FormularioDinamico = ({ formConfig, onSubmit, isSubmitting, defaultValues }: { formConfig: FormularioCampo[], onSubmit: (data: FormDataShape) => void, isSubmitting: boolean, defaultValues?: Record<string, any> }) => {
+// --- Formulario dinámico ---
+const FormularioDinamico = ({ formConfig, onSubmit, isSubmitting, defaultValues }: { formConfig: FormularioCampo[], onSubmit: (data: FormDataShape, reset: () => void) => void, isSubmitting: boolean, defaultValues?: Record<string, any> }) => {
     const validationSchema = generarSchemaValidacion(formConfig);
-    const { register, handleSubmit, control, formState: { errors } } = useForm<FormDataShape>({
+    const { register, handleSubmit, control, reset, formState: { errors } } = useForm<FormDataShape>({
         resolver: yupResolver(validationSchema),
         defaultValues: defaultValues || {}
     });
 
     const renderCampo = (campo: FormularioCampo) => {
-    if (!campo.es_visible) return null;
+        if (!campo.es_visible) return null;
 
-    const fieldName = campo.nombre_interno;
-    const error = errors[fieldName];
-    const isEmailField = fieldName === 'email';
-    const etiqueta = fieldName === 'nombre' ? 'Nombre Completo' : campo.etiqueta;
+        const fieldName = campo.nombre_interno;
+        const error = errors[fieldName];
+        const isEmailField = fieldName === 'email';
+        const etiqueta = fieldName === 'nombre' ? 'Nombre Completo' : campo.etiqueta;
 
-    // CORRECCIÓN 1: Reestructurar el campo 'país' para usar el patrón de shadcn/ui
-    if (fieldName === 'pais') {
-        const options = countryList().getData();
+        // Campo 'país'
+        if (fieldName === 'pais') {
+            const options = countryList().getData();
+            return (
+                <div key={campo.id_campo}>
+                    <Label htmlFor={fieldName}>{etiqueta}{campo.es_obligatorio ? '*' : ''}</Label>
+                    <Controller
+                        name={fieldName}
+                        control={control}
+                        render={({ field }) => (
+                            <Select onValueChange={field.onChange} value={field.value as string}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecciona un país..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {options.map((option: { value: string; label: string }) => (
+                                        <SelectItem key={option.value} value={option.value}>
+                                            {option.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
+                    />
+                    {error && <p className="text-red-500 text-xs mt-1">{(error as any).message}</p>}
+                </div>
+            );
+        }
+
         return (
             <div key={campo.id_campo}>
                 <Label htmlFor={fieldName}>{etiqueta}{campo.es_obligatorio ? '*' : ''}</Label>
-                <Controller
-                    name={fieldName}
-                    control={control}
-                    render={({ field }) => (
-                        <Select onValueChange={field.onChange} value={field.value as string}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Selecciona un país..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {options.map((option: { value: string; label: string }) => (
-                                    <SelectItem key={option.value} value={option.value}>
-                                        {option.label}
-                                    </SelectItem>
+
+                {campo.tipo_campo === 'TEXTO_CORTO' && <Input id={fieldName} {...register(fieldName)} type={isEmailField ? 'email' : 'text'} readOnly={isEmailField && defaultValues?.[fieldName]} className={isEmailField && defaultValues?.[fieldName] ? 'bg-gray-100' : ''} />}
+                {campo.tipo_campo === 'PARRAFO' && <Textarea id={fieldName} {...register(fieldName)} />}
+                
+                {campo.tipo_campo === 'DESPLEGABLE' && (
+                    <Controller
+                        name={fieldName}
+                        control={control}
+                        render={({ field }) => (
+                            <Select onValueChange={field.onChange} value={field.value as string}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecciona una opción..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {campo.opciones?.map(opt => (
+                                        <SelectItem
+                                            key={opt.id_opcion || opt.etiqueta_opcion}
+                                            value={opt.etiqueta_opcion}
+                                        >
+                                            {opt.etiqueta_opcion}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
+                    />
+                )}
+
+                {campo.tipo_campo === 'SELECCION_UNICA' && (
+                    <Controller
+                        name={fieldName}
+                        control={control}
+                        render={({ field }) => (
+                            <div className="space-y-2 rounded-md border p-2 mt-1">
+                                {campo.opciones?.map(opt => (
+                                    <div key={opt.id_opcion} className="flex items-center space-x-2">
+                                        <input
+                                            type="radio"
+                                            id={`${fieldName}-${opt.id_opcion}`}
+                                            {...field}
+                                            value={opt.etiqueta_opcion}
+                                            checked={field.value === opt.etiqueta_opcion}
+                                            className="form-radio h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
+                                        />
+                                        <Label htmlFor={`${fieldName}-${opt.id_opcion}`}>{opt.etiqueta_opcion}</Label>
+                                    </div>
                                 ))}
-                            </SelectContent>
-                        </Select>
-                    )}
-                />
+                            </div>
+                        )}
+                    />
+                )}
+                {campo.tipo_campo === 'CASILLAS' && (
+                    <Controller
+                        name={fieldName}
+                        control={control}
+                        defaultValue={[]}
+                        render={({ field }) => (
+                            <div className="space-y-2 rounded-md border p-2 mt-1">
+                                {campo.opciones?.map(opt => (
+                                    <div key={opt.id_opcion} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={`${fieldName}-${opt.id_opcion}`}
+                                            checked={(field.value as string[])?.includes(opt.etiqueta_opcion)}
+                                            onCheckedChange={(checked) => {
+                                                const currentValues = (field.value as string[]) || [];
+                                                if (checked) {
+                                                    field.onChange([...currentValues, opt.etiqueta_opcion]);
+                                                } else {
+                                                    field.onChange(currentValues.filter((value: string) => value !== opt.etiqueta_opcion));
+                                                }
+                                            }}
+                                        />
+                                        <Label htmlFor={`${fieldName}-${opt.id_opcion}`}>{opt.etiqueta_opcion}</Label>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    />
+                )}
+                {campo.tipo_campo === 'ARCHIVO' && <Input id={fieldName} {...register(fieldName)} type="file" />}
                 {error && <p className="text-red-500 text-xs mt-1">{(error as any).message}</p>}
             </div>
         );
-    }
+    };
 
     return (
-        <div key={campo.id_campo}>
-            <Label htmlFor={fieldName}>{etiqueta}{campo.es_obligatorio ? '*' : ''}</Label>
-
-            {campo.tipo_campo === 'TEXTO_CORTO' && <Input id={fieldName} {...register(fieldName)} type={isEmailField ? 'email' : 'text'} readOnly={isEmailField && defaultValues?.[fieldName]} className={isEmailField && defaultValues?.[fieldName] ? 'bg-gray-100' : ''} />}
-            {campo.tipo_campo === 'PARRAFO' && <Textarea id={fieldName} {...register(fieldName)} />}
-            
-            {campo.tipo_campo === 'DESPLEGABLE' && (
-                <Controller
-                    name={fieldName}
-                    control={control}
-                    render={({ field }) => (
-                        <Select onValueChange={field.onChange} value={field.value as string}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Selecciona una opción..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {campo.opciones?.map(opt => (
-                                    <SelectItem
-                                        key={opt.id_opcion || opt.etiqueta_opcion}
-                                        value={opt.etiqueta_opcion}
-                                    >
-                                        {opt.etiqueta_opcion}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    )}
-                />
-            )}
-
-            {campo.tipo_campo === 'SELECCION_UNICA' && (
-                <Controller
-                    name={fieldName}
-                    control={control}
-                    render={({ field }) => (
-                        <div className="space-y-2 rounded-md border p-2 mt-1">
-                            {campo.opciones?.map(opt => (
-                                <div key={opt.id_opcion} className="flex items-center space-x-2">
-                                    <input
-                                        type="radio"
-                                        id={`${fieldName}-${opt.id_opcion}`}
-                                        {...field}
-                                        value={opt.etiqueta_opcion}
-                                        checked={field.value === opt.etiqueta_opcion}
-                                        className="form-radio h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
-                                    />
-                                    <Label htmlFor={`${fieldName}-${opt.id_opcion}`}>{opt.etiqueta_opcion}</Label>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                />
-            )}
-            {campo.tipo_campo === 'CASILLAS' && (
-                <Controller
-                    name={fieldName}
-                    control={control}
-                    defaultValue={[]}
-                    render={({ field }) => (
-                        <div className="space-y-2 rounded-md border p-2 mt-1">
-                            {campo.opciones?.map(opt => (
-                                <div key={opt.id_opcion} className="flex items-center space-x-2">
-                                    <Checkbox
-                                        id={`${fieldName}-${opt.id_opcion}`}
-                                        checked={(field.value as string[])?.includes(opt.etiqueta_opcion)}
-                                        onCheckedChange={(checked) => {
-                                            const currentValues = (field.value as string[]) || [];
-                                            if (checked) {
-                                                field.onChange([...currentValues, opt.etiqueta_opcion]);
-                                            } else {
-                                                field.onChange(currentValues.filter((value: string) => value !== opt.etiqueta_opcion));
-                                            }
-                                        }}
-                                    />
-                                    <Label htmlFor={`${fieldName}-${opt.id_opcion}`}>{opt.etiqueta_opcion}</Label>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                />
-            )}
-            {campo.tipo_campo === 'ARCHIVO' && <Input id={fieldName} {...register(fieldName)} type="file" />}
-            {error && <p className="text-red-500 text-xs mt-1">{(error as any).message}</p>}
-        </div>
-    );
-};
-    return (
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit((data) => onSubmit(data, reset))} className="space-y-4">
             {formConfig.map(renderCampo)}
             <Button type="submit" className="w-full !mt-6" disabled={isSubmitting}>
                 {isSubmitting ? 'Procesando...' : 'Finalizar Inscripción'}
@@ -223,8 +225,7 @@ const FormularioDinamico = ({ formConfig, onSubmit, isSubmitting, defaultValues 
     );
 };
 
-// --- El resto del archivo permanece igual ---
-
+// --- Lista de tickets ---
 const ListaTickets = ({ tickets, onSelectTicket }: { tickets: TicketData[], onSelectTicket: (ticket: TicketData) => void }) => {
     const formatCurrency = (value: number) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(value);
 
@@ -244,6 +245,7 @@ const ListaTickets = ({ tickets, onSelectTicket }: { tickets: TicketData[], onSe
     );
 };
 
+// --- Proceso de inscripción ---
 const ProcesoInscripcion = ({ campana, tickets, formulario }: { campana: CampanaData['campana'], tickets: TicketData[], formulario: FormularioCampo[] }) => {
     const [selectedTicket, setSelectedTicket] = useState<TicketData | null>(null);
     const [step, setStep] = useState<'selection' | 'email_check' | 'form'>('selection');
@@ -307,7 +309,7 @@ const ProcesoInscripcion = ({ campana, tickets, formulario }: { campana: Campana
         }
     };
 
-    const handleSubmitInscripcion = async (formData: FormDataShape) => {
+    const handleSubmitInscripcion = async (formData: FormDataShape, reset: () => void) => {
         setIsSubmitting(true);
         const toastId = toast.loading('Procesando inscripción...');
 
@@ -338,6 +340,7 @@ const ProcesoInscripcion = ({ campana, tickets, formulario }: { campana: Campana
                 window.location.href = result.redirectUrl;
             } else {
                 toast.success("¡Inscripción exitosa! Revisa tu email.", { id: toastId, duration: 6000 });
+                reset(); // <-- Limpiar campos
             }
         } catch (error: any) {
             toast.error(error.message, { id: toastId });
@@ -385,6 +388,7 @@ const ProcesoInscripcion = ({ campana, tickets, formulario }: { campana: Campana
     return null;
 };
 
+// --- Página de contenido ---
 const PageContent = () => {
     const [slug, setSlug] = useState<string | null>(null);
     const [data, setData] = useState<CampanaData | null>(null);
