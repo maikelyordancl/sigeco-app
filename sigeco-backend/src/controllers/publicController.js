@@ -124,9 +124,11 @@ exports.crearInscripcionPublica = async (req, res) => {
 
         for (const campo of formConfig) {
             if (!campo.es_visible) continue;
+
             const key = campo.nombre_interno;
             let value = req.body[key];
 
+            // Manejo de archivo
             if (campo.tipo_campo === 'ARCHIVO') {
                 const file = req.files && req.files.find(f => f.fieldname === key);
                 if (file) {
@@ -136,18 +138,47 @@ exports.crearInscripcionPublica = async (req, res) => {
                 }
             }
 
-            if (value !== undefined && value !== null && value !== '') {
-                if (campo.es_de_sistema) {
-                    datosContacto[key] = value;
-                } else {
-                    respuestasPersonalizadas.push({
-                        id_campo: campo.id_campo,
-                        valor: String(value)
-                    });
+            // Opción A: CASILLAS viene como JSON string desde el front -> parsear a array UNA sola vez
+            if (campo.tipo_campo === 'CASILLAS' && typeof value === 'string') {
+                try {
+                    const parsed = JSON.parse(value);
+                    if (Array.isArray(parsed)) {
+                        value = parsed;
+                    } else if (parsed == null) {
+                        value = [];
+                    } else {
+                        // Fallback defensivo: si no es array, lo envolvemos como array único
+                        value = [String(parsed)];
+                    }
+                } catch (e) {
+                    console.warn(`Valor CASILLAS no es JSON válido para "${key}", usando fallback. Valor recibido:`, value);
+                    value = value ? [String(value)] : [];
                 }
+            }
+
+            // Normalizar: ignorar vacíos; para arrays, ignorar si están vacíos
+            const isArray = Array.isArray(value);
+            const isEmpty =
+                value === undefined ||
+                value === null ||
+                (typeof value === 'string' && value.trim() === '') ||
+                (isArray && value.length === 0);
+
+            if (isEmpty) continue;
+
+            if (campo.es_de_sistema) {
+                // Campos de sistema deben ser escalares; CASILLAS no se espera aquí
+                datosContacto[key] = isArray ? value.join(', ') : value; // o simplemente value si deseas guardar tal cual
+            } else {
+                // NO forzar String aquí; dejamos el tipo real para que saveRespuestas decida cómo persistir
+                respuestasPersonalizadas.push({
+                    id_campo: campo.id_campo,
+                    valor: value
+                });
             }
         }
 
+        // Contacto por email
         let contacto = await ContactoModel.findByEmail(email);
 
         if (contacto) {
@@ -157,6 +188,7 @@ exports.crearInscripcionPublica = async (req, res) => {
             contacto = { id_contacto: nuevoContacto.id_contacto };
         }
 
+        // Inscripción
         let inscripcion = await InscripcionModel.findByCampanaAndContacto(id_campana, contacto.id_contacto);
 
         if (inscripcion) {
@@ -177,10 +209,12 @@ exports.crearInscripcionPublica = async (req, res) => {
             });
         }
 
+        // Guardar respuestas personalizadas (con nueva lógica de persistencia)
         if (respuestasPersonalizadas.length > 0) {
             await FormularioModel.saveRespuestas(inscripcion.id_inscripcion, respuestasPersonalizadas);
         }
 
+        // Flujo de pago (si corresponde)
         if (campanaRules.obligatorio_pago) {
             const ordenCompra = `sigeco-insc-${inscripcion.id_inscripcion}-${Date.now()}`;
             const nuevoPago = await PagoModel.create({
@@ -205,10 +239,11 @@ exports.crearInscripcionPublica = async (req, res) => {
             }
         }
 
+        // Confirmación sin pago
         await InscripcionModel.update(inscripcion.id_inscripcion, { estado_asistencia: 'Confirmado' });
 
-        // --- ENVÍO DE CORREO USANDO id_campana ---
-        const campanaData = await CampanaModel.findPublicDataById(id_campana); // <- Cambiado
+        // Envío de correo (sin cambios de lógica aquí)
+        const campanaData = await CampanaModel.findPublicDataById(id_campana);
         if (campanaData && campanaData.campana) {
             const { evento_nombre, fecha_inicio, fecha_fin, lugar } = campanaData.campana;
             const eventData = {

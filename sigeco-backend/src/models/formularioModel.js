@@ -88,13 +88,27 @@ exports.saveRespuestas = async (id_inscripcion, respuestas) => {
 
         for (const respuesta of respuestas) {
             const { id_campo, valor } = respuesta;
-            console.log(`Guardando campo ${id_campo} con valor:`, valor);
+
+            // Determina cómo persistir:
+            // - Arrays/objetos -> JSON.stringify (una sola vez)
+            // - Escalares (string/number/bool) -> texto plano (String)
+            let valorParaGuardar;
+            if (Array.isArray(valor) || (valor !== null && typeof valor === 'object')) {
+                valorParaGuardar = JSON.stringify(valor);
+            } else if (valor === null || valor === undefined) {
+                // No guardamos valores nulos/indefinidos
+                continue;
+            } else {
+                valorParaGuardar = String(valor);
+            }
+
+            console.log(`Guardando campo ${id_campo} con valor:`, valorParaGuardar);
 
             await pool.query(
                 `INSERT INTO inscripcion_respuestas (id_inscripcion, id_campo, valor)
                  VALUES (?, ?, ?)
                  ON DUPLICATE KEY UPDATE valor = VALUES(valor)`,
-                [id_inscripcion, id_campo, JSON.stringify(valor)]
+                [id_inscripcion, id_campo, valorParaGuardar]
             );
         }
 
@@ -104,6 +118,7 @@ exports.saveRespuestas = async (id_inscripcion, respuestas) => {
         throw new Error('Error al guardar las respuestas.');
     }
 };
+
 
 
 /**
