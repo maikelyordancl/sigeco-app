@@ -40,3 +40,9 @@ export interface LandingPageProps {
         formulario: FormularioConfig;
     } | null;
 }
+
+export interface CampanaData {
+  campana: CampanaPublica;
+  tickets: Ticket[];
+  formulario: FormularioConfig;
+}
