@@ -49,3 +49,22 @@ export interface CampanaData {
     tickets: Ticket[];
     formulario: FormularioConfig;
 }
+
+export interface CampanaAdmin {
+  id_campana: number;
+  nombre: string;
+  estado: "Borrador" | "Activa" | "Pausada" | "Finalizada";
+  url_amigable: string;
+  id_subevento: number | null;
+  inscripcion_libre: boolean;
+  id_plantilla: number; // 👈 aseguramos que esté
+  subevento_nombre?: string;
+  obligatorio_registro: boolean | null;
+  obligatorio_pago: boolean | null;
+  invitados?: number;
+  registrados?: number;
+  confirmados?: number;
+  asistieron?: number;
+  cancelados?: number;
+  pagados?: number;
+}

@@ -20,24 +20,7 @@ import { FormularioConfigDialog } from "@/components/dialogs/FormularioConfigDia
 import MainLayout from "@/components/Layout/MainLayout";
 import toast from "react-hot-toast";
 import { apiFetch } from "@/lib/api";
-
-interface Campana {
-  id_campana: number;
-  nombre: string;
-  estado: "Borrador" | "Activa" | "Pausada" | "Finalizada";
-  url_amigable: string;
-  id_subevento: number | null;
-  inscripcion_libre: boolean;
-  subevento_nombre?: string;
-  obligatorio_registro: boolean | null;
-  obligatorio_pago: boolean | null;
-  invitados?: number;
-  registrados?: number;
-  confirmados?: number;
-  asistieron?: number;
-  cancelados?: number;
-  pagados?: number;
-}
+import { CampanaAdmin } from "@/app/c/[slug]/types";
 
 const GestionCampanasPage = () => {
   const router = useRouter();
@@ -45,8 +28,8 @@ const GestionCampanasPage = () => {
   const id_evento = params.id as string;
 
   const [eventName, setEventName] = useState<string>('');
-  const [campanaPrincipal, setCampanaPrincipal] = useState<Campana | null>(null);
-  const [subCampanas, setSubCampanas] = useState<Campana[]>([]);
+  const [campanaPrincipal, setCampanaPrincipal] = useState<CampanaAdmin | null>(null);
+  const [subCampanas, setSubCampanas] = useState<CampanaAdmin[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [isCreateModalOpen, setCreateModalOpen] = useState(false);
@@ -55,7 +38,7 @@ const GestionCampanasPage = () => {
   const [isFormConfigModalOpen, setFormConfigModalOpen] = useState(false);
 
   const [selectedCampanaId, setSelectedCampanaId] = useState<number | null>(null);
-  const [campanaToEdit, setCampanaToEdit] = useState<Campana | null>(null);
+  const [campanaToEdit, setCampanaToEdit] = useState<CampanaAdmin | null>(null);
 
   const fetchCampanas = useCallback(async () => {
     if (!id_evento) return;
@@ -69,8 +52,8 @@ const GestionCampanasPage = () => {
       if (responseData.success && responseData.data) {
         const { eventName, campaigns } = responseData.data;
         setEventName(eventName);
-        setCampanaPrincipal(campaigns.find((c: Campana) => !c.id_subevento) || null);
-        setSubCampanas(campaigns.filter((c: Campana) => !!c.id_subevento));
+        setCampanaPrincipal(campaigns.find((c: CampanaAdmin) => !c.id_subevento) || null);
+        setSubCampanas(campaigns.filter((c: CampanaAdmin) => !!c.id_subevento));
       } else {
         throw new Error(responseData.message || "La respuesta de la API no tiene el formato esperado.");
       }
@@ -93,7 +76,7 @@ const GestionCampanasPage = () => {
     setTicketsModalOpen(true);
   };
 
-  const handleOpenEditModal = (campana: Campana) => {
+  const handleOpenEditModal = (campana: CampanaAdmin) => {
     setCampanaToEdit(campana);
     setIsEditModalOpen(true);
   };
@@ -115,7 +98,7 @@ const GestionCampanasPage = () => {
     onCampanaChange();
   };
 
-  const getTipoAccesoTexto = (campana: Campana) => {
+  const getTipoAccesoTexto = (campana: CampanaAdmin) => {
     if (campana.id_subevento === null) return "Informativa";
     return campana.obligatorio_pago ? "De Pago" : "Gratuito";
   };
@@ -131,16 +114,16 @@ const GestionCampanasPage = () => {
     router.push(`/eventos/${id_evento}/campanas/${id_campana}/asistentes`);
   };
 
-  const renderCard = (campana: Campana) => (
+  const renderCard = (campana: CampanaAdmin) => (
     <Card key={campana.id_campana} className="flex flex-col shadow-md hover:shadow-lg transition-shadow">
       <CardHeader>
         <div className="flex justify-between items-start">
           <CardTitle>{campana.nombre}</CardTitle>
           <div className="flex items-center space-x-2">
             <Badge className={campana.estado === "Activa" ? "bg-green-600 text-white" : ""}>{campana.estado}</Badge>
-         <Button variant="secondary" size="sm" onClick={() => handleGoToAsistentes(campana.id_campana)} disabled={!campana.id_subevento}>
-          <Users className="mr-2 h-4 w-4" /> Asistentes
-        </Button>
+            <Button variant="secondary" size="sm" onClick={() => handleGoToAsistentes(campana.id_campana)} disabled={!campana.id_subevento}>
+              <Users className="mr-2 h-4 w-4" /> Asistentes
+            </Button>
             {!!campana.id_subevento && (
               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleOpenFormConfigModal(campana.id_campana)}>
                 <Settings className="h-4 w-4" />

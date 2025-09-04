@@ -25,17 +25,7 @@ import {
 } from "@/components/ui/select";
 import toast from "react-hot-toast";
 import { apiFetch } from "@/lib/api";
-
-// --- INICIO DE LA CORRECCIÓN ---
-interface Campana {
-  id_campana: number;
-  nombre: string;
-  estado: "Borrador" | "Activa" | "Pausada" | "Finalizada";
-  url_amigable: string;
-  inscripcion_libre: boolean;
-  id_plantilla: number; // <--- AÑADIDO
-}
-// --- FIN DE LA CORRECCIÓN ---
+import { CampanaAdmin } from "@/app/c/[slug]/types";
 
 // Esquema de validación para el formulario
 const campanaSchema = yup.object().shape({
@@ -45,7 +35,7 @@ const campanaSchema = yup.object().shape({
     .oneOf(["Borrador", "Activa", "Pausada", "Finalizada"])
     .required("El estado es requerido."),
   inscripcion_libre: yup.boolean().required(),
-  id_plantilla: yup.number().required("La plantilla es obligatoria."), // <--- AÑADIDO
+  id_plantilla: yup.number().required("La plantilla es obligatoria."),
 });
 
 type CampanaFormData = yup.InferType<typeof campanaSchema>;
@@ -53,7 +43,7 @@ type CampanaFormData = yup.InferType<typeof campanaSchema>;
 interface EditarCampanaDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  campana: Campana | null;
+  campana: CampanaAdmin | null; // 👈 corregido
   onCampanaActualizada: () => void;
 }
 
@@ -81,7 +71,7 @@ export const EditarCampanaDialog = ({
         nombre: campana.nombre,
         estado: campana.estado,
         inscripcion_libre: !!campana.inscripcion_libre,
-        id_plantilla: campana.id_plantilla || 1, // <--- AÑADIDO
+        id_plantilla: campana.id_plantilla || 1,
       });
     }
   }, [campana, reset]);
@@ -179,7 +169,6 @@ export const EditarCampanaDialog = ({
               </p>
             )}
           </div>
-          {/* --- CAMPO AÑADIDO: Selección de plantilla --- */}
           <div>
             <Label htmlFor="id_plantilla">Plantilla</Label>
             <Select
@@ -208,7 +197,6 @@ export const EditarCampanaDialog = ({
               </p>
             )}
           </div>
-          {/* ------------------------------------------ */}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               Cancelar
