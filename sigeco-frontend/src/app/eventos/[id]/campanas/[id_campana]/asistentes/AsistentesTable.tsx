@@ -36,7 +36,7 @@ interface AsistentesTableProps {
   onEdit: (asistente: Asistente) => void;
   id_campana: string;
   camposFormulario: CampoFormulario[];
-  onEstadoChange: (id_inscripcion: number, nuevoEstado: string) => void;
+  onEstadoChange: (id_inscripcion: number, nuevoEstado: string) => void | Promise<void>;
 }
 
 const multiWordGlobalFilter: FilterFn<Asistente> = (row, _columnId, filterValue) => {
@@ -122,6 +122,11 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
   // Estado local para manejar eliminaciones
   const [dataState, setDataState] = useState(data);
 
+  // 🔁 SINCRONIZAR props.data → estado local cuando el padre refresque
+  useEffect(() => {
+    setDataState(data);
+  }, [data]);
+
   // Filtro por estado (sentinela ALL)
   const [estadoFiltro, setEstadoFiltro] = useState<string>(ALL);
 
@@ -182,6 +187,31 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
     }
   };
 
+  // ✅ NUEVO: actualización optimista del estado + llamada al padre
+  const handleEstadoLocalChange = async (id_inscripcion: number, nuevoEstado: string) => {
+    const prev = dataState; // snapshot para rollback
+
+    // update optimista
+    setDataState((old) =>
+      old.map((a) =>
+        a.id_inscripcion === id_inscripcion ? { ...a, estado_asistencia: nuevoEstado } : a
+      )
+    );
+
+    try {
+      const maybePromise = onEstadoChange?.(id_inscripcion, nuevoEstado);
+      if (maybePromise && typeof (maybePromise as any).then === 'function') {
+        await (maybePromise as Promise<any>);
+      }
+      toast.success('Estado actualizado');
+    } catch (err) {
+      // rollback si falla
+      setDataState(prev);
+      console.error(err);
+      toast.error('No se pudo actualizar el estado');
+    }
+  };
+
   // Columnas
   const columns = useMemo<ColumnDef<Asistente>[]>(() => {
     if (dataState.length === 0) return [];
@@ -210,7 +240,6 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
             >
               <Pencil className="h-4 w-4" strokeWidth={2.25} />
             </Button>
-
 
             <Button
               size="icon"
@@ -254,7 +283,12 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
         const estilos = getEstadoStyle(estado_asistencia);
         return (
           <div className="flex justify-center">
-            <Select value={estado_asistencia} onValueChange={(nuevoEstado: string) => onEstadoChange(id_inscripcion, nuevoEstado)}>
+            <Select
+              value={estado_asistencia}
+              onValueChange={(nuevoEstado: string) =>
+                handleEstadoLocalChange(id_inscripcion, nuevoEstado)
+              }
+            >
               <SelectTrigger className={`h-8 w-[200px] mx-auto ${estilos.bg} ${estilos.text} border ${estilos.border}`}>
                 <SelectValue placeholder="Cambiar estado..." />
               </SelectTrigger>
@@ -394,7 +428,6 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
               </TableRow>
             ))}
           </TableHeader>
-
 
           <TableBody>
             {table.getRowModel().rows.length > 0 ? (
