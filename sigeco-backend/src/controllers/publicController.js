@@ -204,7 +204,7 @@ exports.crearInscripcionPublica = async (req, res) => {
                 id_campana,
                 id_contacto: contacto.id_contacto,
                 id_tipo_entrada: id_tipo_entrada || null,
-                estado_asistencia: 'Confirmado',
+                estado_asistencia: 'Registrado',
                 estado_pago: campanaRules.obligatorio_pago ? 'Pendiente' : 'No Aplica',
             });
         }
