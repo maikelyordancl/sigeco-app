@@ -43,11 +43,19 @@ export const LandingPagePresenter = ({ data, children, form }: LandingPagePresen
         <div className={isSubCampaign ? 'md:col-span-2' : ''}>
           
           {/* INFORMACIÓN DEL EVENTO (lo que antes era el header) */}
-          <div className="mb-8"> {/* Un div para agrupar y dar espacio debajo */}
-            <h1 className="text-3xl font-bold text-gray-800">{campana.evento_nombre}</h1>
-            <p className="text-lg text-gray-600">{campana.subevento_nombre || 'Evento Principal'}</p>
-            <InfoCard campana={campana} />
-          </div>
+<div className="mb-8"> {/* Un div para agrupar y dar espacio debajo */}
+  <h1 className="text-3xl font-bold text-gray-800">
+    {campana.evento_nombre}
+  </h1>
+  <p className="text-lg text-gray-600">
+    {campana.subevento_nombre || 'Evento Principal'}
+  </p>
+  {/* Línea divisoria después del subevento */}
+  <hr className="my-4 border-gray-300" />
+
+  <InfoCard campana={campana} />
+</div>
+
           <hr className="my-8 border-gray-200" />
 
           {/* Aquí se renderizará el banner o contenido principal (children) */}
