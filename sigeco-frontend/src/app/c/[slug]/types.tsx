@@ -3,7 +3,7 @@ export interface CampanaPublica {
     nombre: string;
     evento_nombre: string;
     landing_page_json: string | null;
-    id_plantilla: number; // Aseguramos que este campo siempre esté presente
+    id_plantilla?: number; // Aseguramos que este campo siempre esté presente
     inscripcion_libre: boolean;
     obligatorio_pago?: boolean;
 }
