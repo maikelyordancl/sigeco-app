@@ -63,7 +63,9 @@ router.put(
     [
         param('id_campana').isInt({ gt: 0 }).withMessage('El ID de la campaña debe ser un número válido.'),
         body('nombre').optional().isString().trim().notEmpty(),
-        body('estado').optional().isIn(['Borrador', 'Activa', 'Pausada', 'Finalizada'])
+        body('estado').optional().isIn(['Borrador', 'Activa', 'Pausada', 'Finalizada']),
+        // --- AÑADIDO: Validación para id_plantilla ---
+        body('id_plantilla').optional().isInt({ min: 1, max: 2 }).withMessage('El ID de plantilla no es válido.')
     ],
     campanasController.actualizarCampana
 );

@@ -27,14 +27,13 @@ import toast from "react-hot-toast";
 import { apiFetch } from "@/lib/api";
 
 // --- INICIO DE LA CORRECCIÓN ---
-// Se elimina la propiedad 'tipo_acceso' de la interfaz, ya que este diálogo
-// no la necesita para editar el nombre y el estado.
 interface Campana {
   id_campana: number;
   nombre: string;
   estado: "Borrador" | "Activa" | "Pausada" | "Finalizada";
   url_amigable: string;
   inscripcion_libre: boolean;
+  id_plantilla: number; // <--- AÑADIDO
 }
 // --- FIN DE LA CORRECCIÓN ---
 
@@ -45,7 +44,8 @@ const campanaSchema = yup.object().shape({
     .string()
     .oneOf(["Borrador", "Activa", "Pausada", "Finalizada"])
     .required("El estado es requerido."),
-    inscripcion_libre: yup.boolean().required(),
+  inscripcion_libre: yup.boolean().required(),
+  id_plantilla: yup.number().required("La plantilla es obligatoria."), // <--- AÑADIDO
 });
 
 type CampanaFormData = yup.InferType<typeof campanaSchema>;
@@ -53,8 +53,8 @@ type CampanaFormData = yup.InferType<typeof campanaSchema>;
 interface EditarCampanaDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  campana: Campana | null; // El diálogo recibe la campaña a editar
-  onCampanaActualizada: () => void; // Función para refrescar la lista
+  campana: Campana | null;
+  onCampanaActualizada: () => void;
 }
 
 export const EditarCampanaDialog = ({
@@ -81,6 +81,7 @@ export const EditarCampanaDialog = ({
         nombre: campana.nombre,
         estado: campana.estado,
         inscripcion_libre: !!campana.inscripcion_libre,
+        id_plantilla: campana.id_plantilla || 1, // <--- AÑADIDO
       });
     }
   }, [campana, reset]);
@@ -90,16 +91,13 @@ export const EditarCampanaDialog = ({
 
     const toastId = toast.loading("Actualizando campaña...");
     try {
-      const response = await apiFetch(
-        `/campanas/${campana.id_campana}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(data),
-        }
-      );
+      const response = await apiFetch(`/campanas/${campana.id_campana}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
 
       const result = await response.json();
       if (!response.ok) {
@@ -107,7 +105,7 @@ export const EditarCampanaDialog = ({
       }
 
       toast.success("Campaña actualizada con éxito", { id: toastId });
-      onCampanaActualizada(); // Llama a la función para cerrar y refrescar
+      onCampanaActualizada();
     } catch (error: any) {
       toast.error(error.message, { id: toastId });
     }
@@ -119,39 +117,51 @@ export const EditarCampanaDialog = ({
         <DialogHeader>
           <DialogTitle>Editar Campaña</DialogTitle>
           <DialogDescription>
-            Modifica el nombre y el estado de tu campaña.
+            Modifica el nombre, el estado y la plantilla de tu campaña.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit(handleUpdateCampana)} className="space-y-4 py-4">
+        <form
+          onSubmit={handleSubmit(handleUpdateCampana)}
+          className="space-y-4 py-4"
+        >
           <div className="flex items-center justify-between rounded-lg border p-3">
             <div className="space-y-0.5">
-                <Label htmlFor="inscripcion_libre">Permitir Inscripción Pública</Label>
-                <p className="text-xs text-muted-foreground">
-                    Si está activado, cualquiera puede inscribirse. Si no, solo los contactos previamente convocados.
-                </p>
+              <Label htmlFor="inscripcion_libre">
+                Permitir Inscripción Pública
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Si está activado, cualquiera puede inscribirse. Si no, solo los
+                contactos previamente convocados.
+              </p>
             </div>
             <Controller
-                control={control}
-                name="inscripcion_libre"
-                render={({ field }) => (
-                    <Switch
-                        id="inscripcion_libre"
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                    />
-                )}
+              control={control}
+              name="inscripcion_libre"
+              render={({ field }) => (
+                <Switch
+                  id="inscripcion_libre"
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              )}
             />
           </div>
           <div>
             <Label htmlFor="nombre">Nombre de la Campaña</Label>
             <Input id="nombre" {...register("nombre")} />
-            {errors.nombre && <p className="text-red-500 text-sm mt-1">{errors.nombre.message}</p>}
+            {errors.nombre && (
+              <p className="text-red-500 text-sm mt-1">
+                {errors.nombre.message}
+              </p>
+            )}
           </div>
           <div>
             <Label htmlFor="estado">Estado</Label>
             <Select
               defaultValue={campana?.estado}
-              onValueChange={(value) => setValue("estado", value as any, { shouldValidate: true })}
+              onValueChange={(value) =>
+                setValue("estado", value as any, { shouldValidate: true })
+              }
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecciona un estado" />
@@ -163,8 +173,42 @@ export const EditarCampanaDialog = ({
                 <SelectItem value="Finalizada">Finalizada</SelectItem>
               </SelectContent>
             </Select>
-            {errors.estado && <p className="text-red-500 text-sm mt-1">{errors.estado.message}</p>}
+            {errors.estado && (
+              <p className="text-red-500 text-sm mt-1">
+                {errors.estado.message}
+              </p>
+            )}
           </div>
+          {/* --- CAMPO AÑADIDO: Selección de plantilla --- */}
+          <div>
+            <Label htmlFor="id_plantilla">Plantilla</Label>
+            <Select
+              defaultValue={String(campana?.id_plantilla || 1)}
+              onValueChange={(value) =>
+                setValue("id_plantilla", parseInt(value, 10), {
+                  shouldValidate: true,
+                })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecciona una plantilla" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">
+                  Clásica (Formulario a la derecha)
+                </SelectItem>
+                <SelectItem value="2">
+                  Moderna (Formulario centrado)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            {errors.id_plantilla && (
+              <p className="text-red-500 text-sm mt-1">
+                {errors.id_plantilla.message}
+              </p>
+            )}
+          </div>
+          {/* ------------------------------------------ */}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               Cancelar

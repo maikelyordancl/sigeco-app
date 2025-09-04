@@ -20,14 +20,14 @@ const Campana = {
         await connection.beginTransaction();
 
         try {
-            const { id_evento, id_subevento = null, nombre, estado, url_amigable = null } = campanaData;
+            const { id_evento, id_subevento = null, nombre, estado, url_amigable = null, id_plantilla = 1 } = campanaData;
 
             // 1. Insertar la nueva campaña
             const queryCampana = `
-                INSERT INTO campanas (id_evento, id_subevento, nombre, estado, url_amigable)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO campanas (id_evento, id_subevento, nombre, estado, url_amigable, id_plantilla)
+                VALUES (?, ?, ?, ?, ?, ?)
             `;
-            const [result] = await connection.query(queryCampana, [id_evento, id_subevento, nombre, estado, url_amigable]);
+            const [result] = await connection.query(queryCampana, [id_evento, id_subevento, nombre, estado, url_amigable, id_plantilla]);
             const newCampanaId = result.insertId;
 
             // 2. Si es una SUB-CAMPAÑA, asociar los campos de formulario por defecto
@@ -183,6 +183,7 @@ const Campana = {
                 c.id_campana, c.id_subevento, c.nombre, c.estado, c.url_amigable,
                 c.inscripcion_libre,
                 c.landing_page_json,
+                c.id_plantilla, -- <--- AÑADIDO
                 e.nombre AS evento_nombre, e.fecha_inicio, e.fecha_fin, e.ciudad, e.lugar,
                 s.nombre AS subevento_nombre, s.obligatorio_registro, s.obligatorio_pago
             FROM campanas c
@@ -252,6 +253,7 @@ const Campana = {
             c.id_campana, c.id_subevento, c.nombre, c.estado, c.url_amigable,
             c.inscripcion_libre,
             c.landing_page_json,
+            c.id_plantilla, -- <--- AÑADIDO
             e.nombre AS evento_nombre, e.fecha_inicio, e.fecha_fin, e.ciudad, e.lugar,
             s.nombre AS subevento_nombre, s.obligatorio_registro, s.obligatorio_pago
         FROM campanas c
