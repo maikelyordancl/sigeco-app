@@ -240,7 +240,7 @@ exports.crearInscripcionPublica = async (req, res) => {
         }
 
         // Confirmación sin pago
-        await InscripcionModel.update(inscripcion.id_inscripcion, { estado_asistencia: 'Confirmado' });
+        await InscripcionModel.update(inscripcion.id_inscripcion, { estado_asistencia: 'Registrado' });
 
         // Envío de correo (sin cambios de lógica aquí)
         const campanaData = await CampanaModel.findPublicDataById(id_campana);

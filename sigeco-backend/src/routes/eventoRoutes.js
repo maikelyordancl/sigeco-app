@@ -12,6 +12,12 @@ router.use(verificarToken);
 // GET /api/eventos -> Obtener todos los eventos
 router.get('/', eventoController.getAllEventos);
 
+router.get(
+  '/:id',
+  [param('id').isInt({ min: 1 }).withMessage('El ID del evento debe ser un número entero válido.')],
+  eventoController.getEventoById
+);
+
 // POST /api/eventos -> Crear un nuevo evento con validación
 router.post(
     '/',

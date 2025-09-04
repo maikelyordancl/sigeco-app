@@ -35,3 +35,8 @@ exports.deleteById = async (id) => {
     const [result] = await pool.query('DELETE FROM eventos WHERE id_evento = ?', [id]);
     return result;
 };
+
+exports.findById = async (id) => {
+  const [rows] = await pool.query('SELECT * FROM eventos WHERE id_evento = ? LIMIT 1', [id]);
+  return rows[0] || null;
+};

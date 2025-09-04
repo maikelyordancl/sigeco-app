@@ -24,36 +24,40 @@ export default function AsistentesPage() {
   const [isSheetOpen, setSheetOpen] = useState(false);
   const [campanaInfo, setCampanaInfo] = useState<any>(null);
   const [camposFormulario, setCamposFormulario] = useState<CampoFormulario[]>([]);
+  const [eventoInfo, setEventoInfo] = useState<any>(null);
 
 
   const fetchData = useCallback(async () => {
-    if (!id_campana) return;
+    if (!id_campana || !id_evento) return;
     setLoading(true);
     try {
-      const [asistentesRes, campanaRes, formularioRes] = await Promise.all([
+      const [asistentesRes, campanaRes, formularioRes, eventoRes] = await Promise.all([
         apiFetch(`/campanas/${id_campana}/asistentes-v2`),
         apiFetch(`/campanas/${id_campana}`),
-        apiFetch(`/campanas/${id_campana}/formulario`)
+        apiFetch(`/campanas/${id_campana}/formulario`),
+        apiFetch(`/eventos/${id_evento}`),
       ]);
 
-      if (!asistentesRes.ok || !campanaRes.ok || !formularioRes.ok) {
+      if (!asistentesRes.ok || !campanaRes.ok || !formularioRes.ok || !eventoRes.ok) {
         throw new Error("Error al obtener los datos de la campaña");
       }
 
       const asistentesData = await asistentesRes.json();
       const campanaData = await campanaRes.json();
       const formularioData = await formularioRes.json();
+      const eventoData = await eventoRes.json();
 
       setAsistentes(asistentesData);
       setCampanaInfo(campanaData.data);
       setCamposFormulario(formularioData.data || []);
+      setEventoInfo(eventoData.data);
 
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
       setLoading(false);
     }
-  }, [id_campana]);
+  }, [id_campana, id_evento]);
 
   useEffect(() => {
     fetchData();
@@ -108,17 +112,21 @@ export default function AsistentesPage() {
 
 
   if (loading) return <div className="p-10">Cargando asistentes...</div>;
+  console.log("campanaInfo:", campanaInfo);
 
   return (
     <MainLayout>
       <div className="container mx-auto py-10">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-3xl font-bold">
-              {campanaInfo?.nombre || 'Campaña'}
-            </h1>
-            <p className="text-muted-foreground">Lista de Asistentes</p>
-          </div>
+  <h1 className="text-3xl font-bold">
+    {eventoInfo?.nombre || 'Evento'}
+  </h1>
+  <h3 className="text-xl font-semibold">
+    {campanaInfo?.nombre || 'Campaña'}
+  </h3>
+  <p className="text-muted-foreground">Lista de Usuarios</p>
+</div>
           <Button
             onClick={() => router.push(`/eventos/${id_evento}/campanas`)}
             className="bg-blue-600 hover:bg-blue-700 text-white"

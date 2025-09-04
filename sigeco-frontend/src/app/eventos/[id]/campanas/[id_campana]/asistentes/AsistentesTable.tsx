@@ -367,24 +367,28 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
       <div className="rounded-md border">
         <Table>
           <TableHeader>
-            {table.getHeaderGroups().map(headerGroup => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map(header => (
-                  <TableHead
-                    key={header.id}
-                    onClick={header.column.getToggleSortingHandler()}
-                    className={`${header.id === 'estado_asistencia' ? 'w-[220px] text-center' : ''}`}
-                  >
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                    {{
-                      asc: ' 🔼',
-                      desc: ' 🔽',
-                    }[header.column.getIsSorted() as string] ?? null}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
+  {table.getHeaderGroups().map(headerGroup => (
+    <TableRow key={headerGroup.id} className="bg-cyan-400">
+      {headerGroup.headers.map(header => (
+        <TableHead
+          key={header.id}
+          onClick={header.column.getToggleSortingHandler()}
+          className={`font-bold text-black !bg-cyan-400 hover:!bg-cyan-400 ${
+            header.id === 'estado_asistencia' ? 'w-[220px] text-center' : ''
+          }`}
+        >
+          {flexRender(header.column.columnDef.header, header.getContext())}
+          {{
+            asc: ' 🔼',
+            desc: ' 🔽',
+          }[header.column.getIsSorted() as string] ?? null}
+        </TableHead>
+      ))}
+    </TableRow>
+  ))}
+</TableHeader>
+
+
           <TableBody>
             {table.getRowModel().rows.length > 0 ? (
               table.getRowModel().rows.map(row => {

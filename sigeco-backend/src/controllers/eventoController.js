@@ -13,6 +13,25 @@ exports.getAllEventos = async (req, res) => {
     }
 };
 
+exports.getEventoById = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
+  const { id } = req.params;
+  try {
+    const evento = await EventoModel.findById(id);
+    if (!evento) {
+      return res.status(404).json({ success: false, error: 'Evento no encontrado.' });
+    }
+    return res.json({ success: true, data: evento });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, error: 'Error del servidor al obtener el evento.' });
+  }
+};
+
 // Crear un nuevo evento
 exports.createEvento = async (req, res) => {
     const errors = validationResult(req);
