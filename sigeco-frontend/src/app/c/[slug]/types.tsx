@@ -32,17 +32,20 @@ export interface FormularioConfig {
     campos: FormularioCampo[];
 }
 
-// Renombramos la interfaz principal para que coincida con lo que usan los componentes
+// Props del presenter de landing
 export interface LandingPageProps {
     data: {
         campana: CampanaPublica;
         tickets: Ticket[];
         formulario: FormularioConfig;
     } | null;
+    children?: React.ReactNode;   // <-- añadido para soportar <Frame> en editor
+    form?: React.ReactNode;       // <-- añadido para soportar formulario placeholder
 }
 
+// Para reutilizar en otras partes del código
 export interface CampanaData {
-  campana: CampanaPublica;
-  tickets: Ticket[];
-  formulario: FormularioConfig;
+    campana: CampanaPublica;
+    tickets: Ticket[];
+    formulario: FormularioConfig;
 }
