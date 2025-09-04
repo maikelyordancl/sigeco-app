@@ -69,10 +69,15 @@ export const LandingPagePresenter = ({ data, children, form }: LandingPagePresen
           <aside className="md:col-span-1">
             <Card className="sticky top-8">
               <CardHeader>
-                <CardTitle className="flex items-center">
-                  {campana.obligatorio_pago ? <Ticket className="h-6 w-6 mr-3" /> : <UserPlus className="h-6 w-6 mr-3" />}
-                  Inscripción
-                </CardTitle>
+                <CardTitle className="flex items-center text-3xl font-bold">
+  {campana.obligatorio_pago ? (
+    <Ticket className="h-6 w-6 mr-3" />
+  ) : (
+    <UserPlus className="h-6 w-6 mr-3" />
+  )}
+  Registrarse
+</CardTitle>
+
               </CardHeader>
               <CardContent>
                 {form}

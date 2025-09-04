@@ -128,7 +128,7 @@ const FormularioDinamico = ({ formConfig, onSubmit, isSubmitting, defaultValues 
 
         return (
             <div key={campo.id_campo}>
-                <Label htmlFor={fieldName}>{etiqueta}{campo.es_obligatorio ? '*' : ''}</Label>
+                <Label htmlFor={fieldName} className="block text-lg font-medium text-gray-800" > {etiqueta}{campo.es_obligatorio ? '*' : ''} </Label>
 
                 {campo.tipo_campo === 'TEXTO_CORTO' && <Input id={fieldName} {...register(fieldName)} type={isEmailField ? 'email' : 'text'} readOnly={isEmailField && defaultValues?.[fieldName]} className={isEmailField && defaultValues?.[fieldName] ? 'bg-gray-100' : ''} />}
                 {campo.tipo_campo === 'PARRAFO' && <Textarea id={fieldName} {...register(fieldName)} />}
@@ -373,7 +373,6 @@ const ProcesoInscripcion = ({ campana, tickets, formulario }: { campana: Campana
                         <ArrowLeft className="mr-2 h-4 w-4" /> Volver a seleccionar ticket
                     </Button>
                 ) : null}
-                <h4 className="font-semibold text-lg border-b pb-2 mb-4">Completa tus datos</h4>
                 <FormularioDinamico
                     formConfig={formulario}
                     onSubmit={handleSubmitInscripcion}
