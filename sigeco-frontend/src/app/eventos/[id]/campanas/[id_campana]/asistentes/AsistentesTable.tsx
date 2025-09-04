@@ -347,38 +347,44 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
       {/* Toolbar en grid: [buscador | select | alternar] */}
       <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-3 py-4">
         {/* Col 1: Buscador */}
-        <div className="md:justify-self-start">
-          <Input
-            placeholder="Buscar en toda la tabla..."
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            className="max-w-sm"
-          />
-        </div>
+        <div className="relative max-w-sm">
+  <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-cyan-600">
+    🔍
+  </span>
+  <Input
+    placeholder="Buscar..."
+    value={globalFilter}
+    onChange={(e) => setGlobalFilter(e.target.value)}
+    className="pl-8 border-2 border-cyan-500 focus:border-cyan-600 focus:ring-cyan-500 shadow-md"
+  />
+</div>
 
         {/* Col 2: Select de estado centrado */}
         <div className="justify-self-center">
           <Select value={estadoFiltro} onValueChange={(v) => setEstadoFiltro(v)}>
-            <SelectTrigger className={`w-[220px] ${estiloFiltro.bg} ${estiloFiltro.text} border ${estiloFiltro.border}`}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>
-                <div className="flex items-center gap-2">
-                  <span className={`h-2.5 w-2.5 rounded-full ${ESTILO_DEFAULT.dot}`} />
-                  Todos
-                </div>
-              </SelectItem>
-              {ESTADOS.map(e => (
-                <SelectItem key={e} value={e}>
-                  <div className="flex items-center gap-2">
-                    <span className={`h-2.5 w-2.5 rounded-full ${getEstadoStyle(e).dot}`} />
-                    {e}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+  <SelectTrigger
+    className={`w-[220px] border-2 border-cyan-500 focus:border-cyan-600 focus:ring-cyan-500 shadow-md ${estiloFiltro.bg} ${estiloFiltro.text}`}
+  >
+    <SelectValue />
+  </SelectTrigger>
+  <SelectContent>
+    <SelectItem value={ALL}>
+      <div className="flex items-center gap-2">
+        <span className={`h-2.5 w-2.5 rounded-full ${ESTILO_DEFAULT.dot}`} />
+        Todos
+      </div>
+    </SelectItem>
+    {ESTADOS.map(e => (
+      <SelectItem key={e} value={e}>
+        <div className="flex items-center gap-2">
+          <span className={`h-2.5 w-2.5 rounded-full ${getEstadoStyle(e).dot}`} />
+          {e}
+        </div>
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+
         </div>
 
         {/* Col 3: Alternar Columnas alineado a la derecha */}
