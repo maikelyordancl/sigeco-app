@@ -201,21 +201,32 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
         header: 'Editar',
         cell: ({ row }) => (
           <div className="flex gap-2">
-            <Button variant="ghost" size="icon" onClick={() => onEdit(row.original)}>
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant="destructive"
-              onClick={() => {
-                if (window.confirm(`¿Seguro que deseas eliminar la inscripción de "${row.original.nombre}"?`)) {
-                  handleDelete(row.original.id_inscripcion);
-                }
-              }}
-            >
-              <Trash className="h-4 w-4" />
-            </Button>
-          </div>
+<Button
+  size="icon"
+  className="bg-amber-500 hover:bg-amber-600 text-white focus-visible:ring-amber-400 dark:bg-amber-600 dark:hover:bg-amber-500"
+  onClick={() => onEdit(row.original)}
+  title="Editar"
+  aria-label="Editar"
+>
+  <Pencil className="h-4 w-4" strokeWidth={2.25} />
+</Button>
+
+
+  <Button
+    size="icon"
+    variant="destructive"
+    onClick={() => {
+      if (window.confirm(`¿Seguro que deseas eliminar la inscripción de "${row.original.nombre}"?`)) {
+        handleDelete(row.original.id_inscripcion);
+      }
+    }}
+    title="Eliminar"
+    aria-label="Eliminar"
+  >
+    <Trash className="h-4 w-4" />
+  </Button>
+</div>
+
         ),
         enableHiding: false,
       },
