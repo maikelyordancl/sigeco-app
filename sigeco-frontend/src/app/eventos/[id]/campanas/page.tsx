@@ -1,3 +1,5 @@
+// sigeco-frontend/src/app/eventos/[id]/campanas/page.tsx
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -12,7 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, PlusCircle, Ticket, Edit, Send, Settings, Users } from "lucide-react";
+import { ArrowLeft, PlusCircle, Ticket, Edit, Send, Settings, Users, Calendar } from "lucide-react"; // Añadido Calendar
 import { CrearSubCampanaDialog } from "@/components/dialogs/CrearSubCampanaDialog";
 import { GestionTicketsDialog } from "@/components/dialogs/GestionTicketsDialog";
 import { EditarCampanaDialog } from "@/components/dialogs/EditarCampanaDialog";
@@ -27,6 +29,7 @@ const GestionCampanasPage = () => {
   const params = useParams();
   const id_evento = params.id as string;
 
+  // ... (estados y funciones sin cambios)
   const [eventName, setEventName] = useState<string>('');
   const [campanaPrincipal, setCampanaPrincipal] = useState<CampanaAdmin | null>(null);
   const [subCampanas, setSubCampanas] = useState<CampanaAdmin[]>([]);
@@ -114,9 +117,11 @@ const GestionCampanasPage = () => {
     router.push(`/eventos/${id_evento}/campanas/${id_campana}/asistentes`);
   };
 
+
   const renderCard = (campana: CampanaAdmin) => (
     <Card key={campana.id_campana} className="flex flex-col shadow-md hover:shadow-lg transition-shadow">
       <CardHeader>
+        {/* ... (código de CardHeader sin cambios) ... */}
         <div className="flex justify-between items-start">
           <CardTitle>{campana.nombre}</CardTitle>
           <div className="flex items-center space-x-2">
@@ -136,6 +141,14 @@ const GestionCampanasPage = () => {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-grow">
+        {/* --- INICIO DE LA MODIFICACIÓN --- */}
+        {campana.fecha_personalizada && (
+          <div className="flex items-center text-sm text-gray-600 mb-2">
+            <Calendar className="mr-2 h-4 w-4" />
+            <span>{campana.fecha_personalizada}</span>
+          </div>
+        )}
+        {/* --- FIN DE LA MODIFICACIÓN --- */}
         <p className="text-sm text-gray-500 break-all">
           URL:{" "}
           <a href={`/c/${campana.url_amigable}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
@@ -144,6 +157,7 @@ const GestionCampanasPage = () => {
         </p>
         <div className="mt-4 border-t pt-2 text-sm">
           <h4 className="font-semibold mb-1">Asistencia:</h4>
+          {/* ... (código de estadísticas sin cambios) ... */}
           <div className="flex flex-wrap gap-x-4 gap-y-1">
             {!campana.obligatorio_registro && !campana.obligatorio_pago && (
               <>
@@ -171,7 +185,8 @@ const GestionCampanasPage = () => {
         </div>
       </CardContent>
       <CardFooter className="grid grid-cols-2 lg:grid-cols-5 gap-2 pt-4">
-        <Button variant="outline" size="sm" onClick={() => handleOpenEditModal(campana)}>
+        {/* ... (código de CardFooter sin cambios) ... */}
+         <Button variant="outline" size="sm" onClick={() => handleOpenEditModal(campana)}>
           <Edit className="mr-2 h-4 w-4" /> Config.
         </Button>
         <Button variant="outline" size="sm" onClick={() => handleGoToEditor(campana.id_campana)} disabled={!campana.id_subevento}>
@@ -188,7 +203,8 @@ const GestionCampanasPage = () => {
   );
 
   return (
-    <MainLayout>
+    // ... (resto del componente sin cambios)
+     <MainLayout>
       <div className="p-4 md:p-6">
         <div className="flex justify-between items-center mb-6">
           <Button variant="outline" onClick={() => router.push("/eventos/gestion")}>

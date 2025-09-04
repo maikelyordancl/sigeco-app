@@ -111,14 +111,14 @@ const EditorPageContent = () => {
             <div className="flex-grow grid grid-cols-12 overflow-hidden">
                 <aside className="col-span-2 bg-white p-2 border-r overflow-y-auto"><Toolbox /></aside>
 
-                <main className="col-span-7 bg-gray-200 overflow-auto">
-                    {/* *** CORRECCIÓN: Pasamos el placeholder a la prop 'form' *** */}
-                    <LandingPagePresenter data={data} form={<ProcesoInscripcionPlaceholder />}>
-                        <Frame json={landingJson ?? undefined}>
-                            <Element is={CraftContainer} canvas id="main-content" className="min-h-full" />
-                        </Frame>
-                    </LandingPagePresenter>
-                </main>
+               <main className="col-span-7 bg-gray-200 overflow-auto">
+  <Frame json={landingJson ?? undefined}>
+    <Element is={CraftContainer} canvas id="main-content" className="min-h-full">
+      <LandingPagePresenter data={data} form={<ProcesoInscripcionPlaceholder />} />
+    </Element>
+  </Frame>
+</main>
+
 
                 <aside className="col-span-3 bg-white p-2 border-l overflow-y-auto"><SettingsPanel /></aside>
             </div>

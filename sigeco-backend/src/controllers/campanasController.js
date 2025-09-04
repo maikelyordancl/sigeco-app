@@ -48,8 +48,8 @@ exports.crearSubCampana = async (req, res) => {
         return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    // AÑADIDO: id_plantilla extraído del body, con valor por defecto 1
-    const { id_evento, id_subevento, nombre, url_amigable, id_plantilla = 1 } = req.body;
+    // AÑADIDO: id_plantilla y fecha_personalizada extraídos del body
+    const { id_evento, id_subevento, nombre, url_amigable, id_plantilla = 1, fecha_personalizada } = req.body;
 
     try {
         const subevento = await SubeventoModel.findById(id_subevento);
@@ -63,7 +63,8 @@ exports.crearSubCampana = async (req, res) => {
             nombre: nombre || `Campana - ${subevento.nombre}`,
             estado: 'Borrador',
             url_amigable: url_amigable,
-            id_plantilla: id_plantilla // AÑADIDO: Se pasa el id_plantilla
+            id_plantilla: id_plantilla,
+            fecha_personalizada: fecha_personalizada // AÑADIDO: Se pasa el nuevo campo
         };
 
         const nuevaCampana = await Campana.create(campanaData);
@@ -89,6 +90,7 @@ exports.actualizarCampana = async (req, res) => {
     }
 
     const { id_campana } = req.params;
+    // campanaData ahora puede incluir fecha_personalizada
     const campanaData = req.body;
 
     try {

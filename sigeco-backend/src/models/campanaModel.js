@@ -1,9 +1,12 @@
+// sigeco-backend/src/models/campanaModel.js
+
 /**
  * Modelo para gestionar las operaciones de la base de datos para las campañas.
  * Utiliza un pool de conexiones para interactuar con la base de datos MySQL.
  */
 const pool = require('../config/db');
 const FormularioModel = require('./formularioModel');
+
 const Campana = {
     /**
      * Crea una nueva campaña en la base de datos.
@@ -20,14 +23,14 @@ const Campana = {
         await connection.beginTransaction();
 
         try {
-            const { id_evento, id_subevento = null, nombre, estado, url_amigable = null, id_plantilla = 1 } = campanaData;
+            const { id_evento, id_subevento = null, nombre, estado, url_amigable = null, id_plantilla = 1, fecha_personalizada = null } = campanaData;
 
             // 1. Insertar la nueva campaña
             const queryCampana = `
-                INSERT INTO campanas (id_evento, id_subevento, nombre, estado, url_amigable, id_plantilla)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO campanas (id_evento, id_subevento, nombre, estado, url_amigable, id_plantilla, fecha_personalizada)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             `;
-            const [result] = await connection.query(queryCampana, [id_evento, id_subevento, nombre, estado, url_amigable, id_plantilla]);
+            const [result] = await connection.query(queryCampana, [id_evento, id_subevento, nombre, estado, url_amigable, id_plantilla, fecha_personalizada]);
             const newCampanaId = result.insertId;
 
             // 2. Si es una SUB-CAMPAÑA, asociar los campos de formulario por defecto
@@ -184,6 +187,7 @@ const Campana = {
                 c.inscripcion_libre,
                 c.landing_page_json,
                 c.id_plantilla, -- <--- AÑADIDO
+                c.fecha_personalizada, -- <--- NUEVO CAMPO
                 e.nombre AS evento_nombre, e.fecha_inicio, e.fecha_fin, e.ciudad, e.lugar,
                 s.nombre AS subevento_nombre, s.obligatorio_registro, s.obligatorio_pago
             FROM campanas c
@@ -254,6 +258,7 @@ const Campana = {
             c.inscripcion_libre,
             c.landing_page_json,
             c.id_plantilla, -- <--- AÑADIDO
+            c.fecha_personalizada, -- <--- NUEVO CAMPO
             e.nombre AS evento_nombre, e.fecha_inicio, e.fecha_fin, e.ciudad, e.lugar,
             s.nombre AS subevento_nombre, s.obligatorio_registro, s.obligatorio_pago
         FROM campanas c

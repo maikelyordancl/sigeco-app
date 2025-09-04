@@ -1,3 +1,5 @@
+// sigeco-frontend/src/components/dialogs/EditarCampanaDialog.tsx
+
 "use client";
 
 import { useEffect } from "react";
@@ -36,6 +38,8 @@ const campanaSchema = yup.object().shape({
     .required("El estado es requerido."),
   inscripcion_libre: yup.boolean().required(),
   id_plantilla: yup.number().required("La plantilla es obligatoria."),
+  // --- NUEVO CAMPO EN EL ESQUEMA ---
+  fecha_personalizada: yup.string().nullable().optional(),
 });
 
 type CampanaFormData = yup.InferType<typeof campanaSchema>;
@@ -43,7 +47,7 @@ type CampanaFormData = yup.InferType<typeof campanaSchema>;
 interface EditarCampanaDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  campana: CampanaAdmin | null; // 👈 corregido
+  campana: CampanaAdmin | null;
   onCampanaActualizada: () => void;
 }
 
@@ -57,7 +61,6 @@ export const EditarCampanaDialog = ({
     register,
     handleSubmit,
     reset,
-    setValue,
     control,
     formState: { errors, isSubmitting },
   } = useForm<CampanaFormData>({
@@ -72,6 +75,8 @@ export const EditarCampanaDialog = ({
         estado: campana.estado,
         inscripcion_libre: !!campana.inscripcion_libre,
         id_plantilla: campana.id_plantilla || 1,
+        // --- NUEVO CAMPO EN EL RESET ---
+        fecha_personalizada: campana.fecha_personalizada || '',
       });
     }
   }, [campana, reset]);
@@ -107,14 +112,15 @@ export const EditarCampanaDialog = ({
         <DialogHeader>
           <DialogTitle>Editar Campaña</DialogTitle>
           <DialogDescription>
-            Modifica el nombre, el estado y la plantilla de tu campaña.
+            Modifica los detalles generales de tu campaña.
           </DialogDescription>
         </DialogHeader>
         <form
           onSubmit={handleSubmit(handleUpdateCampana)}
           className="space-y-4 py-4"
         >
-          <div className="flex items-center justify-between rounded-lg border p-3">
+          {/* ... (otros campos sin cambios) ... */}
+           <div className="flex items-center justify-between rounded-lg border p-3">
             <div className="space-y-0.5">
               <Label htmlFor="inscripcion_libre">
                 Permitir Inscripción Pública
@@ -145,52 +151,72 @@ export const EditarCampanaDialog = ({
               </p>
             )}
           </div>
+
+          {/* --- NUEVO CAMPO DE TEXTO --- */}
+          <div>
+            <Label htmlFor="fecha_personalizada">Fecha Personalizada (Texto)</Label>
+            <Input 
+              id="fecha_personalizada" 
+              {...register("fecha_personalizada")} 
+              placeholder="Ej: Finales de Octubre, 25/12/2025"
+            />
+            {errors.fecha_personalizada && (
+              <p className="text-red-500 text-sm mt-1">
+                {errors.fecha_personalizada.message}
+              </p>
+            )}
+          </div>
+          {/* --- FIN NUEVO CAMPO --- */}
+          
           <div>
             <Label htmlFor="estado">Estado</Label>
-            <Select
-              defaultValue={campana?.estado}
-              onValueChange={(value) =>
-                setValue("estado", value as any, { shouldValidate: true })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecciona un estado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Borrador">Borrador</SelectItem>
-                <SelectItem value="Activa">Activa</SelectItem>
-                <SelectItem value="Pausada">Pausada</SelectItem>
-                <SelectItem value="Finalizada">Finalizada</SelectItem>
-              </SelectContent>
-            </Select>
+            <Controller
+                name="estado"
+                control={control}
+                render={({ field }) => (
+                    <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Selecciona un estado" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Borrador">Borrador</SelectItem>
+                            <SelectItem value="Activa">Activa</SelectItem>
+                            <SelectItem value="Pausada">Pausada</SelectItem>
+                            <SelectItem value="Finalizada">Finalizada</SelectItem>
+                        </SelectContent>
+                    </Select>
+                )}
+            />
             {errors.estado && (
               <p className="text-red-500 text-sm mt-1">
                 {errors.estado.message}
               </p>
             )}
           </div>
+
           <div>
             <Label htmlFor="id_plantilla">Plantilla</Label>
-            <Select
-              defaultValue={String(campana?.id_plantilla || 1)}
-              onValueChange={(value) =>
-                setValue("id_plantilla", parseInt(value, 10), {
-                  shouldValidate: true,
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecciona una plantilla" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">
-                  Clásica (Formulario a la derecha)
-                </SelectItem>
-                <SelectItem value="2">
-                  Moderna (Formulario centrado)
-                </SelectItem>
-              </SelectContent>
-            </Select>
+             <Controller
+                name="id_plantilla"
+                control={control}
+                render={({ field }) => (
+                    <Select
+                        onValueChange={(value) => field.onChange(parseInt(value, 10))}
+                        value={String(field.value)}
+                    >
+                        <SelectTrigger>
+                            <SelectValue placeholder="Selecciona una plantilla" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="1">Clásica (Formulario a la derecha)</SelectItem>
+                            <SelectItem value="2">Moderna (Formulario centrado)</SelectItem>
+                        </SelectContent>
+                    </Select>
+                )}
+            />
             {errors.id_plantilla && (
               <p className="text-red-500 text-sm mt-1">
                 {errors.id_plantilla.message}

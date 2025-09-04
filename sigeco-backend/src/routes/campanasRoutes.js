@@ -34,7 +34,9 @@ router.post(
         body('nombre').optional().isString().trim().notEmpty().withMessage('El nombre no puede estar vacío.'),
         body('url_amigable')
             .isString().trim().notEmpty().withMessage('La URL amigable no puede estar vacía.')
-            .matches(/^[A-Za-z0-9-]+$/).withMessage('La URL amigable contiene caracteres no válidos.')
+            .matches(/^[A-Za-z0-9-]+$/).withMessage('La URL amigable contiene caracteres no válidos.'),
+        // --- NUEVA REGLA DE VALIDACIÓN ---
+        body('fecha_personalizada').optional({ nullable: true }).isString().withMessage('La fecha personalizada debe ser un texto.')
     ],
     campanasController.crearSubCampana
 );
@@ -64,8 +66,9 @@ router.put(
         param('id_campana').isInt({ gt: 0 }).withMessage('El ID de la campaña debe ser un número válido.'),
         body('nombre').optional().isString().trim().notEmpty(),
         body('estado').optional().isIn(['Borrador', 'Activa', 'Pausada', 'Finalizada']),
-        // --- AÑADIDO: Validación para id_plantilla ---
-        body('id_plantilla').optional().isInt({ min: 1, max: 2 }).withMessage('El ID de plantilla no es válido.')
+        body('id_plantilla').optional().isInt({ min: 1, max: 2 }).withMessage('El ID de plantilla no es válido.'),
+        // --- NUEVA REGLA DE VALIDACIÓN ---
+        body('fecha_personalizada').optional({ nullable: true }).isString().withMessage('La fecha personalizada debe ser un texto.')
     ],
     campanasController.actualizarCampana
 );

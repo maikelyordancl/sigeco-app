@@ -1,3 +1,5 @@
+// sigeco-frontend/src/app/c/[slug]/plantillas/ModernaLayout.tsx
+
 'use client';
 
 import React, { useEffect } from 'react';
@@ -11,7 +13,8 @@ import { CraftSpacer } from '@/components/craft/CraftSpacer';
 import { CraftColumns } from '@/components/craft/CraftColumns';
 import RegistrationForm from '../RegistrationForm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Calendar, Info } from 'lucide-react';
+// AÑADIDO: Importar el ícono de MapPin
+import { Calendar, Info, MapPin } from 'lucide-react';
 
 import type { CampanaPublica, Ticket, FormularioConfig } from '../types';
 
@@ -27,7 +30,7 @@ const LandingRenderer = ({ jsonContent }: { jsonContent?: string | null }) => {
   const { actions } = useEditor();
 
   useEffect(() => {
-    // Fallback válido usando nombres del resolver como strings
+    // Fallback ...
     const fallback = JSON.stringify({
       ROOT: {
         type: { resolvedName: 'CraftContainer' },
@@ -74,26 +77,43 @@ const LandingRenderer = ({ jsonContent }: { jsonContent?: string | null }) => {
   );
 };
 
+// --- INICIO DE LA MODIFICACIÓN ---
 const InfoCard = ({ campana }: { campana: CampanaPublica }) => {
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
 
+  // Fechas y lugar (tratados como opcionales para seguridad)
   const fechaInicio = (campana as any)?.fecha_inicio as string | undefined;
   const fechaFin = (campana as any)?.fecha_fin as string | undefined;
+  const fechaPersonalizada = (campana as any)?.fecha_personalizada as string | undefined;
   const lugar = (campana as any)?.lugar as string | undefined;
+  const ciudad = (campana as any)?.ciudad as string | undefined;
 
-  if (!fechaInicio || !fechaFin) return null;
+  // Lógica para determinar qué fecha mostrar
+  const fechaMostrada = fechaPersonalizada || (fechaInicio && fechaFin ? `${formatDate(fechaInicio)} - ${formatDate(fechaFin)}` : null);
+  const lugarMostrado = lugar && ciudad ? `${lugar}, ${ciudad}` : lugar || ciudad || null;
 
   return (
-    <div className="flex items-center justify-center text-gray-700 mt-2">
-      <Calendar className="h-5 w-5 mr-3 text-gray-500" />
-      <span>
-        {formatDate(fechaInicio)} - {formatDate(fechaFin)}
-        {lugar ? ` – ${lugar}` : ''}
-      </span>
+    <div className="mt-2 space-y-2 flex flex-col items-center justify-center">
+      {/* Mostrar Fecha */}
+      {fechaMostrada && (
+        <div className="flex items-center text-gray-700">
+          <Calendar className="h-5 w-5 mr-3 text-gray-500 flex-shrink-0" />
+          <span>{fechaMostrada}</span>
+        </div>
+      )}
+
+      {/* Mostrar Lugar */}
+      {lugarMostrado && (
+        <div className="flex items-center text-gray-700">
+          <MapPin className="h-5 w-5 mr-3 text-gray-500 flex-shrink-0" />
+          <span>{lugarMostrado}</span>
+        </div>
+      )}
     </div>
   );
 };
+// --- FIN DE LA MODIFICACIÓN ---
 
 
 const ModernaLayout: React.FC<Props> = ({ data }) => {

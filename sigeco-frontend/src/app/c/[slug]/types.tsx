@@ -67,4 +67,5 @@ export interface CampanaAdmin {
   asistieron?: number;
   cancelados?: number;
   pagados?: number;
+  fecha_personalizada?: string;
 }
