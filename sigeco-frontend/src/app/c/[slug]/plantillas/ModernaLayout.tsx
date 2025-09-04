@@ -78,21 +78,23 @@ const InfoCard = ({ campana }: { campana: CampanaPublica }) => {
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
 
-  // Fechas opcionales
   const fechaInicio = (campana as any)?.fecha_inicio as string | undefined;
   const fechaFin = (campana as any)?.fecha_fin as string | undefined;
+  const lugar = (campana as any)?.lugar as string | undefined;
 
   if (!fechaInicio || !fechaFin) return null;
 
   return (
     <div className="flex items-center justify-center text-gray-700 mt-2">
-  <Calendar className="h-5 w-5 mr-3 text-gray-500" />
-  <span>
-    {formatDate(fechaInicio)} - {formatDate(fechaFin)}
-  </span>
-</div>
+      <Calendar className="h-5 w-5 mr-3 text-gray-500" />
+      <span>
+        {formatDate(fechaInicio)} - {formatDate(fechaFin)}
+        {lugar ? ` – ${lugar}` : ''}
+      </span>
+    </div>
   );
 };
+
 
 const ModernaLayout: React.FC<Props> = ({ data }) => {
   if (!data) return null;
