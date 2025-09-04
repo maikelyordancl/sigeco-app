@@ -361,6 +361,7 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
 
         {/* Col 2: Select de estado centrado */}
         <div className="justify-self-center">
+          <p>Filtros: </p>
           <Select value={estadoFiltro} onValueChange={(v) => setEstadoFiltro(v)}>
   <SelectTrigger
     className={`w-[220px] border-2 border-cyan-500 focus:border-cyan-600 focus:ring-cyan-500 shadow-md ${estiloFiltro.bg} ${estiloFiltro.text}`}
