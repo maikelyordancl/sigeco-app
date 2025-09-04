@@ -72,8 +72,8 @@ const ESTADOS = [
   "Registrado",
   "Confirmado",
   "Por Confirmar",
-  "No Asiste",
   "Asistió",
+  "No Asiste",
   "Cancelado",
 ];
 
@@ -98,16 +98,16 @@ const ESTILO_DEFAULT: EstadoStyle = {
 };
 
 const ESTADO_STYLES: Record<string, EstadoStyle> = {
-  "Invitado":      { bg: 'bg-slate-50 dark:bg-slate-900/60', text: 'text-slate-700 dark:text-slate-200', border: 'border-slate-200 dark:border-slate-800', dot: 'bg-slate-500',   rowBorder: 'border-l-slate-400 dark:border-l-slate-600' },
-  "Abrio Email":   { bg: 'bg-amber-50 dark:bg-amber-900/40', text: 'text-amber-800 dark:text-amber-200', border: 'border-amber-200 dark:border-amber-800', dot: 'bg-amber-500', rowBorder: 'border-l-amber-400 dark:border-l-amber-600' },
-  "Registrado":    { bg: 'bg-sky-50 dark:bg-sky-900/40',     text: 'text-sky-700 dark:text-sky-200',     border: 'border-sky-200 dark:border-sky-800',     dot: 'bg-sky-500',   rowBorder: 'border-l-sky-400 dark:border-l-sky-600' },
+  "Invitado": { bg: 'bg-slate-50 dark:bg-slate-900/60', text: 'text-slate-700 dark:text-slate-200', border: 'border-slate-200 dark:border-slate-800', dot: 'bg-slate-500', rowBorder: 'border-l-slate-400 dark:border-l-slate-600' },
+  "Abrio Email": { bg: 'bg-amber-50 dark:bg-amber-900/40', text: 'text-amber-800 dark:text-amber-200', border: 'border-amber-200 dark:border-amber-800', dot: 'bg-amber-500', rowBorder: 'border-l-amber-400 dark:border-l-amber-600' },
+  "Registrado": { bg: 'bg-sky-50 dark:bg-sky-900/40', text: 'text-sky-700 dark:text-sky-200', border: 'border-sky-200 dark:border-sky-800', dot: 'bg-sky-500', rowBorder: 'border-l-sky-400 dark:border-l-sky-600' },
   // Confirmado → índigo para distinguir de Asistió
-  "Confirmado":    { bg: 'bg-indigo-50 dark:bg-indigo-900/40', text: 'text-indigo-700 dark:text-indigo-200', border: 'border-indigo-200 dark:border-indigo-800', dot: 'bg-indigo-500', rowBorder: 'border-l-indigo-400 dark:border-l-indigo-600' },
+  "Confirmado": { bg: 'bg-indigo-50 dark:bg-indigo-900/40', text: 'text-indigo-700 dark:text-indigo-200', border: 'border-indigo-200 dark:border-indigo-800', dot: 'bg-indigo-500', rowBorder: 'border-l-indigo-400 dark:border-l-indigo-600' },
   "Por Confirmar": { bg: 'bg-yellow-50 dark:bg-yellow-900/40', text: 'text-yellow-800 dark:text-yellow-200', border: 'border-yellow-200 dark:border-yellow-800', dot: 'bg-yellow-500', rowBorder: 'border-l-yellow-400 dark:border-l-yellow-600' },
-  "No Asiste":     { bg: 'bg-red-50 dark:bg-red-900/40',       text: 'text-red-700 dark:text-red-200',       border: 'border-red-200 dark:border-red-800',       dot: 'bg-red-500',   rowBorder: 'border-l-red-400 dark:border-l-red-600' },
+  "No Asiste": { bg: 'bg-red-50 dark:bg-red-900/40', text: 'text-red-700 dark:text-red-200', border: 'border-red-200 dark:border-red-800', dot: 'bg-red-500', rowBorder: 'border-l-red-400 dark:border-l-red-600' },
   // Asistió → verde/emerald
-  "Asistió":       { bg: 'bg-emerald-50 dark:bg-emerald-900/40', text: 'text-emerald-700 dark:text-emerald-200', border: 'border-emerald-200 dark:border-emerald-800', dot: 'bg-emerald-500', rowBorder: 'border-l-emerald-400 dark:border-l-emerald-600' },
-  "Cancelado":     { bg: 'bg-zinc-50 dark:bg-zinc-900/40',     text: 'text-zinc-700 dark:text-zinc-200',     border: 'border-zinc-200 dark:border-zinc-800',     dot: 'bg-zinc-500',  rowBorder: 'border-l-zinc-400 dark:border-l-zinc-600' },
+  "Asistió": { bg: 'bg-emerald-50 dark:bg-emerald-900/40', text: 'text-emerald-700 dark:text-emerald-200', border: 'border-emerald-200 dark:border-emerald-800', dot: 'bg-emerald-500', rowBorder: 'border-l-emerald-400 dark:border-l-emerald-600' },
+  "Cancelado": { bg: 'bg-zinc-50 dark:bg-zinc-900/40', text: 'text-zinc-700 dark:text-zinc-200', border: 'border-zinc-200 dark:border-zinc-800', dot: 'bg-zinc-500', rowBorder: 'border-l-zinc-400 dark:border-l-zinc-600' },
 };
 
 const getEstadoStyle = (estado?: string): EstadoStyle =>
@@ -201,36 +201,44 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
         header: 'Editar',
         cell: ({ row }) => (
           <div className="flex gap-2">
-<Button
-  size="icon"
-  className="bg-amber-500 hover:bg-amber-600 text-white focus-visible:ring-amber-400 dark:bg-amber-600 dark:hover:bg-amber-500"
-  onClick={() => onEdit(row.original)}
-  title="Editar"
-  aria-label="Editar"
->
-  <Pencil className="h-4 w-4" strokeWidth={2.25} />
-</Button>
+            <Button
+              size="icon"
+              className="bg-amber-500 hover:bg-amber-600 text-white focus-visible:ring-amber-400 dark:bg-amber-600 dark:hover:bg-amber-500"
+              onClick={() => onEdit(row.original)}
+              title="Editar"
+              aria-label="Editar"
+            >
+              <Pencil className="h-4 w-4" strokeWidth={2.25} />
+            </Button>
 
 
-  <Button
-    size="icon"
-    variant="destructive"
-    onClick={() => {
-      if (window.confirm(`¿Seguro que deseas eliminar la inscripción de "${row.original.nombre}"?`)) {
-        handleDelete(row.original.id_inscripcion);
-      }
-    }}
-    title="Eliminar"
-    aria-label="Eliminar"
-  >
-    <Trash className="h-4 w-4" />
-  </Button>
-</div>
+            <Button
+              size="icon"
+              variant="destructive"
+              onClick={() => {
+                if (window.confirm(`¿Seguro que deseas eliminar la inscripción de "${row.original.nombre}"?`)) {
+                  handleDelete(row.original.id_inscripcion);
+                }
+              }}
+              title="Eliminar"
+              aria-label="Eliminar"
+            >
+              <Trash className="h-4 w-4" />
+            </Button>
+          </div>
 
         ),
         enableHiding: false,
       },
-      { accessorKey: 'nombre', header: 'Nombre', enableHiding: false },
+      {
+        accessorKey: 'nombre',
+        header: 'Nombre',
+        enableHiding: false,
+        cell: ({ row }) => (
+          <span className="uppercase">{row.original.nombre}</span>
+        ),
+      },
+
       { accessorKey: 'email', header: 'Email', enableHiding: false },
       { accessorKey: 'telefono', header: 'Teléfono', enableHiding: true },
       { accessorKey: 'empresa', header: 'Empresa', enableHiding: true },
@@ -367,26 +375,25 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
       <div className="rounded-md border">
         <Table>
           <TableHeader>
-  {table.getHeaderGroups().map(headerGroup => (
-    <TableRow key={headerGroup.id} className="bg-cyan-400">
-      {headerGroup.headers.map(header => (
-        <TableHead
-          key={header.id}
-          onClick={header.column.getToggleSortingHandler()}
-          className={`font-bold text-black !bg-cyan-400 hover:!bg-cyan-400 ${
-            header.id === 'estado_asistencia' ? 'w-[220px] text-center' : ''
-          }`}
-        >
-          {flexRender(header.column.columnDef.header, header.getContext())}
-          {{
-            asc: ' 🔼',
-            desc: ' 🔽',
-          }[header.column.getIsSorted() as string] ?? null}
-        </TableHead>
-      ))}
-    </TableRow>
-  ))}
-</TableHeader>
+            {table.getHeaderGroups().map(headerGroup => (
+              <TableRow key={headerGroup.id} className="bg-cyan-400">
+                {headerGroup.headers.map(header => (
+                  <TableHead
+                    key={header.id}
+                    onClick={header.column.getToggleSortingHandler()}
+                    className={`font-bold text-black !bg-cyan-400 hover:!bg-cyan-400 ${header.id === 'estado_asistencia' ? 'w-[220px] text-center' : ''
+                      }`}
+                  >
+                    {flexRender(header.column.columnDef.header, header.getContext())}
+                    {{
+                      asc: ' 🔼',
+                      desc: ' 🔽',
+                    }[header.column.getIsSorted() as string] ?? null}
+                  </TableHead>
+                ))}
+              </TableRow>
+            ))}
+          </TableHeader>
 
 
           <TableBody>

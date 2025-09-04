@@ -8,7 +8,6 @@ import { apiFetch } from "@/lib/api";
 import { Asistente, CampoFormulario } from "./types";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-// --- MODIFICACIÓN: Importar toast ---
 import toast from "react-hot-toast";
 import MainLayout from "@/components/Layout/MainLayout";
 
@@ -25,7 +24,6 @@ export default function AsistentesPage() {
   const [campanaInfo, setCampanaInfo] = useState<any>(null);
   const [camposFormulario, setCamposFormulario] = useState<CampoFormulario[]>([]);
   const [eventoInfo, setEventoInfo] = useState<any>(null);
-
 
   const fetchData = useCallback(async () => {
     if (!id_campana || !id_evento) return;
@@ -51,7 +49,6 @@ export default function AsistentesPage() {
       setCampanaInfo(campanaData.data);
       setCamposFormulario(formularioData.data || []);
       setEventoInfo(eventoData.data);
-
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -81,9 +78,7 @@ export default function AsistentesPage() {
     );
   };
 
-  // --- NUEVA FUNCIÓN PARA CAMBIAR EL ESTADO DESDE LA TABLA ---
   const handleEstadoChange = async (id_inscripcion: number, nuevoEstado: string) => {
-    // 1. Actualización optimista de la UI
     setAsistentes(currentAsistentes =>
       currentAsistentes.map(a =>
         a.id_inscripcion === id_inscripcion ? { ...a, estado_asistencia: nuevoEstado } : a
@@ -91,7 +86,6 @@ export default function AsistentesPage() {
     );
 
     try {
-      // 2. Llamada a la API en segundo plano
       const response = await apiFetch(`/campanas/asistentes/${id_inscripcion}/estado`, {
         method: 'PUT',
         body: JSON.stringify({ estado_asistencia: nuevoEstado }),
@@ -101,32 +95,33 @@ export default function AsistentesPage() {
         throw new Error('No se pudo actualizar el estado.');
       }
       toast.success('Estado actualizado');
-
     } catch (error) {
-      // 3. Si falla, revertir el cambio en la UI y notificar
       toast.error('Error al actualizar. Intente de nuevo.');
       console.error("Error actualizando estado:", error);
-      fetchData(); // Recargamos los datos para asegurar consistencia
+      fetchData();
     }
   };
-
 
   if (loading) return <div className="p-10">Cargando asistentes...</div>;
   console.log("campanaInfo:", campanaInfo);
 
   return (
     <MainLayout>
-      <div className="container mx-auto py-10">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-  <h1 className="text-3xl font-bold">
-    {eventoInfo?.nombre || 'Evento'}
-  </h1>
-  <h3 className="text-xl font-semibold">
-    {campanaInfo?.nombre || 'Campaña'}
-  </h3>
-  <p className="text-muted-foreground">Lista de Usuarios</p>
-</div>
+      {/* MENOS padding vertical aquí */}
+      <div className="container mx-auto px-4 pt-3 pb-6">
+        {/* Reducimos separación del header */}
+        <div className="flex justify-between items-center mb-3">
+          {/* Controlamos márgenes internos del bloque de títulos */}
+          <div className="space-y-1">
+            <h1 className="text-3xl font-bold leading-tight m-0">
+              {eventoInfo?.nombre || 'Evento'}
+            </h1>
+            <h3 className="text-xl font-semibold leading-snug m-0">
+              {campanaInfo?.nombre || 'Campaña'}
+            </h3>
+            <p className="text-muted-foreground m-0">Lista de Usuarios</p>
+          </div>
+
           <Button
             onClick={() => router.push(`/eventos/${id_evento}/campanas`)}
             className="bg-blue-600 hover:bg-blue-700 text-white"
@@ -134,7 +129,6 @@ export default function AsistentesPage() {
             <ArrowLeft className="mr-2 h-4 w-4" />
             Volver a las campañas
           </Button>
-
         </div>
 
         <AsistentesTable
@@ -142,7 +136,6 @@ export default function AsistentesPage() {
           onEdit={handleEditAsistente}
           id_campana={id_campana}
           camposFormulario={camposFormulario}
-          // --- MODIFICACIÓN: Pasar la nueva función a la tabla ---
           onEstadoChange={handleEstadoChange}
         />
 
