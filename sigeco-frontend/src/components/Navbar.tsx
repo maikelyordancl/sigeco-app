@@ -102,6 +102,7 @@ export default function Navbar({ fontSize, increaseFontSize, decreaseFontSize, r
           </Button>
           {openMenu === "convocatoria" && (
             <div className="absolute bg-white text-black shadow-lg rounded mt-2 p-2 space-y-2 animate-fade-in">
+              <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/convocatoria/campanas")}>Campanas</Button>
               <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/convocatoria/influencers")}>Influencers</Button>
               <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/convocatoria/whatsapp")}>WhatsApp</Button>
             </div>
