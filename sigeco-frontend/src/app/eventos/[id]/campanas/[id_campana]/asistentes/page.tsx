@@ -25,12 +25,18 @@ export default function AsistentesPage() {
   const [camposFormulario, setCamposFormulario] = useState<CampoFormulario[]>([]);
   const [eventoInfo, setEventoInfo] = useState<any>(null);
 
+  // NUEVO: paginación
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(50); // default 50
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalInscripciones, setTotalInscripciones] = useState(0);
+
   const fetchData = useCallback(async () => {
     if (!id_campana || !id_evento) return;
     setLoading(true);
     try {
       const [asistentesRes, campanaRes, formularioRes, eventoRes] = await Promise.all([
-        apiFetch(`/campanas/${id_campana}/asistentes-v2`),
+        apiFetch(`/campanas/${id_campana}/asistentes-v2?page=${page}&limit=${limit}`),
         apiFetch(`/campanas/${id_campana}`),
         apiFetch(`/campanas/${id_campana}/formulario`),
         apiFetch(`/eventos/${id_evento}`),
@@ -45,7 +51,14 @@ export default function AsistentesPage() {
       const formularioData = await formularioRes.json();
       const eventoData = await eventoRes.json();
 
-      setAsistentes(asistentesData);
+      // IMPORTANTE: asistentesData es { asistentes, totalInscripciones, totalPages }
+      const arr = Array.isArray(asistentesData)
+        ? asistentesData
+        : (asistentesData.asistentes ?? []);
+      setAsistentes(arr);
+      setTotalInscripciones(asistentesData.totalInscripciones ?? 0);
+      setTotalPages(asistentesData.totalPages ?? 1);
+
       setCampanaInfo(campanaData.data);
       setCamposFormulario(formularioData.data || []);
       setEventoInfo(eventoData.data);
@@ -54,7 +67,7 @@ export default function AsistentesPage() {
     } finally {
       setLoading(false);
     }
-  }, [id_campana, id_evento]);
+  }, [id_campana, id_evento, page, limit]);
 
   useEffect(() => {
     fetchData();
@@ -137,6 +150,12 @@ export default function AsistentesPage() {
           id_campana={id_campana}
           camposFormulario={camposFormulario}
           onEstadoChange={handleEstadoChange}
+          // NUEVO: control del tamaño de página
+          limit={limit}
+          onLimitChange={(nuevo) => {
+            setPage(1);       // reset a la primera página al cambiar tamaño
+            setLimit(nuevo);
+          }}
         />
 
         {selectedAsistente && campanaInfo && (

@@ -80,7 +80,7 @@ const Inscripcion = {
 
     // --- INICIO DE LAS NUEVAS FUNCIONES CORREGIDAS ---
 
-    findWithCustomFieldsByCampanaId: async (id_campana) => {
+     findWithCustomFieldsByCampanaId: async (id_campana, limit = 100, offset = 0) => {
         const [campos] = await pool.execute(
             `SELECT fc.id_campo, fc.nombre_interno, fc.etiqueta 
        FROM campana_formulario_config cfc
@@ -95,6 +95,10 @@ const Inscripcion = {
                 `MAX(CASE WHEN ir.id_campo = ${campo.id_campo} THEN ir.valor END) AS \`${campo.nombre_interno}\``
             ).join(', ');
         }
+
+        const countQuery = `SELECT COUNT(DISTINCT i.id_inscripcion) as total FROM inscripciones i WHERE i.id_campana = ?`;
+        const [totalRows] = await pool.execute(countQuery, [id_campana]);
+        const totalInscripciones = totalRows[0].total;
 
         const query = `
       SELECT 
@@ -112,10 +116,16 @@ const Inscripcion = {
       WHERE i.id_campana = ?
       GROUP BY i.id_inscripcion
       ORDER BY i.fecha_inscripcion ASC
+      LIMIT ? OFFSET ?
     `;
 
-        const [rows] = await pool.execute(query, [id_campana]);
-        return rows;
+        const [rows] = await pool.execute(query, [id_campana, limit, offset]);
+        
+        return {
+            asistentes: rows,
+            totalInscripciones,
+            totalPages: Math.ceil(totalInscripciones / limit)
+        };
     },
 
     updateStatus: async (id_inscripcion, estado_asistencia) => {

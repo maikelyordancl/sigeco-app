@@ -37,6 +37,9 @@ interface AsistentesTableProps {
   id_campana: string;
   camposFormulario: CampoFormulario[];
   onEstadoChange: (id_inscripcion: number, nuevoEstado: string) => void | Promise<void>;
+  // NUEVO: control de tamaño de página
+  limit: number;
+  onLimitChange: (n: number) => void;
 }
 
 const multiWordGlobalFilter: FilterFn<Asistente> = (row, _columnId, filterValue) => {
@@ -101,11 +104,9 @@ const ESTADO_STYLES: Record<string, EstadoStyle> = {
   "Invitado": { bg: 'bg-slate-50 dark:bg-slate-900/60', text: 'text-slate-700 dark:text-slate-200', border: 'border-slate-200 dark:border-slate-800', dot: 'bg-slate-500', rowBorder: 'border-l-slate-400 dark:border-l-slate-600' },
   "Abrio Email": { bg: 'bg-amber-50 dark:bg-amber-900/40', text: 'text-amber-800 dark:text-amber-200', border: 'border-amber-200 dark:border-amber-800', dot: 'bg-amber-500', rowBorder: 'border-l-amber-400 dark:border-l-amber-600' },
   "Registrado": { bg: 'bg-sky-50 dark:bg-sky-900/40', text: 'text-sky-700 dark:text-sky-200', border: 'border-sky-200 dark:border-sky-800', dot: 'bg-sky-500', rowBorder: 'border-l-sky-400 dark:border-l-sky-600' },
-  // Confirmado → índigo para distinguir de Asistió
   "Confirmado": { bg: 'bg-indigo-50 dark:bg-indigo-900/40', text: 'text-indigo-700 dark:text-indigo-200', border: 'border-indigo-200 dark:border-indigo-800', dot: 'bg-indigo-500', rowBorder: 'border-l-indigo-400 dark:border-l-indigo-600' },
   "Por Confirmar": { bg: 'bg-yellow-50 dark:bg-yellow-900/40', text: 'text-yellow-800 dark:text-yellow-200', border: 'border-yellow-200 dark:border-yellow-800', dot: 'bg-yellow-500', rowBorder: 'border-l-yellow-400 dark:border-l-yellow-600' },
   "No Asiste": { bg: 'bg-red-50 dark:bg-red-900/40', text: 'text-red-700 dark:text-red-200', border: 'border-red-200 dark:border-red-800', dot: 'bg-red-500', rowBorder: 'border-l-red-400 dark:border-l-red-600' },
-  // Asistió → verde/emerald
   "Asistió": { bg: 'bg-emerald-50 dark:bg-emerald-900/40', text: 'text-emerald-700 dark:text-emerald-200', border: 'border-emerald-200 dark:border-emerald-800', dot: 'bg-emerald-500', rowBorder: 'border-l-emerald-400 dark:border-l-emerald-600' },
   "Cancelado": { bg: 'bg-zinc-50 dark:bg-zinc-900/40', text: 'text-zinc-700 dark:text-zinc-200', border: 'border-zinc-200 dark:border-zinc-800', dot: 'bg-zinc-500', rowBorder: 'border-l-zinc-400 dark:border-l-zinc-600' },
 };
@@ -113,18 +114,26 @@ const ESTADO_STYLES: Record<string, EstadoStyle> = {
 const getEstadoStyle = (estado?: string): EstadoStyle =>
   estado ? (ESTADO_STYLES[estado] ?? ESTILO_DEFAULT) : ESTILO_DEFAULT;
 
-export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, onEstadoChange }: AsistentesTableProps) {
+export function AsistentesTable({
+  data,
+  onEdit,
+  id_campana,
+  camposFormulario,
+  onEstadoChange,
+  limit,
+  onLimitChange,
+}: AsistentesTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [isInitialVisibilitySet, setIsInitialVisibilitySet] = useState(false);
 
   // Estado local para manejar eliminaciones
-  const [dataState, setDataState] = useState(data);
+  const [dataState, setDataState] = useState<Asistente[]>(Array.isArray(data) ? data : []);
 
   // 🔁 SINCRONIZAR props.data → estado local cuando el padre refresque
   useEffect(() => {
-    setDataState(data);
+    setDataState(Array.isArray(data) ? data : []);
   }, [data]);
 
   // Filtro por estado (sentinela ALL)
@@ -134,9 +143,10 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
   const dataConNumeroFila = useMemo(() => {
     const base = estadoFiltro === ALL
       ? dataState
-      : dataState.filter(a => a.estado_asistencia === estadoFiltro);
+      : dataState.filter(a => a?.estado_asistencia === estadoFiltro);
 
-    return base.map(row => ({
+    const arr = Array.isArray(base) ? base : [];
+    return arr.map(row => ({
       ...row,
       numero_fila: (row as any)['#'],
     }));
@@ -344,53 +354,70 @@ export function AsistentesTable({ data, onEdit, id_campana, camposFormulario, on
 
   return (
     <div>
-      {/* Toolbar en grid: [buscador | select | alternar] */}
+      {/* Toolbar en grid: [buscador | select | alternar + tamaño] */}
       <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-3 py-4">
         {/* Col 1: Buscador */}
         <div className="relative max-w-sm">
-  <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-cyan-600">
-    🔍
-  </span>
-  <Input
-    placeholder="Buscar..."
-    value={globalFilter}
-    onChange={(e) => setGlobalFilter(e.target.value)}
-    className="pl-8 border-2 border-cyan-500 focus:border-cyan-600 focus:ring-cyan-500 shadow-md"
-  />
-</div>
+          <span className="absolute inset-y-0 left-0 flex items-center pl-2 text-cyan-600">
+            🔍
+          </span>
+          <Input
+            placeholder="Buscar..."
+            value={globalFilter}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            className="pl-8 border-2 border-cyan-500 focus:border-cyan-600 focus:ring-cyan-500 shadow-md"
+          />
+        </div>
 
         {/* Col 2: Select de estado centrado */}
         <div className="justify-self-center">
           <p>Filtros: </p>
           <Select value={estadoFiltro} onValueChange={(v) => setEstadoFiltro(v)}>
-  <SelectTrigger
-    className={`w-[220px] border-2 border-cyan-500 focus:border-cyan-600 focus:ring-cyan-500 shadow-md ${estiloFiltro.bg} ${estiloFiltro.text}`}
-  >
-    <SelectValue />
-  </SelectTrigger>
-  <SelectContent>
-    <SelectItem value={ALL}>
-      <div className="flex items-center gap-2">
-        <span className={`h-2.5 w-2.5 rounded-full ${ESTILO_DEFAULT.dot}`} />
-        Todos
-      </div>
-    </SelectItem>
-    {ESTADOS.map(e => (
-      <SelectItem key={e} value={e}>
-        <div className="flex items-center gap-2">
-          <span className={`h-2.5 w-2.5 rounded-full ${getEstadoStyle(e).dot}`} />
-          {e}
+            <SelectTrigger
+              className={`w-[220px] border-2 border-cyan-500 focus:border-cyan-600 focus:ring-cyan-500 shadow-md ${estiloFiltro.bg} ${estiloFiltro.text}`}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>
+                <div className="flex items-center gap-2">
+                  <span className={`h-2.5 w-2.5 rounded-full ${ESTILO_DEFAULT.dot}`} />
+                  Todos
+                </div>
+              </SelectItem>
+              {ESTADOS.map(e => (
+                <SelectItem key={e} value={e}>
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2.5 w-2.5 rounded-full ${getEstadoStyle(e).dot}`} />
+                    {e}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-      </SelectItem>
-    ))}
-  </SelectContent>
-</Select>
 
-        </div>
-
-        {/* Col 3: Alternar Columnas alineado a la derecha */}
-        <div className="md:justify-self-end">
+        {/* Col 3: Alternar Columnas + Select de cantidad (alineado a la derecha) */}
+        <div className="md:justify-self-end flex items-center gap-3">
           <ConfigurarColumnas table={table} id_campana={id_campana} camposFormulario={camposFormulario} />
+
+          {/* NUEVO: Select de cantidad */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Registros:</span>
+            <Select
+              value={String(limit)}
+              onValueChange={(v) => onLimitChange(parseInt(v, 10))}
+            >
+              <SelectTrigger className="w-[120px] border-2 border-cyan-500 focus:border-cyan-600 focus:ring-cyan-500 shadow-md">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[25, 50, 100, 200, 300].map(n => (
+                  <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Fila 2: Leyenda centrada EXACTAMENTE bajo el select (columna central) */}

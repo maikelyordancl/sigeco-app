@@ -1,5 +1,5 @@
 const express = require('express');
-const { body, param } = require('express-validator');
+const { body, param, query } = require('express-validator');
 const router = express.Router();
 const campanasController = require('../controllers/campanasController');
 const formularioController = require('../controllers/formularioController'); // Importamos el nuevo controlador
@@ -135,8 +135,15 @@ router.put(
 );
 
 // Agrega esta línea en /src/routes/campanasRoutes.js, por ejemplo, después de la ruta para obtener asistentes.
-router.get('/:id_campana/asistentes-v2', campanasController.getAsistentesConCampos);
-
+router.get(
+    '/:id_campana/asistentes-v2', 
+    [
+        param('id_campana').isInt({ gt: 0 }),
+        query('page').optional().isInt({ min: 1 }).withMessage('La página debe ser un entero positivo.'),
+        query('limit').optional().isInt({ min: 1 }).withMessage('El límite debe ser un entero positivo.')
+    ],
+    campanasController.getAsistentesConCampos
+);
 router.put('/asistentes/:id_inscripcion/estado', campanasController.updateAsistenteStatus);
 router.put('/asistentes/:id_inscripcion/nota', campanasController.updateAsistenteNota);
 router.get('/:id_campana/formulario', formularioController.getCamposPorCampana);
