@@ -28,7 +28,6 @@ interface AsistentesTableProps {
   totalPages: number;
   totalInscripciones: number;
   onPageChange: (newPage: number) => void;
-  // --- NUEVO: Prop para recibir los conteos ---
   statusCounts: Record<string, number>;
 }
 
@@ -87,7 +86,7 @@ const getEstadoStyle = (estado?: string): EstadoStyle => estado ? (ESTADO_STYLES
 export function AsistentesTable({
   data, onEdit, id_campana, camposFormulario, onEstadoChange,
   limit, onLimitChange, page, totalPages, totalInscripciones, onPageChange,
-  statusCounts // <-- Recibir la prop
+  statusCounts
 }: AsistentesTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
@@ -204,10 +203,35 @@ export function AsistentesTable({
     <div>
       <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-3 py-4">
         <div className="relative max-w-sm"><span className="absolute inset-y-0 left-0 pl-2 text-cyan-600">🔍</span><Input placeholder="Buscar..." value={globalFilter} onChange={e => setGlobalFilter(e.target.value)} className="pl-8 border-2 border-cyan-500 shadow-md" /></div>
-        <div className="justify-self-center"><p>Filtros: </p><Select value={estadoFiltro} onValueChange={v => setEstadoFiltro(v)}><SelectTrigger className={`w-[220px] border-2 border-cyan-500 shadow-md ${estiloFiltro.bg} ${estiloFiltro.text}`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value={ALL}><div className="flex items-center gap-2"><span className={`h-2.5 w-2.5 rounded-full ${ESTILO_DEFAULT.dot}`} />Todos</div></SelectItem>{ESTADOS.map(e => (<SelectItem key={e} value={e}><div className="flex items-center gap-2"><span className={`h-2.5 w-2.5 rounded-full ${getEstadoStyle(e).dot}`} />{e}</div></SelectItem>))}</SelectContent></Select></div>
+        
+        {/* --- MODIFICACIÓN: Select de Filtro con Conteos --- */}
+        <div className="justify-self-center">
+          <p>Filtros: </p>
+          <Select value={estadoFiltro} onValueChange={v => setEstadoFiltro(v)}>
+            <SelectTrigger className={`w-[220px] border-2 border-cyan-500 shadow-md ${estiloFiltro.bg} ${estiloFiltro.text}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>
+                <div className="flex items-center gap-2">
+                  <span className={`h-2.5 w-2.5 rounded-full ${ESTILO_DEFAULT.dot}`} />
+                  Todos ({totalInscripciones})
+                </div>
+              </SelectItem>
+              {ESTADOS.map(e => (
+                <SelectItem key={e} value={e}>
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2.5 w-2.5 rounded-full ${getEstadoStyle(e).dot}`} />
+                    {e} ({statusCounts[e] || 0})
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        
         <div className="md:justify-self-end flex items-center gap-3"><ConfigurarColumnas table={table} id_campana={id_campana} camposFormulario={camposFormulario} /><div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Registros:</span><Select value={String(limit)} onValueChange={v => onLimitChange(parseInt(v, 10))}><SelectTrigger className="w-[120px] border-2 border-cyan-500 shadow-md"><SelectValue /></SelectTrigger><SelectContent>{[25, 50, 100, 200, 300].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent></Select></div></div>
         
-        {/* --- LEYENDA CON CONTEOS --- */}
         <div className="mt-2 md:col-start-2 md:col-end-3 justify-self-center">
             <div className="flex flex-wrap items-center justify-center gap-2">
             {["Confirmado", "Asistió", "Registrado", "Por Confirmar", "Abrio Email", "No Asiste", "Invitado", "Cancelado"].map((e) => {
