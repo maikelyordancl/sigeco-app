@@ -78,14 +78,48 @@ const Inscripcion = {
         }
     },
 
-    // --- INICIO DE LAS NUEVAS FUNCIONES CORREGIDAS ---
-
     findWithCustomFieldsByCampanaId: async (id_campana, limit = 100, offset = 0) => {
+        // --- INICIO DE LA MODIFICACIÓN ---
+
+        // 1. Consulta para obtener los conteos por estado y el total de inscripciones
+        const countQuery = `
+            SELECT 
+                COUNT(*) AS total,
+                SUM(CASE WHEN estado_asistencia = 'Invitado' THEN 1 ELSE 0 END) AS "Invitado",
+                SUM(CASE WHEN estado_asistencia = 'Abrio Email' THEN 1 ELSE 0 END) AS "Abrio Email",
+                SUM(CASE WHEN estado_asistencia = 'Registrado' THEN 1 ELSE 0 END) AS "Registrado",
+                SUM(CASE WHEN estado_asistencia = 'Confirmado' THEN 1 ELSE 0 END) AS "Confirmado",
+                SUM(CASE WHEN estado_asistencia = 'Por Confirmar' THEN 1 ELSE 0 END) AS "Por Confirmar",
+                SUM(CASE WHEN estado_asistencia = 'Asistió' THEN 1 ELSE 0 END) AS "Asistió",
+                SUM(CASE WHEN estado_asistencia = 'No Asiste' THEN 1 ELSE 0 END) AS "No Asiste",
+                SUM(CASE WHEN estado_asistencia = 'Cancelado' THEN 1 ELSE 0 END) AS "Cancelado"
+            FROM inscripciones 
+            WHERE id_campana = ?
+        `;
+
+        const [countRows] = await pool.execute(countQuery, [id_campana]);
+        const counts = countRows[0];
+        const totalInscripciones = counts.total || 0;
+        
+        // Creamos el objeto de conteos para el frontend
+        const statusCounts = {
+            "Invitado": parseInt(counts["Invitado"] || 0),
+            "Abrio Email": parseInt(counts["Abrio Email"] || 0),
+            "Registrado": parseInt(counts["Registrado"] || 0),
+            "Confirmado": parseInt(counts["Confirmado"] || 0),
+            "Por Confirmar": parseInt(counts["Por Confirmar"] || 0),
+            "Asistió": parseInt(counts["Asistió"] || 0),
+            "No Asiste": parseInt(counts["No Asiste"] || 0),
+            "Cancelado": parseInt(counts["Cancelado"] || 0)
+        };
+        
+        // --- FIN DE LA MODIFICACIÓN ---
+
         const [campos] = await pool.execute(
             `SELECT fc.id_campo, fc.nombre_interno, fc.etiqueta 
-       FROM campana_formulario_config cfc
-       JOIN formulario_campos fc ON cfc.id_campo = fc.id_campo
-       WHERE cfc.id_campana = ? AND fc.es_de_sistema = 0`,
+             FROM campana_formulario_config cfc
+             JOIN formulario_campos fc ON cfc.id_campo = fc.id_campo
+             WHERE cfc.id_campana = ? AND fc.es_de_sistema = 0`,
             [id_campana]
         );
 
@@ -95,36 +129,34 @@ const Inscripcion = {
                 `MAX(CASE WHEN ir.id_campo = ${campo.id_campo} THEN ir.valor END) AS \`${campo.nombre_interno}\``
             ).join(', ');
         }
-
-        const countQuery = `SELECT COUNT(DISTINCT i.id_inscripcion) as total FROM inscripciones i WHERE i.id_campana = ?`;
-        const [totalRows] = await pool.execute(countQuery, [id_campana]);
-        const totalInscripciones = totalRows[0].total;
-
+        
         const query = `
-      SELECT 
-        ROW_NUMBER() OVER (ORDER BY i.fecha_inscripcion ASC) as '#',
-        i.id_inscripcion, i.estado_asistencia, i.estado_pago, i.nota,
-        c.id_contacto, c.nombre, c.email, c.telefono, c.rut, c.empresa, c.actividad, c.profesion, c.pais, c.comuna,
-        p.id_pago, p.monto, p.estado AS estado_transaccion,
-        te.nombre AS tipo_entrada
-        ${customFieldsSelect ? `, ${customFieldsSelect}` : ''}
-      FROM inscripciones i
-      JOIN contactos c ON i.id_contacto = c.id_contacto
-      LEFT JOIN inscripcion_respuestas ir ON i.id_inscripcion = ir.id_inscripcion
-      LEFT JOIN pagos p ON i.id_inscripcion = p.id_inscripcion
-      LEFT JOIN tipos_de_entrada te ON i.id_tipo_entrada = te.id_tipo_entrada
-      WHERE i.id_campana = ?
-      GROUP BY i.id_inscripcion
-      ORDER BY i.fecha_inscripcion ASC
-      LIMIT ? OFFSET ?
-    `;
+            SELECT 
+                ROW_NUMBER() OVER (ORDER BY i.fecha_inscripcion ASC) as '#',
+                i.id_inscripcion, i.estado_asistencia, i.estado_pago, i.nota,
+                c.id_contacto, c.nombre, c.email, c.telefono, c.rut, c.empresa, c.actividad, c.profesion, c.pais, c.comuna,
+                p.id_pago, p.monto, p.estado AS estado_transaccion,
+                te.nombre AS tipo_entrada
+                ${customFieldsSelect ? `, ${customFieldsSelect}` : ''}
+            FROM inscripciones i
+            JOIN contactos c ON i.id_contacto = c.id_contacto
+            LEFT JOIN inscripcion_respuestas ir ON i.id_inscripcion = ir.id_inscripcion
+            LEFT JOIN pagos p ON i.id_inscripcion = p.id_inscripcion
+            LEFT JOIN tipos_de_entrada te ON i.id_tipo_entrada = te.id_tipo_entrada
+            WHERE i.id_campana = ?
+            GROUP BY i.id_inscripcion
+            ORDER BY i.fecha_inscripcion ASC
+            LIMIT ? OFFSET ?
+        `;
 
         const [rows] = await pool.execute(query, [id_campana, limit, offset]);
         
+        // Devolvemos el nuevo objeto con los conteos
         return {
             asistentes: rows,
             totalInscripciones,
-            totalPages: Math.ceil(totalInscripciones / limit)
+            totalPages: Math.ceil(totalInscripciones / limit),
+            statusCounts // <-- ¡AQUÍ ESTÁ LA NUEVA DATA!
         };
     },
     updateStatus: async (id_inscripcion, estado_asistencia) => {

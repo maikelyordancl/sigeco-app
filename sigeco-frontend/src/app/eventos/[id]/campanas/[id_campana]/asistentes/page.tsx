@@ -31,6 +31,9 @@ export default function AsistentesPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalInscripciones, setTotalInscripciones] = useState(0);
 
+  // --- NUEVO: Estado para los conteos de estado ---
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+
   const fetchData = useCallback(async () => {
     if (!id_campana || !id_evento) return;
     setLoading(true);
@@ -56,6 +59,9 @@ export default function AsistentesPage() {
       setAsistentes(arr);
       setTotalInscripciones(asistentesData.totalInscripciones ?? 0);
       setTotalPages(asistentesData.totalPages ?? 1);
+
+      // --- NUEVO: Guardar los conteos en el estado ---
+      setStatusCounts(asistentesData.statusCounts ?? {});
       
       setCampanaInfo(campanaData.data);
       setCamposFormulario(formularioData.data || []);
@@ -106,6 +112,8 @@ export default function AsistentesPage() {
         throw new Error('No se pudo actualizar el estado.');
       }
       toast.success('Estado actualizado');
+      // Opcional: Refrescar los conteos después de un cambio de estado
+      fetchData(); 
     } catch (error) {
       toast.error('Error al actualizar. Intente de nuevo.');
       console.error("Error actualizando estado:", error);
@@ -113,16 +121,13 @@ export default function AsistentesPage() {
     }
   };
   
-  // --- NUEVO: Handler para cambiar de página ---
   const handlePageChange = (newPage: number) => {
     if (newPage > 0 && newPage <= totalPages) {
       setPage(newPage);
     }
   };
 
-
   if (loading) return <div className="p-10">Cargando asistentes...</div>;
-  console.log("campanaInfo:", campanaInfo);
 
   return (
     <MainLayout>
@@ -158,11 +163,12 @@ export default function AsistentesPage() {
             setPage(1);
             setLimit(nuevo);
           }}
-          // --- NUEVO: Props para paginación ---
           page={page}
           totalPages={totalPages}
           totalInscripciones={totalInscripciones}
           onPageChange={handlePageChange}
+          // --- NUEVO: Prop con los conteos para la tabla ---
+          statusCounts={statusCounts}
         />
 
         {selectedAsistente && campanaInfo && (
