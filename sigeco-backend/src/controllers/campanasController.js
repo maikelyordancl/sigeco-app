@@ -163,12 +163,8 @@ exports.guardarLanding = async (req, res) => {
 
 exports.getAsistentesConCampos = async (req, res) => {
   try {
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 100;
-    const offset = (page - 1) * limit;
-    
-    const data = await InscripcionModel.findWithCustomFieldsByCampanaId(req.params.id_campana, limit, offset);
-    res.json(data);
+    const asistentes = await InscripcionModel.findWithCustomFieldsByCampanaId(req.params.id_campana);
+    res.json(asistentes);
   } catch (error) {
     console.error('Error fetching asistentes with custom fields:', error);
     res.status(500).json({ message: 'Error al obtener los asistentes.' });
