@@ -25,7 +25,7 @@ export default function AsistentesPage() {
   const [camposFormulario, setCamposFormulario] = useState<CampoFormulario[]>([]);
   const [eventoInfo, setEventoInfo] = useState<any>(null);
 
-  // NUEVO: paginación
+  // --- PAGINACIÓN ---
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50); // default 50
   const [totalPages, setTotalPages] = useState(1);
@@ -50,15 +50,13 @@ export default function AsistentesPage() {
       const campanaData = await campanaRes.json();
       const formularioData = await formularioRes.json();
       const eventoData = await eventoRes.json();
+      
+      const arr = Array.isArray(asistentesData.asistentes) ? asistentesData.asistentes : [];
 
-      // IMPORTANTE: asistentesData es { asistentes, totalInscripciones, totalPages }
-      const arr = Array.isArray(asistentesData)
-        ? asistentesData
-        : (asistentesData.asistentes ?? []);
       setAsistentes(arr);
       setTotalInscripciones(asistentesData.totalInscripciones ?? 0);
       setTotalPages(asistentesData.totalPages ?? 1);
-
+      
       setCampanaInfo(campanaData.data);
       setCamposFormulario(formularioData.data || []);
       setEventoInfo(eventoData.data);
@@ -114,17 +112,22 @@ export default function AsistentesPage() {
       fetchData();
     }
   };
+  
+  // --- NUEVO: Handler para cambiar de página ---
+  const handlePageChange = (newPage: number) => {
+    if (newPage > 0 && newPage <= totalPages) {
+      setPage(newPage);
+    }
+  };
+
 
   if (loading) return <div className="p-10">Cargando asistentes...</div>;
   console.log("campanaInfo:", campanaInfo);
 
   return (
     <MainLayout>
-      {/* MENOS padding vertical aquí */}
       <div className="container mx-auto px-4 pt-3 pb-6">
-        {/* Reducimos separación del header */}
         <div className="flex justify-between items-center mb-3">
-          {/* Controlamos márgenes internos del bloque de títulos */}
           <div className="space-y-1">
             <h1 className="text-3xl font-bold leading-tight m-0">
               {eventoInfo?.nombre || 'Evento'}
@@ -150,12 +153,16 @@ export default function AsistentesPage() {
           id_campana={id_campana}
           camposFormulario={camposFormulario}
           onEstadoChange={handleEstadoChange}
-          // NUEVO: control del tamaño de página
           limit={limit}
           onLimitChange={(nuevo) => {
-            setPage(1);       // reset a la primera página al cambiar tamaño
+            setPage(1);
             setLimit(nuevo);
           }}
+          // --- NUEVO: Props para paginación ---
+          page={page}
+          totalPages={totalPages}
+          totalInscripciones={totalInscripciones}
+          onPageChange={handlePageChange}
         />
 
         {selectedAsistente && campanaInfo && (

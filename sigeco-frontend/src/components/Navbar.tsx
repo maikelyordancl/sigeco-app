@@ -55,7 +55,7 @@ export default function Navbar({ fontSize, increaseFontSize, decreaseFontSize, r
           <Button variant="ghost" size="icon" onClick={increaseFontSize}><ZoomIn size={20} /></Button>
           <Button variant="ghost" size="icon" onClick={resetFontSize}><RotateCcw size={20} /></Button>
         </div>
-        <Button variant="ghost" onClick={() => router.push("/dashboard")}>Inici testo</Button>
+        <Button variant="ghost" onClick={() => router.push("/dashboard")}>Inicio</Button>
 
         <div className="relative">
           <Button

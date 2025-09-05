@@ -163,14 +163,25 @@ exports.guardarLanding = async (req, res) => {
 
 exports.getAsistentesConCampos = async (req, res) => {
   try {
+    // 1. Validar y obtener los parámetros de la petición
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { id_campana } = req.params;
     const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 100;
+    const limit = parseInt(req.query.limit, 10) || 50; // Sincronizado con el frontend
     const offset = (page - 1) * limit;
-    
-    const data = await InscripcionModel.findWithCustomFieldsByCampanaId(req.params.id_campana, limit, offset);
-    res.json(data);
+
+    // 2. Llamar a la función del modelo que ya hace todo el trabajo
+    const paginatedData = await InscripcionModel.findWithCustomFieldsByCampanaId(id_campana, limit, offset);
+
+    // 3. Enviar la respuesta completa directamente al frontend
+    res.json(paginatedData);
+
   } catch (error) {
-    console.error('Error fetching asistentes with custom fields:', error);
+    console.error('Error fetching asistentes con campos personalizados:', error);
     res.status(500).json({ message: 'Error al obtener los asistentes.' });
   }
 };
