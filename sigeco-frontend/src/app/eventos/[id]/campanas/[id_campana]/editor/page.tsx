@@ -277,7 +277,8 @@ const EditorPageContent = () => {
                                     onInit={(_evt, editor) => emailEditorRef.current = editor}
                                     initialValue={emailBody}
                                     init={{
-                                        height: 500,
+                                        language: 'es', 
+                                        height: 1000,
                                         menubar: true, // Habilitamos la barra de menú para acceso a más herramientas
                                         plugins: [
                                             'advlist', 'autolink', 'lists', 'link', 'image', 'charmap', 
