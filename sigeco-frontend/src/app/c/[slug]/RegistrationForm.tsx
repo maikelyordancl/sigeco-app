@@ -204,7 +204,10 @@ const DynamicForm = ({
             name={fieldName}
             control={control}
             render={({ field }) => (
-              <Select onValueChange={field.onChange} value={String(field.value || '')}>
+              <Select
+                onValueChange={field.onChange}
+                value={String(field.value || "CL")} // <- Chile por defecto
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona un país..." />
                 </SelectTrigger>
@@ -218,6 +221,7 @@ const DynamicForm = ({
               </Select>
             )}
           />
+
           {error && <p className="text-red-500 text-xs mt-1">{error.message}</p>}
         </div>
       );
