@@ -33,8 +33,46 @@ const normalizeCampos = (formulario: FormularioProp): FormularioCampo[] => {
   return [];
 };
 
+// ---------- RUT helpers ----------
+const cleanRut = (rut: string) => rut.replace(/[^0-9kK]/g, '').toUpperCase();
+
+const computeDv = (numStr: string) => {
+  let sum = 0;
+  let mul = 2;
+  for (let i = numStr.length - 1; i >= 0; i--) {
+    sum += parseInt(numStr[i], 10) * mul;
+    mul = mul === 7 ? 2 : mul + 1;
+  }
+  const rest = 11 - (sum % 11);
+  if (rest === 11) return '0';
+  if (rest === 10) return 'K';
+  return String(rest);
+};
+
+const isValidRut = (rutInput?: string | null) => {
+  if (!rutInput || typeof rutInput !== 'string') return false;
+  const rut = cleanRut(rutInput);
+  if (rut.length < 2) return false;
+  const cuerpo = rut.slice(0, -1);
+  const dv = rut.slice(-1);
+  if (!/^\d+$/.test(cuerpo)) return false;
+  return computeDv(cuerpo) === dv.toUpperCase();
+};
+
+const formatRut = (rutInput: string) => {
+  const rut = cleanRut(rutInput);
+  if (rut.length <= 1) return rut;
+  const cuerpo = rut.slice(0, -1);
+  const dv = rut.slice(-1);
+  // poner puntos cada 3 desde derecha
+  let cuerpoRev = cuerpo.split('').reverse().join('');
+  cuerpoRev = cuerpoRev.replace(/(\d{3})(?=\d)/g, '$1.');
+  const cuerpoFmt = cuerpoRev.split('').reverse().join('');
+  return `${cuerpoFmt}-${dv}`;
+};
+
+// ---------- Schema dinámico ----------
 const buildSchema = (campos: FormularioCampo[]) => {
-  // Si no hay campos, devolvemos un esquema vacío
   if (!Array.isArray(campos) || campos.length === 0) {
     return yup.object().shape({});
   }
@@ -45,29 +83,60 @@ const buildSchema = (campos: FormularioCampo[]) => {
     let validator: any;
 
     switch (campo.tipo_campo) {
-      case 'TEXTO_CORTO':
-        validator =
-          campo.nombre_interno === 'email'
-            ? yup.string().email('Debe ser un email válido.')
-            : yup.string();
+      case 'TEXTO_CORTO': {
+        // Casos especiales: email y rut
+        if (campo.nombre_interno === 'email') {
+          validator = yup
+            .string()
+            .email('Debe ser un email válido.')
+            .required(`El campo "${campo.etiqueta}" es obligatorio.`);
+        } else if (campo.nombre_interno?.toLowerCase() === 'rut') {
+          validator = yup
+            .string()
+            .test('rut-valido', 'RUT inválido.', (v) => (v ? isValidRut(v) : !campo.es_obligatorio))
+            .transform((v) => (typeof v === 'string' ? v.trim() : v));
+          if (campo.es_obligatorio) {
+            validator = validator.required(`El campo "${campo.etiqueta}" es obligatorio.`);
+          } else {
+            validator = validator.nullable().transform((v: any) => (v === '' ? null : v));
+          }
+        } else {
+          validator = yup.string();
+          if (campo.es_obligatorio) {
+            validator = validator.required(`El campo "${campo.etiqueta}" es obligatorio.`);
+          } else {
+            validator = validator.nullable().transform((v: any) => (v === '' ? null : v));
+          }
+        }
         break;
+      }
       case 'PARRAFO':
         validator = yup.string();
+        if (campo.es_obligatorio) {
+          validator = validator.required(`El campo "${campo.etiqueta}" es obligatorio.`);
+        } else {
+          validator = validator.nullable().transform((v: any) => (v === '' ? null : v));
+        }
         break;
       case 'DESPLEGABLE':
       case 'SELECCION_UNICA':
         validator = yup.string();
-        break;
-      case 'CASILLAS':
-        validator = yup.array().of(yup.string());
         if (campo.es_obligatorio) {
-          validator = validator.min(
-            1,
-            `Debes seleccionar al menos una opción para "${campo.etiqueta}".`
-          );
+          validator = validator.required(`El campo "${campo.etiqueta}" es obligatorio.`);
+        } else {
+          validator = validator.nullable().transform((v: any) => (v === '' ? null : v));
         }
         break;
-      case 'ARCHIVO':
+      case 'CASILLAS': {
+        validator = yup.array().of(yup.string());
+        if (campo.es_obligatorio) {
+          validator = validator.min(1, `Debes seleccionar al menos una opción para "${campo.etiqueta}".`);
+        } else {
+          validator = validator.nullable();
+        }
+        break;
+      }
+      case 'ARCHIVO': {
         validator = yup.mixed();
         if (campo.es_obligatorio) {
           validator = validator.test(
@@ -75,18 +144,19 @@ const buildSchema = (campos: FormularioCampo[]) => {
             `El archivo para "${campo.etiqueta}" es obligatorio.`,
             (v: any) => !!v && v.length > 0
           );
+        } else {
+          validator = validator.nullable();
         }
         break;
-      default:
+      }
+      default: {
         validator = yup.string();
-    }
-
-    if (campo.nombre_interno === 'email') {
-      validator = validator.required(`El campo "${campo.etiqueta}" es obligatorio.`);
-    } else if (campo.es_obligatorio && !['CASILLAS', 'ARCHIVO'].includes(campo.tipo_campo)) {
-      validator = validator.required(`El campo "${campo.etiqueta}" es obligatorio.`);
-    } else if (!campo.es_obligatorio) {
-      validator = validator.nullable().transform((v: any) => (v === '' ? null : v));
+        if (campo.es_obligatorio) {
+          validator = validator.required(`El campo "${campo.etiqueta}" es obligatorio.`);
+        } else {
+          validator = validator.nullable().transform((v: any) => (v === '' ? null : v));
+        }
+      }
     }
 
     shape[campo.nombre_interno] = validator;
@@ -181,14 +251,22 @@ const DynamicForm = ({
     handleSubmit,
     control,
     reset,
+    setValue,
     formState: { errors },
-  } = useForm<FormDataShape>({ resolver: yupResolver(schema), defaultValues });
+  } = useForm<FormDataShape>({
+    resolver: yupResolver(schema),
+    defaultValues: {
+      pais: defaultValues?.pais || 'CL', // Chile por defecto
+      ...defaultValues,
+    },
+  });
 
   const renderCampo = (campo: FormularioCampo) => {
     if (!campo?.es_visible) return null;
     const fieldName = campo.nombre_interno;
     const error = errors[fieldName] as any;
     const isEmail = fieldName === 'email';
+    const isRut = fieldName?.toLowerCase() === 'rut';
     const etiqueta = fieldName === 'nombre' ? 'Nombre Completo' : campo.etiqueta;
 
     // País
@@ -204,10 +282,7 @@ const DynamicForm = ({
             name={fieldName}
             control={control}
             render={({ field }) => (
-              <Select
-                onValueChange={field.onChange}
-                value={String(field.value || "CL")} // <- Chile por defecto
-              >
+              <Select onValueChange={field.onChange} value={String(field.value || 'CL')}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona un país..." />
                 </SelectTrigger>
@@ -221,7 +296,6 @@ const DynamicForm = ({
               </Select>
             )}
           />
-
           {error && <p className="text-red-500 text-xs mt-1">{error.message}</p>}
         </div>
       );
@@ -241,6 +315,13 @@ const DynamicForm = ({
             type={isEmail ? 'email' : 'text'}
             readOnly={isEmail && defaultValues?.[fieldName]}
             className={isEmail && defaultValues?.[fieldName] ? 'bg-gray-100' : ''}
+            onBlur={(e) => {
+              if (isRut && e.target.value) {
+                const formatted = formatRut(e.target.value);
+                setValue(fieldName, formatted as any, { shouldValidate: true, shouldDirty: true });
+              }
+            }}
+            placeholder={isRut ? '12.345.678-5' : undefined}
           />
         )}
 
@@ -343,7 +424,7 @@ const RegistrationForm: React.FC<{
   tickets: Ticket[];
   formulario: FormularioProp;
 }> = ({ campana, tickets, formulario }) => {
-  const campos = normalizeCampos(formulario);             // <- Normalizamos aquí
+  const campos = normalizeCampos(formulario);
   const isPago = !!campana.obligatorio_pago;
   const [step, setStep] = useState<'selection' | 'email_check' | 'form'>(isPago ? 'selection' : 'form');
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
