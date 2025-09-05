@@ -257,6 +257,34 @@ exports.updateAsistenteCompleto = async (req, res) => {
   }
 };
 
+exports.updateEmailTemplate = async (req, res) => {
+    try {
+        const { id_campana } = req.params;
+        const { emailSubject, emailBody } = req.body;
+
+        if (typeof emailSubject === 'undefined' || typeof emailBody === 'undefined') {
+            return res.status(400).json({ message: 'El asunto (emailSubject) y el cuerpo (emailBody) son requeridos.' });
+        }
+
+        const campanaData = {
+            email_subject: emailSubject,
+            email_body: emailBody,
+        };
+
+        const result = await Campana.updateById(id_campana, campanaData);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Campaña no encontrada.' });
+        }
+
+        res.status(200).json({ message: 'Plantilla de correo actualizada exitosamente.' });
+    } catch (error) {
+        console.error('Error al actualizar la plantilla de correo:', error);
+        res.status(500).json({ message: 'Error interno del servidor al actualizar la plantilla.' });
+    }
+};
+
+
 /**
  * Elimina un asistente (inscripción) de una campaña.
  */

@@ -128,7 +128,6 @@ exports.crearInscripcionPublica = async (req, res) => {
             const key = campo.nombre_interno;
             let value = req.body[key];
 
-            // Manejo de archivo
             if (campo.tipo_campo === 'ARCHIVO') {
                 const file = req.files && req.files.find(f => f.fieldname === key);
                 if (file) {
@@ -137,40 +136,27 @@ exports.crearInscripcionPublica = async (req, res) => {
                     return res.status(400).json({ success: false, message: `El archivo para "${campo.etiqueta}" es obligatorio.` });
                 }
             }
-
-            // Opción A: CASILLAS viene como JSON string desde el front -> parsear a array UNA sola vez
+            
             if (campo.tipo_campo === 'CASILLAS' && typeof value === 'string') {
                 try {
                     const parsed = JSON.parse(value);
-                    if (Array.isArray(parsed)) {
-                        value = parsed;
-                    } else if (parsed == null) {
-                        value = [];
-                    } else {
-                        // Fallback defensivo: si no es array, lo envolvemos como array único
-                        value = [String(parsed)];
-                    }
+                    if (Array.isArray(parsed)) { value = parsed; } 
+                    else if (parsed == null) { value = []; } 
+                    else { value = [String(parsed)]; }
                 } catch (e) {
                     console.warn(`Valor CASILLAS no es JSON válido para "${key}", usando fallback. Valor recibido:`, value);
                     value = value ? [String(value)] : [];
                 }
             }
-
-            // Normalizar: ignorar vacíos; para arrays, ignorar si están vacíos
+            
             const isArray = Array.isArray(value);
-            const isEmpty =
-                value === undefined ||
-                value === null ||
-                (typeof value === 'string' && value.trim() === '') ||
-                (isArray && value.length === 0);
+            const isEmpty = value === undefined || value === null || (typeof value === 'string' && value.trim() === '') || (isArray && value.length === 0);
 
             if (isEmpty) continue;
 
             if (campo.es_de_sistema) {
-                // Campos de sistema deben ser escalares; CASILLAS no se espera aquí
-                datosContacto[key] = isArray ? value.join(', ') : value; // o simplemente value si deseas guardar tal cual
+                datosContacto[key] = isArray ? value.join(', ') : value;
             } else {
-                // NO forzar String aquí; dejamos el tipo real para que saveRespuestas decida cómo persistir
                 respuestasPersonalizadas.push({
                     id_campo: campo.id_campo,
                     valor: value
@@ -178,7 +164,6 @@ exports.crearInscripcionPublica = async (req, res) => {
             }
         }
 
-        // Contacto por email
         let contacto = await ContactoModel.findByEmail(email);
 
         if (contacto) {
@@ -188,7 +173,6 @@ exports.crearInscripcionPublica = async (req, res) => {
             contacto = { id_contacto: nuevoContacto.id_contacto };
         }
 
-        // Inscripción
         let inscripcion = await InscripcionModel.findByCampanaAndContacto(id_campana, contacto.id_contacto);
 
         if (inscripcion) {
@@ -209,12 +193,10 @@ exports.crearInscripcionPublica = async (req, res) => {
             });
         }
 
-        // Guardar respuestas personalizadas (con nueva lógica de persistencia)
         if (respuestasPersonalizadas.length > 0) {
             await FormularioModel.saveRespuestas(inscripcion.id_inscripcion, respuestasPersonalizadas);
         }
 
-        // Flujo de pago (si corresponde)
         if (campanaRules.obligatorio_pago) {
             const ordenCompra = `sigeco-insc-${inscripcion.id_inscripcion}-${Date.now()}`;
             const nuevoPago = await PagoModel.create({
@@ -239,10 +221,8 @@ exports.crearInscripcionPublica = async (req, res) => {
             }
         }
 
-        // Confirmación sin pago
         await InscripcionModel.update(inscripcion.id_inscripcion, { estado_asistencia: 'Registrado' });
 
-        // Envío de correo (sin cambios de lógica aquí)
         const campanaData = await CampanaModel.findPublicDataById(id_campana);
         if (campanaData && campanaData.campana) {
             const { evento_nombre, fecha_inicio, fecha_fin, lugar } = campanaData.campana;
@@ -253,11 +233,18 @@ exports.crearInscripcionPublica = async (req, res) => {
                 event_location: lugar
             };
 
-            if (campanaRules.obligatorio_pago && campanaRules.estado_pago === 'Pagado') {
-                await emailService.sendConfirmationEmail(email, datosContacto.nombre, eventData);
-            } else if (!campanaRules.obligatorio_pago) {
-                await emailService.sendConfirmationEmail(email, datosContacto.nombre, eventData);
+            // --- INICIO DE LA MODIFICACIÓN ---
+            // Se elimina la condición de pago aquí, ya que el correo de pago se envía al confirmar el pago.
+            // Esta sección ahora solo se ejecuta para inscripciones gratuitas.
+            if (!campanaRules.obligatorio_pago) {
+                await emailService.sendConfirmationEmail(
+                    email, 
+                    datosContacto.nombre, 
+                    eventData,
+                    id_campana // Se pasa el ID de la campaña para usar la plantilla correcta
+                );
             }
+            // --- FIN DE LA MODIFICACIÓN ---
         }
 
         return res.status(200).json({ success: true, message: 'Inscripción confirmada correctamente.' });
@@ -274,23 +261,44 @@ exports.crearInscripcionPublica = async (req, res) => {
 exports.getPagoByToken = async (req, res) => {
     try {
         const { token } = req.params;
-
         const flowStatusResult = await FlowService.obtenerEstadoDelPago(token);
         const nuestroEstado = mapFlowStatus(flowStatusResult.status);
-
         const pago = await PagoModel.findByToken(token);
+
         if (pago && pago.estado !== nuestroEstado) {
             await PagoModel.updateById(pago.id_pago, { estado: nuestroEstado });
             await InscripcionModel.update(pago.id_inscripcion, { estado_pago: nuestroEstado });
+
+            // --- INICIO DE LA ADICIÓN ---
+            // Si el pago fue exitoso, se envía el correo de confirmación.
+            if (nuestroEstado === 'Pagado') {
+                const inscripcion = await InscripcionModel.findById(pago.id_inscripcion);
+                const contacto = await ContactoModel.findById(inscripcion.id_contacto);
+                const campanaData = await CampanaModel.findPublicDataById(inscripcion.id_campana);
+
+                if (contacto && campanaData && campanaData.campana) {
+                    const { evento_nombre, fecha_inicio, lugar } = campanaData.campana;
+                    const eventData = {
+                        event_name: evento_nombre,
+                        event_start_date: fecha_inicio,
+                        event_location: lugar
+                    };
+                    await emailService.sendConfirmationEmail(
+                        contacto.email,
+                        contacto.nombre,
+                        eventData,
+                        inscripcion.id_campana // Se pasa el ID para la plantilla
+                    );
+                }
+            }
+            // --- FIN DE LA ADICIÓN ---
         }
 
         const pagoDetails = await PagoModel.findByTokenWithDetails(token);
         if (!pagoDetails) {
             return res.status(404).json({ success: false, message: 'Pago no encontrado.' });
         }
-
         res.json({ success: true, data: pagoDetails });
-
     } catch (error) {
         console.error('Error al obtener detalles del pago:', error);
         res.status(500).json({ success: false, message: 'Error interno del servidor.' });
@@ -306,21 +314,44 @@ exports.confirmarPagoFlow = async (req, res) => {
         if (!token) {
             return res.status(400).send("Token no proporcionado");
         }
-
         const flowStatusResult = await FlowService.obtenerEstadoDelPago(token);
         const nuestroEstado = mapFlowStatus(flowStatusResult.status);
-
         const pago = await PagoModel.findByToken(token);
-        if (pago) {
+        
+        if (pago && pago.estado !== 'Pagado') { // Asegurarse de no enviar correos duplicados
             await PagoModel.updateById(pago.id_pago, { estado: nuestroEstado });
             await InscripcionModel.update(pago.id_inscripcion, { estado_pago: nuestroEstado });
+
+            // --- INICIO DE LA ADICIÓN ---
+            // Si el pago fue exitoso, se envía el correo de confirmación.
+            if (nuestroEstado === 'Pagado') {
+                const inscripcion = await InscripcionModel.findById(pago.id_inscripcion);
+                const contacto = await ContactoModel.findById(inscripcion.id_contacto);
+                const campanaData = await CampanaModel.findPublicDataById(inscripcion.id_campana);
+    
+                if (contacto && campanaData && campanaData.campana) {
+                    const { evento_nombre, fecha_inicio, lugar } = campanaData.campana;
+                    const eventData = {
+                        event_name: evento_nombre,
+                        event_start_date: fecha_inicio,
+                        event_location: lugar
+                    };
+                    await emailService.sendConfirmationEmail(
+                        contacto.email,
+                        contacto.nombre,
+                        eventData,
+                        inscripcion.id_campana // Se pasa el ID para la plantilla
+                    );
+                }
+            }
+            // --- FIN DE LA ADICIÓN ---
+
             console.log(`Webhook: Pago ${pago.id_pago} actualizado a estado: ${nuestroEstado}`);
         }
-
         res.status(200).send("Confirmación recibida");
-
     } catch (error) {
         console.error("Error en webhook de Flow:", error);
         res.status(500).send("Error interno");
     }
 };
+

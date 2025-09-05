@@ -156,4 +156,16 @@ router.delete(
     campanasController.deleteAsistente
 );
 
+// NUEVA RUTA para actualizar la plantilla de correo
+router.put(
+    '/:id_campana/template',
+    [
+        param('id_campana').isInt({ gt: 0 }).withMessage('El ID de la campaña debe ser un número válido.'),
+        body('emailSubject').isString().withMessage('El asunto es requerido.'),
+        body('emailBody').isString().withMessage('El cuerpo del correo es requerido.')
+    ],
+    campanasController.updateEmailTemplate
+);
+
+
 module.exports = router;
