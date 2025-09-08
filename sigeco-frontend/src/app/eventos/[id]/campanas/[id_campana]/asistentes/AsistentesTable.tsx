@@ -183,9 +183,23 @@ export function AsistentesTable({
     const colsDinamicas: ColumnDef<Asistente>[] = Array.from(todasLasClaves)
       .filter(key => !clavesFijas.includes(key) && key !== '#')
       .map(key => ({
-        accessorKey: key,
-        header: campoEtiquetaMap.get(key) || key.replace(/_/g, ' ').replace(/(?:^|\s)\S/g, a => a.toUpperCase()),
-      }));
+  accessorKey: key,
+  header: campoEtiquetaMap.get(key) || key.replace(/_/g, ' ').replace(/(?:^|\s)\S/g, a => a.toUpperCase()),
+  cell: ({ row }) => {
+    let valor = row.original[key];
+    if (typeof valor === "string" && valor.trim().startsWith("[") && valor.trim().endsWith("]")) {
+      try {
+        const arr = JSON.parse(valor);
+        if (Array.isArray(arr)) {
+          valor = arr.join(", ");
+        }
+      } catch {
+        // Si falla el parseo, lo dejamos tal cual
+      }
+    }
+    return <span>{valor}</span>;
+  }
+}))
     return [...colsPrefijo, ...colsDinamicas, colSufijo];
   }, [dataState, onEdit, camposFormulario, onEstadoChange]);
   
@@ -201,7 +215,7 @@ export function AsistentesTable({
 
   return (
     <div>
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-center gap-3 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 py-4">
         <div className="relative max-w-sm"><span className="absolute inset-y-0 left-0 pl-2 text-cyan-600">🔍</span><Input placeholder="Buscar..." value={globalFilter} onChange={e => setGlobalFilter(e.target.value)} className="pl-8 border-2 border-cyan-500 shadow-md" /></div>
         
         {/* --- MODIFICACIÓN: Select de Filtro con Conteos --- */}
