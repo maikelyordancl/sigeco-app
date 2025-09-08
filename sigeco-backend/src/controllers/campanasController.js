@@ -260,15 +260,17 @@ exports.updateAsistenteCompleto = async (req, res) => {
 exports.updateEmailTemplate = async (req, res) => {
     try {
         const { id_campana } = req.params;
-        const { emailSubject, emailBody } = req.body;
+        // Ahora recibimos también emailSettings
+        const { emailSubject, emailBody, emailSettings } = req.body;
 
         if (typeof emailSubject === 'undefined' || typeof emailBody === 'undefined') {
-            return res.status(400).json({ message: 'El asunto (emailSubject) y el cuerpo (emailBody) son requeridos.' });
+            return res.status(400).json({ message: 'El asunto y el cuerpo son requeridos.' });
         }
 
         const campanaData = {
             email_subject: emailSubject,
-            email_body: emailBody,
+            email_body: emailBody, // Este es solo el contenido
+            email_settings: emailSettings, // Guardamos los ajustes de diseño como un string JSON
         };
 
         const result = await Campana.updateById(id_campana, campanaData);

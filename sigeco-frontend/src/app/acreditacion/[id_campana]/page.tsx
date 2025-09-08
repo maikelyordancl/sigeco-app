@@ -59,7 +59,17 @@ export default function AcreditarCampanaPage() {
       const formResult = await formRes.json();
       const campanaResult = await campanaRes.json();
 
-      setAsistentes(asistentesData);
+      // Aseguramos que siempre se guarde un array
+
+if (Array.isArray(asistentesData)) {
+  setAsistentes(asistentesData);
+} else if (asistentesData?.data && Array.isArray(asistentesData.data)) {
+  setAsistentes(asistentesData.data);
+} else if (asistentesData?.asistentes && Array.isArray(asistentesData.asistentes)) {
+  setAsistentes(asistentesData.asistentes);
+} else {
+  setAsistentes([]);
+}
 
       if (formResult.success) {
         // Mapeo para que coincida con CampoFormulario y TipoCampo
@@ -73,7 +83,7 @@ export default function AcreditarCampanaPage() {
         throw new Error('No se pudo cargar la configuración del formulario.');
       }
 
-      if(campanaResult.success) {
+      if (campanaResult.success) {
         setCampanaInfo(campanaResult.data);
       }
 
@@ -97,7 +107,10 @@ export default function AcreditarCampanaPage() {
     );
   }, [asistentes, searchTerm]);
 
-  const handleUpdateStatus = async (id_inscripcion: number, nuevo_estado: 'acreditado' | 'denegado' | 'pendiente') => {
+  const handleUpdateStatus = async (
+    id_inscripcion: number,
+    nuevo_estado: 'acreditado' | 'denegado' | 'pendiente'
+  ) => {
     if (updatingId !== null) return;
     setUpdatingId(id_inscripcion);
 
@@ -110,7 +123,11 @@ export default function AcreditarCampanaPage() {
     }[nuevo_estado];
 
     setAsistentes(prev =>
-      prev.map(a => a.id_inscripcion === id_inscripcion ? { ...a, estado_asistencia: estadoBackend } : a)
+      prev.map(a =>
+        a.id_inscripcion === id_inscripcion
+          ? { ...a, estado_asistencia: estadoBackend }
+          : a
+      )
     );
 
     const toastId = toast.loading('Actualizando...');
@@ -136,8 +153,9 @@ export default function AcreditarCampanaPage() {
   };
 
   const stats = useMemo(() => {
-    const total = asistentes.length;
-    const acreditados = asistentes.filter(a => a.estado_asistencia === EstadoAsistencia.Asistio).length;
+    const list = Array.isArray(asistentes) ? asistentes : [];
+    const total = list.length;
+    const acreditados = list.filter(a => a.estado_asistencia === EstadoAsistencia.Asistio).length;
     const pendientes = total - acreditados;
     return { total, acreditados, pendientes };
   }, [asistentes]);
@@ -149,7 +167,9 @@ export default function AcreditarCampanaPage() {
           <Button variant="outline" size="sm" onClick={() => router.push('/eventos/gestion')}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Volver a Eventos
           </Button>
-          <h1 className="text-2xl font-bold text-center">{campanaInfo ? `ACREDITACION ${campanaInfo.nombre}` : 'Acreditación'}</h1>
+          <h1 className="text-2xl font-bold text-center">
+            {campanaInfo ? `ACREDITACION ${campanaInfo.nombre}` : 'Acreditación'}
+          </h1>
           <div style={{ width: '150px' }}></div>
         </div>
 
@@ -215,7 +235,6 @@ export default function AcreditarCampanaPage() {
         onSubmit={async (payload) => {
           try {
             const toastId = toast.loading('Registrando asistente...');
-            // --- CORRECCIÓN: Se ajusta la URL del endpoint ---
             const response = await apiFetch(`/acreditacion/registrar-en-puerta/${id_campana}`, {
               method: 'POST',
               body: JSON.stringify(payload),
