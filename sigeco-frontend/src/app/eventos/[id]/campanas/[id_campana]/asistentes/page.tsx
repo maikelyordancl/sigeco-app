@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { AsistentesTable } from "./AsistentesTable";
 import { AsistenteDetalleSheet } from "./AsistenteDetalleSheet";
 import { apiFetch } from "@/lib/api";
-import { Asistente, CampoFormulario } from "./types";
+import { Asistente, CampoFormulario, EstadoAsistencia } from "./types";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import toast from "react-hot-toast";
@@ -95,7 +95,7 @@ export default function AsistentesPage() {
     );
   };
 
-  const handleEstadoChange = async (id_inscripcion: number, nuevoEstado: string) => {
+  const handleEstadoChange = async (id_inscripcion: number, nuevoEstado: EstadoAsistencia) => {
     setAsistentes(currentAsistentes =>
       currentAsistentes.map(a =>
         a.id_inscripcion === id_inscripcion ? { ...a, estado_asistencia: nuevoEstado } : a
@@ -167,8 +167,10 @@ export default function AsistentesPage() {
           totalPages={totalPages}
           totalInscripciones={totalInscripciones}
           onPageChange={handlePageChange}
-          // --- NUEVO: Prop con los conteos para la tabla ---
           statusCounts={statusCounts}
+          // --- LÍNEA MODIFICADA ---
+          // Le pasamos la función fetchData a la tabla para que pueda refrescarse
+          onRefreshData={fetchData}
         />
 
         {selectedAsistente && campanaInfo && (

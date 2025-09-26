@@ -123,7 +123,7 @@ const GestionCampanasPage = () => {
       <CardHeader>
         {/* ... (código de CardHeader sin cambios) ... */}
         <div className="flex justify-between items-start">
-          <CardTitle>{campana.nombre}</CardTitle>
+          <CardTitle>ID: 00{campana.id_campana} - {campana.nombre}</CardTitle>
           <div className="flex items-center space-x-2">
             <Badge className={campana.estado === "Activa" ? "bg-green-600 text-white" : ""}>{campana.estado}</Badge>
             <Button variant="secondary" size="sm" onClick={() => handleGoToAsistentes(campana.id_campana)} disabled={!campana.id_subevento}>

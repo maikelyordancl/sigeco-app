@@ -264,6 +264,126 @@ const Inscripcion = {
         return result.affectedRows > 0;
     },
 
+    importarMasivamente: async (id_campana, contactos) => {
+        const connection = await pool.getConnection();
+        await connection.beginTransaction();
+
+        try {
+            // --- PASO 1: Mapeo de Cabeceras a IDs de Campos ---
+            // Obtenemos todos los campos del formulario para esta campaña UNA SOLA VEZ.
+            const camposQuery = `
+                SELECT fc.id_campo, fc.etiqueta, fc.nombre_interno
+                FROM campana_formulario_config cfc
+                JOIN formulario_campos fc ON cfc.id_campo = fc.id_campo
+                WHERE cfc.id_campana = ?
+            `;
+            const [camposDelFormulario] = await connection.query(camposQuery, [id_campana]);
+
+            // Creamos un mapa para buscar rápidamente el ID de un campo a partir de su etiqueta (la cabecera del Excel).
+            const mapaEtiquetaAId = camposDelFormulario.reduce((mapa, campo) => {
+                mapa[campo.etiqueta] = campo.id_campo;
+                return mapa;
+            }, {});
+            
+            // Creamos otro mapa para buscar el nombre_interno a partir de la etiqueta, útil para los campos fijos.
+            const mapaEtiquetaANombreInterno = camposDelFormulario.reduce((mapa, campo) => {
+                mapa[campo.etiqueta] = campo.nombre_interno;
+                return mapa;
+            }, {});
+
+            let totalProcesados = 0;
+
+            // --- PASO 2: Procesar cada fila del Excel (cada contacto) ---
+            for (const [index, fila] of contactos.entries()) {
+                
+                // Extraemos el email. Es el único campo obligatorio para la importación.
+                // Buscamos el email sin importar cómo se llame la columna ("Email", "email", "Correo Electrónico").
+                const emailKey = Object.keys(fila).find(k => k.toLowerCase().includes('email'));
+                const email = emailKey ? fila[emailKey]?.toLowerCase().trim() : null;
+
+                if (!email) {
+                    // Si no hay email, lanzamos un error que cancelará TODA la transacción.
+                    throw new Error(`Fila ${index + 2}: La columna de email es obligatoria y no fue encontrada o está vacía.`);
+                }
+                
+                // --- PASO 2.1: Buscar o Crear el Contacto ---
+                let [contactosExistentes] = await connection.query('SELECT id_contacto FROM contactos WHERE email = ?', [email]);
+                let id_contacto;
+
+                if (contactosExistentes.length > 0) {
+                    id_contacto = contactosExistentes[0].id_contacto;
+                } else {
+                    // Si el contacto no existe, lo creamos con los datos básicos que tengamos.
+                    const nombreKey = Object.keys(fila).find(k => k.toLowerCase().includes('nombre'));
+                    const nombre = nombreKey ? fila[nombreKey] : 'N/A';
+                    
+                    const [result] = await connection.query('INSERT INTO contactos (email, nombre) VALUES (?, ?)', [email, nombre]);
+                    id_contacto = result.insertId;
+                }
+
+                // --- PASO 2.2: Crear la Inscripción ---
+                // Usamos INSERT IGNORE para evitar errores si el contacto ya estaba inscrito en esta campaña.
+                const [resultInscripcion] = await connection.query(
+                    'INSERT IGNORE INTO inscripciones (id_campana, id_contacto, estado_asistencia) VALUES (?, ?, ?)',
+                    [id_campana, id_contacto, 'Registrado'] // O 'Invitado', según tu lógica.
+                );
+                
+                let id_inscripcion;
+                if (resultInscripcion.insertId > 0) {
+                    id_inscripcion = resultInscripcion.insertId;
+                } else {
+                    // Si no se insertó, es porque ya existía. La buscamos.
+                    const [inscripcionExistente] = await connection.query(
+                        'SELECT id_inscripcion FROM inscripciones WHERE id_campana = ? AND id_contacto = ?',
+                        [id_campana, id_contacto]
+                    );
+                    if (!inscripcionExistente.length) {
+                         throw new Error(`Fila ${index + 2}: No se pudo crear ni encontrar la inscripción para ${email}.`);
+                    }
+                    id_inscripcion = inscripcionExistente[0].id_inscripcion;
+                }
+                
+                // --- PASO 2.3: Guardar las Respuestas del Formulario ---
+                const respuestasParaInsertar = [];
+                for (const cabecera in fila) {
+                    const id_campo = mapaEtiquetaAId[cabecera];
+                    const valor = fila[cabecera];
+
+                    // Solo guardamos si encontramos un campo correspondiente y el valor no es nulo/vacío.
+                    if (id_campo && valor !== null && valor !== '') {
+                        respuestasParaInsertar.push([id_inscripcion, id_campo, String(valor)]);
+                    }
+                }
+                
+                if (respuestasParaInsertar.length > 0) {
+                    // Usamos una sola consulta para insertar todas las respuestas de esta fila.
+                    // `ON DUPLICATE KEY UPDATE` actualizará la respuesta si ya existía.
+                    const queryRespuestas = `
+                        INSERT INTO inscripcion_respuestas (id_inscripcion, id_campo, valor) VALUES ?
+                        ON DUPLICATE KEY UPDATE valor = VALUES(valor)
+                    `;
+                    await connection.query(queryRespuestas, [respuestasParaInsertar]);
+                }
+                
+                totalProcesados++;
+            }
+
+            // --- PASO 3: Si todo fue bien, confirmar la transacción ---
+            await connection.commit();
+            return { totalProcesados };
+
+        } catch (error) {
+            // --- PASO 4: Si algo falló, revertir todo ---
+            await connection.rollback();
+            console.error("Error en la transacción de importación masiva:", error);
+            // Re-lanzamos el error para que el controlador lo atrape y envíe al frontend.
+            throw error;
+        } finally {
+            // --- PASO 5: Liberar la conexión ---
+            connection.release();
+        }
+    }
+
 
 };
 

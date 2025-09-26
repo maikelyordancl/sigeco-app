@@ -5,23 +5,26 @@ import {
   ColumnDef, flexRender, getCoreRowModel, getSortedRowModel,
   getFilteredRowModel, useReactTable, SortingState, VisibilityState, FilterFn
 } from '@tanstack/react-table';
-import { Pencil, Trash } from 'lucide-react';
+import { Pencil, Trash, UserPlus } from 'lucide-react';
 import Cookies from 'js-cookie';
 import toast from 'react-hot-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Asistente, CampoFormulario } from './types';
+// --- LÍNEA MODIFICADA ---
+// Volvemos a la importación local, que ahora es la correcta y unificada.
+import { Asistente, CampoFormulario, EstadoAsistencia } from './types';
 import { ConfigurarColumnas } from './ConfigurarColumnas';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { apiFetch } from '@/lib/api';
+import RegistrarEnPuertaDialog from '@/app/acreditacion/[id_campana]/components/RegistrarEnPuertaDialog';
 
 interface AsistentesTableProps {
   data: Asistente[];
   onEdit: (asistente: Asistente) => void;
   id_campana: string;
   camposFormulario: CampoFormulario[];
-  onEstadoChange: (id_inscripcion: number, nuevoEstado: string) => void | Promise<void>;
+  onEstadoChange: (id_inscripcion: number, nuevoEstado: EstadoAsistencia) => void | Promise<void>; // <- tipado
   limit: number;
   onLimitChange: (n: number) => void;
   page: number;
@@ -29,24 +32,24 @@ interface AsistentesTableProps {
   totalInscripciones: number;
   onPageChange: (newPage: number) => void;
   statusCounts: Record<string, number>;
+  onRefreshData: () => void;
 }
 
-const PaginationControls = ({ page, totalPages, totalInscripciones, limit, onPageChange }: Omit<AsistentesTableProps, 'data' | 'onEdit' | 'id_campana' | 'camposFormulario' | 'onEstadoChange' | 'onLimitChange' | 'statusCounts'>) => (
-    <div className="flex items-center justify-between space-x-2 py-4">
-        <div className="text-sm text-muted-foreground">
-        {totalInscripciones > 0
-            ? `Mostrando ${Math.min((page - 1) * limit + 1, totalInscripciones)} a ${Math.min(page * limit, totalInscripciones)} de ${totalInscripciones} inscripciones`
-            : "No hay inscripciones para mostrar"
-        }
-        </div>
-        <div className="space-x-2">
-        <Button variant="outline" size="sm" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>Anterior</Button>
-        <span className="px-2 text-sm">Página {page} de {totalPages > 0 ? totalPages : 1}</span>
-        <Button variant="outline" size="sm" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages}>Siguiente</Button>
-        </div>
+const PaginationControls = ({ page, totalPages, totalInscripciones, limit, onPageChange }: Omit<AsistentesTableProps, 'data' | 'onEdit' | 'id_campana' | 'camposFormulario' | 'onEstadoChange' | 'onLimitChange' | 'statusCounts' | 'onRefreshData'>) => (
+  <div className="flex items-center justify-between space-x-2 py-4">
+    <div className="text-sm text-muted-foreground">
+      {totalInscripciones > 0
+        ? `Mostrando ${Math.min((page - 1) * limit + 1, totalInscripciones)} a ${Math.min(page * limit, totalInscripciones)} de ${totalInscripciones} inscripciones`
+        : "No hay inscripciones para mostrar"
+      }
     </div>
+    <div className="space-x-2">
+      <Button variant="outline" size="sm" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>Anterior</Button>
+      <span className="px-2 text-sm">Página {page} de {totalPages > 0 ? totalPages : 1}</span>
+      <Button variant="outline" size="sm" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages}>Siguiente</Button>
+    </div>
+  </div>
 );
-
 
 const multiWordGlobalFilter: FilterFn<Asistente> = (row, _columnId, filterValue) => {
   const searchWords = String(filterValue).toLowerCase().split(' ').filter(Boolean);
@@ -67,7 +70,7 @@ const guardarColumnasVisiblesEnCookie = (id_campana: string, visibilityState: Vi
   Cookies.set(cookieKey, JSON.stringify(visibilityState), { expires: 365 });
 };
 
-const ESTADOS = ["Invitado", "Abrio Email", "Registrado", "Confirmado", "Por Confirmar", "Asistió", "No Asiste", "Cancelado"];
+const ESTADOS: EstadoAsistencia[] = ["Invitado", "Abrio Email", "Registrado", "Confirmado", "Por Confirmar", "Asistió", "No Asiste", "Cancelado"];
 const ALL = "__ALL__";
 type EstadoStyle = { bg: string; text: string; border: string; dot: string; rowBorder: string; };
 const ESTILO_DEFAULT: EstadoStyle = { bg: 'bg-muted dark:bg-muted/40', text: 'text-foreground dark:text-foreground', border: 'border-gray-300 dark:border-gray-800', dot: 'bg-gray-400 dark:bg-gray-500', rowBorder: 'border-l-gray-300 dark:border-l-gray-700' };
@@ -86,17 +89,20 @@ const getEstadoStyle = (estado?: string): EstadoStyle => estado ? (ESTADO_STYLES
 export function AsistentesTable({
   data, onEdit, id_campana, camposFormulario, onEstadoChange,
   limit, onLimitChange, page, totalPages, totalInscripciones, onPageChange,
-  statusCounts
+  statusCounts, onRefreshData
 }: AsistentesTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState('');
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [isInitialVisibilitySet, setIsInitialVisibilitySet] = useState(false);
   const [dataState, setDataState] = useState<Asistente[]>(Array.isArray(data) ? data : []);
+  
+  const [isRegistrarOpen, setIsRegistrarOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => { setDataState(Array.isArray(data) ? data : []); }, [data]);
   
-  const [estadoFiltro, setEstadoFiltro] = useState<string>(ALL);
+  const [estadoFiltro, setEstadoFiltro] = useState<EstadoAsistencia | typeof ALL>(ALL);
 
   const dataConNumeroFila = useMemo(() => {
     const base = estadoFiltro === ALL ? dataState : dataState.filter(a => a?.estado_asistencia === estadoFiltro);
@@ -139,67 +145,141 @@ export function AsistentesTable({
     }
   };
 
-  const handleEstadoLocalChange = async (id_inscripcion: number, nuevoEstado: string) => {
+  const handleEstadoLocalChange = async (id_inscripcion: number, nuevoEstado: EstadoAsistencia) => {
     const prevData = dataState;
-    setDataState(old => old.map(a => a.id_inscripcion === id_inscripcion ? { ...a, estado_asistencia: nuevoEstado } : a));
+    setDataState(old =>
+      old.map(a =>
+        a.id_inscripcion === id_inscripcion ? { ...a, estado_asistencia: nuevoEstado } : a
+      )
+    );
     try {
       const promise = onEstadoChange?.(id_inscripcion, nuevoEstado);
       if (promise && typeof promise.then === 'function') { await promise; }
     } catch (err) {
-      setDataState(prevData); // Rollback
+      setDataState(prevData);
       console.error(err);
     }
   };
 
+  const handleRegistrarSubmit = async (formData: any) => {
+  setIsSubmitting(true);
+  const toastId = toast.loading('Registrando asistente...');
+  try {
+    // 🔒 Forzamos a NO acreditar desde esta pantalla
+    const sanitized = {
+      ...formData,
+      acreditar: false,
+      acreditar_inmediatamente: false,
+      acreditacion_inmediata: false, // por si el dialog usa otro nombre
+    };
+    delete (sanitized as any).acreditar;
+    delete (sanitized as any).acreditar_inmediatamente;
+    delete (sanitized as any).acreditacion_inmediata;
+
+    const response = await apiFetch(`/acreditacion/registrar-en-puerta/${id_campana}`, {
+      method: 'POST',
+      body: JSON.stringify(sanitized),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData?.error || errorData?.message || 'Error al registrar la inscripción.');
+    }
+
+    toast.success('Asistente registrado con éxito!', { id: toastId });
+    setIsRegistrarOpen(false);
+    onRefreshData();
+  } catch (error: any) {
+    toast.error(error?.message || 'No se pudo registrar al asistente.', { id: toastId });
+    console.error(error);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+
+
   const columns = useMemo<ColumnDef<Asistente>[]>(() => {
     if (dataState.length === 0) return [];
+    
     const campoEtiquetaMap = new Map(camposFormulario.map(c => [c.nombre_interno, c.etiqueta]));
+    
     const colsPrefijo: ColumnDef<Asistente>[] = [
       { accessorKey: 'numero_fila', header: '#', enableHiding: false },
-      { id: 'actions', header: 'Editar', enableHiding: false, cell: ({ row }) => (
+      { 
+        id: 'actions', 
+        header: 'Editar', 
+        enableHiding: false, 
+        cell: ({ row }) => (
           <div className="flex gap-2">
             <Button size="icon" className="bg-amber-500 hover:bg-amber-600" onClick={() => onEdit(row.original)}><Pencil className="h-4 w-4" /></Button>
             <Button size="icon" variant="destructive" onClick={() => { if (window.confirm(`¿Seguro que deseas eliminar a "${row.original.nombre}"?`)) { handleDelete(row.original.id_inscripcion); } }}><Trash className="h-4 w-4" /></Button>
           </div>
-      )},
+        )
+      },
       { accessorKey: 'nombre', header: 'Nombre', enableHiding: false, cell: ({ row }) => <span className="uppercase">{row.original.nombre}</span> },
-      { accessorKey: 'email', header: 'Email', enableHiding: false }, { accessorKey: 'telefono', header: 'Teléfono', enableHiding: true }, { accessorKey: 'empresa', header: 'Empresa', enableHiding: true },
+      { accessorKey: 'email', header: 'Email', enableHiding: false }, 
+      { accessorKey: 'telefono', header: 'Teléfono', enableHiding: true }, 
+      { accessorKey: 'empresa', header: 'Empresa', enableHiding: true },
     ];
-    const colSufijo: ColumnDef<Asistente> = { accessorKey: 'estado_asistencia', header: 'Estado', enableHiding: false, cell: ({ row }) => {
+
+    const colSufijo: ColumnDef<Asistente> = { 
+      accessorKey: 'estado_asistencia', 
+      header: 'Estado', 
+      enableHiding: false, 
+      cell: ({ row }) => {
         const { id_inscripcion, estado_asistencia } = row.original;
         const estilos = getEstadoStyle(estado_asistencia);
         return (
           <div className="flex justify-center">
-            <Select value={estado_asistencia} onValueChange={nuevo => handleEstadoLocalChange(id_inscripcion, nuevo)}>
+            <Select
+              value={estado_asistencia}
+              onValueChange={(nuevo) => handleEstadoLocalChange(id_inscripcion, nuevo as EstadoAsistencia)}
+            >
               <SelectTrigger className={`h-8 w-[200px] ${estilos.bg} ${estilos.text} border ${estilos.border}`}><SelectValue/></SelectTrigger>
-              <SelectContent>{ESTADOS.map(e => <SelectItem key={e} value={e}><div className="flex items-center gap-2"><span className={`h-2.5 w-2.5 rounded-full ${getEstadoStyle(e).dot}`} />{e}</div></SelectItem>)}</SelectContent>
+              <SelectContent>
+                {ESTADOS.map(e => (
+                  <SelectItem key={e} value={e}>
+                    <div className="flex items-center gap-2">
+                      <span className={`h-2.5 w-2.5 rounded-full ${getEstadoStyle(e).dot}`} />
+                      {e}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
         );
-    }};
-    const todasLasClaves = dataState.reduce((acc, row) => { Object.keys(row).forEach(key => acc.add(key)); return acc; }, new Set<string>());
+      }
+    };
+
+    const todasLasClaves = dataState.reduce((acc, row) => { 
+      Object.keys(row).forEach(key => acc.add(key)); 
+      return acc; 
+    }, new Set<string>());
+    
     todasLasClaves.add('numero_fila');
+    
     const clavesFijas = ['id_inscripcion', 'id_contacto', 'actions', 'nombre', 'email', 'telefono', 'empresa', 'estado_asistencia', 'nota', 'numero_fila'];
+    
     const colsDinamicas: ColumnDef<Asistente>[] = Array.from(todasLasClaves)
       .filter(key => !clavesFijas.includes(key) && key !== '#')
       .map(key => ({
-  accessorKey: key,
-  header: campoEtiquetaMap.get(key) || key.replace(/_/g, ' ').replace(/(?:^|\s)\S/g, a => a.toUpperCase()),
-  cell: ({ row }) => {
-    let valor = row.original[key];
-    if (typeof valor === "string" && valor.trim().startsWith("[") && valor.trim().endsWith("]")) {
-      try {
-        const arr = JSON.parse(valor);
-        if (Array.isArray(arr)) {
-          valor = arr.join(", ");
+        accessorKey: key,
+        header: campoEtiquetaMap.get(key) || key.replace(/_/g, ' ').replace(/(?:^|\s)\S/g, a => a.toUpperCase()),
+        cell: ({ row }) => {
+          let valor = row.original[key];
+          if (typeof valor === "string" && valor.trim().startsWith("[") && valor.trim().endsWith("]")) {
+            try {
+              const arr = JSON.parse(valor);
+              if (Array.isArray(arr)) {
+                valor = arr.join(", ");
+              }
+            } catch {}
+          }
+          return <span>{valor}</span>;
         }
-      } catch {
-        // Si falla el parseo, lo dejamos tal cual
-      }
-    }
-    return <span>{valor}</span>;
-  }
-}))
+      }));
+
     return [...colsPrefijo, ...colsDinamicas, colSufijo];
   }, [dataState, onEdit, camposFormulario, onEstadoChange]);
   
@@ -210,7 +290,7 @@ export function AsistentesTable({
     getSortedRowModel: getSortedRowModel(), getFilteredRowModel: getFilteredRowModel(),
   });
 
-  const estiloFiltro = estadoFiltro === ALL ? ESTILO_DEFAULT : getEstadoStyle(estadoFiltro);
+  const estiloFiltro = estadoFiltro === ALL ? ESTILO_DEFAULT : getEstadoStyle(estadoFiltro as string);
   const paginationProps = { page, totalPages, totalInscripciones, limit, onPageChange };
 
   return (
@@ -218,10 +298,9 @@ export function AsistentesTable({
       <div className="flex flex-wrap items-center justify-between gap-3 py-4">
         <div className="relative max-w-sm"><span className="absolute inset-y-0 left-0 pl-2 text-cyan-600">🔍</span><Input placeholder="Buscar..." value={globalFilter} onChange={e => setGlobalFilter(e.target.value)} className="pl-8 border-2 border-cyan-500 shadow-md" /></div>
         
-        {/* --- MODIFICACIÓN: Select de Filtro con Conteos --- */}
         <div className="justify-self-center">
           <p>Filtros: </p>
-          <Select value={estadoFiltro} onValueChange={v => setEstadoFiltro(v)}>
+          <Select value={estadoFiltro as string} onValueChange={v => setEstadoFiltro(v as EstadoAsistencia | typeof ALL)}>
             <SelectTrigger className={`w-[220px] border-2 border-cyan-500 shadow-md ${estiloFiltro.bg} ${estiloFiltro.text}`}>
               <SelectValue />
             </SelectTrigger>
@@ -244,8 +323,23 @@ export function AsistentesTable({
           </Select>
         </div>
         
-        <div className="md:justify-self-end flex items-center gap-3"><ConfigurarColumnas table={table} id_campana={id_campana} camposFormulario={camposFormulario} /><div className="flex items-center gap-2"><span className="text-sm text-muted-foreground">Registros:</span><Select value={String(limit)} onValueChange={v => onLimitChange(parseInt(v, 10))}><SelectTrigger className="w-[120px] border-2 border-cyan-500 shadow-md"><SelectValue /></SelectTrigger><SelectContent>{[25, 50, 100, 200, 300].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent></Select></div></div>
-        
+        <div className="md:justify-self-end flex items-center gap-3">
+            <ConfigurarColumnas table={table} id_campana={id_campana} camposFormulario={camposFormulario} />
+
+            <Button onClick={() => setIsRegistrarOpen(true)} className="bg-cyan-600 hover:bg-cyan-700">
+                <UserPlus className="mr-2 h-4 w-4" />
+                Registrar en Puerta
+            </Button>
+
+            <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Registros:</span>
+                <Select value={String(limit)} onValueChange={v => onLimitChange(parseInt(v, 10))}>
+                    <SelectTrigger className="w-[120px] border-2 border-cyan-500 shadow-md"><SelectValue /></SelectTrigger>
+                    <SelectContent>{[25, 50, 100, 200, 300].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
+                </Select>
+            </div>
+        </div>
+
         <div className="mt-2 md:col-start-2 md:col-end-3 justify-self-center">
             <div className="flex flex-wrap items-center justify-center gap-2">
             {["Confirmado", "Asistió", "Registrado", "Por Confirmar", "Abrio Email", "No Asiste", "Invitado", "Cancelado"].map((e) => {
@@ -262,6 +356,16 @@ export function AsistentesTable({
         </div>
       </div>
       
+      <RegistrarEnPuertaDialog
+        isOpen={isRegistrarOpen}
+        onClose={() => setIsRegistrarOpen(false)}
+        id_campana={id_campana}
+        formConfig={camposFormulario}
+        onSubmit={handleRegistrarSubmit}
+        isSubmitting={isSubmitting}
+        showAcreditarToggle={false}
+      />
+
       <PaginationControls {...paginationProps} />
       <div className="rounded-md border">
         <Table>

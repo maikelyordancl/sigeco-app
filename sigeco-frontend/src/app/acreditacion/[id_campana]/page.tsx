@@ -60,24 +60,41 @@ export default function AcreditarCampanaPage() {
       const campanaResult = await campanaRes.json();
 
       // Aseguramos que siempre se guarde un array
-
-if (Array.isArray(asistentesData)) {
-  setAsistentes(asistentesData);
-} else if (asistentesData?.data && Array.isArray(asistentesData.data)) {
-  setAsistentes(asistentesData.data);
-} else if (asistentesData?.asistentes && Array.isArray(asistentesData.asistentes)) {
-  setAsistentes(asistentesData.asistentes);
-} else {
-  setAsistentes([]);
-}
+      if (Array.isArray(asistentesData)) {
+        setAsistentes(asistentesData);
+      } else if (asistentesData?.data && Array.isArray(asistentesData.data)) {
+        setAsistentes(asistentesData.data);
+      } else if (asistentesData?.asistentes && Array.isArray(asistentesData.asistentes)) {
+        setAsistentes(asistentesData.asistentes);
+      } else {
+        setAsistentes([]);
+      }
 
       if (formResult.success) {
         // Mapeo para que coincida con CampoFormulario y TipoCampo
-        const campos: CampoFormulario[] = formResult.data.map((c: CampoFormulario) => ({
+        let campos: CampoFormulario[] = formResult.data.map((c: any) => ({
           ...c,
           es_de_sistema: c.es_de_sistema,
           tipo_campo: c.tipo_campo as TipoCampo
         }));
+
+        // --- INICIO DE LA MODIFICACIÓN ---
+        // Añadimos manualmente el campo de estado de asistencia para que sea configurable
+        const estadoAsistenciaCampo: CampoFormulario = {
+          id_campo: -1, // Un ID único que no entre en conflicto
+          nombre_interno: 'estado_asistencia',
+          etiqueta: 'Estado',
+          es_visible: true,
+          es_de_sistema: true,
+          tipo_campo: 'TEXTO_CORTO', // O cualquier tipo genérico
+          es_obligatorio: false,
+          orden: -999,
+        };
+
+        // Lo insertamos al principio de la lista de campos
+        campos.unshift(estadoAsistenciaCampo);
+        // --- FIN DE LA MODIFICACIÓN ---
+
         setCamposFormulario(campos);
       } else {
         throw new Error('No se pudo cargar la configuración del formulario.');
@@ -94,18 +111,22 @@ if (Array.isArray(asistentesData)) {
     }
   }, [id_campana]);
 
+
   useEffect(() => {
     fetchPageData();
   }, [fetchPageData]);
 
   const filteredAsistentes = useMemo(() => {
+    // Mientras el modal esté abierto, NO aplicar el filtro de búsqueda
+    if (isModalOpen) return asistentes;
+
     if (!searchTerm) return asistentes;
     return asistentes.filter(asistente =>
       Object.values(asistente).some(value =>
         String(value).toLowerCase().includes(searchTerm.toLowerCase())
       )
     );
-  }, [asistentes, searchTerm]);
+  }, [asistentes, searchTerm, isModalOpen]); // 👈 agrega isModalOpen
 
   const handleUpdateStatus = async (
     id_inscripcion: number,
@@ -195,6 +216,11 @@ if (Array.isArray(asistentesData)) {
 
             <div className="flex flex-col flex-1 gap-2">
               <Input
+                type="search"
+                name="tabla_busqueda"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="none"
                 placeholder="Buscar asistente (nombre, email, rut...)"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -228,7 +254,7 @@ if (Array.isArray(asistentesData)) {
       <RegistrarEnPuertaDialog
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        formConfig={camposFormulario}
+        formConfig={camposFormulario.filter(c => c.nombre_interno !== 'estado_asistencia')}
         isSubmitting={false}
         id_campana={id_campana}
         // El prop 'onSubmit' ahora recibe el payload ya formateado

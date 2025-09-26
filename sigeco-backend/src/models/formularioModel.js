@@ -273,3 +273,22 @@ exports.findCamposByCampanaId = async (id_campana) => {
     return campos;
 
 };
+
+/**
+ * Obtiene los campos de formulario para una campaña específica,
+ * destinado a la generación de plantillas. Es una versión simplificada
+ * que no carga las opciones de los campos de selección.
+ * @param {number} idCampana - El ID de la campaña.
+ * @returns {Promise<Array<object>>} Un arreglo con los campos del formulario.
+ */
+exports.getCamposByCampanaId = async (idCampana) => {
+    const query = `
+        SELECT fc.nombre_interno, fc.etiqueta, fc.es_fijo
+        FROM campana_formulario_config cfc
+        JOIN formulario_campos fc ON cfc.id_campo = fc.id_campo
+        WHERE cfc.id_campana = ?
+        ORDER BY cfc.orden;
+    `;
+    const [rows] = await pool.query(query, [idCampana]);
+    return rows;
+};

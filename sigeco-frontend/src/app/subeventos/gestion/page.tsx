@@ -328,7 +328,7 @@ export default function GestionSubeventos() {
                             {subeventos.map(subevento => (
                                 <Card key={subevento.id_subevento} className="shadow-md">
                                     <CardHeader>
-                                        <CardTitle>{subevento.nombre}</CardTitle>
+                                        <CardTitle>00{subevento.id_subevento} - {subevento.nombre}</CardTitle>
                                     </CardHeader>
                                     <CardContent>
                                         <div className="flex items-center space-x-2 mb-2">

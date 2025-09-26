@@ -1,29 +1,47 @@
-export interface Asistente {
-    id_inscripcion: number;
-    // Hacemos el estado flexible para aceptar los valores de la base de datos
-    estado_asistencia: string; 
-    nombre: string;
-    email: string;
-    // Permite que lleguen campos personalizados sin errores
-    [key: string]: any; 
+// src/app/acreditacion/[id_campana]/types.ts
+
+export interface Inscripcion {
+  id_inscripcion: number;
+  id_contacto: number;
+  nombre: string;
+  email: string;
+  telefono?: string;
+  rut?: string;
+  empresa?: string;
+  estado_asistencia:
+    | "Invitado"
+    | "Registrado"
+    | "Confirmado"
+    | "Asistió"
+    | "No Asiste"
+    | "Cancelado"
+    | "Por Confirmar"
+    | "Abrio Email";
+  nota?: string;
+  [key: string]: any; // Para campos dinámicos
 }
 
-// Definimos los tipos válidos de campo
-export type TipoCampo =
+export interface CampoFormulario {
+  id_campo: number;
+  nombre_interno: string;
+  etiqueta: string;
+  tipo_campo:
     | "TEXTO_CORTO"
     | "PARRAFO"
-    | "DESPLEGABLE"
     | "SELECCION_UNICA"
+    | "DESPLEGABLE"
     | "CASILLAS"
     | "ARCHIVO";
 
-export interface CampoFormulario {
-    id_campo: number;
-    nombre_interno: string;
-    etiqueta: string;
-    es_visible: boolean;
-    es_de_sistema: boolean;
-    tipo_campo: TipoCampo; // ← union estricta
-    es_obligatorio: boolean;
-    opciones?: string; // Mantener string si viene de backend
+  // Aceptamos el formato de array que viene de la base de datos.
+  opciones?: string[] | { id_opcion: number; etiqueta_opcion: string }[];
+
+  es_de_sistema: boolean;
+  orden: number;
+  es_visible: boolean;
+  es_obligatorio: boolean;
 }
+
+// --- Alias para compatibilidad con otros módulos ---
+export type Asistente = Inscripcion;
+export type TipoCampo = CampoFormulario["tipo_campo"];

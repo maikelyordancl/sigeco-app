@@ -118,6 +118,7 @@ const RegistrarEnPuertaDialog = ({
   isSubmitting,
   isOpen,
   onClose,
+  showAcreditarToggle = true, // 👈 NUEVO (default visible para mantener comportamiento actual)
 }: {
   id_campana: string;
   formConfig?: CampoFormulario[];
@@ -125,6 +126,7 @@ const RegistrarEnPuertaDialog = ({
   isSubmitting: boolean;
   isOpen: boolean;
   onClose: () => void;
+  showAcreditarToggle?: boolean; // 👈 NUEVO
 }) => {
   const [step, setStep] = useState<"email_check" | "form">("email_check");
   const [email, setEmail] = useState("");
@@ -140,7 +142,7 @@ const RegistrarEnPuertaDialog = ({
   } = useForm<FormDataShape>({
     resolver: yupResolver(validationSchema),
     defaultValues: {
-      acreditar_ahora: true, // por defecto marcado
+      acreditar_ahora: showAcreditarToggle ? true : false, // 👈 depende del contexto
     },
   });
 
@@ -148,9 +150,9 @@ const RegistrarEnPuertaDialog = ({
     if (isOpen) {
       setStep("email_check");
       setEmail("");
-      reset({ acreditar_ahora: true }); // reset con el valor default
+      reset({ acreditar_ahora: showAcreditarToggle ? true : false }); // 👈 depende del contexto
     }
-  }, [isOpen, reset]);
+  }, [isOpen, reset, showAcreditarToggle]);
 
   const handleCheckEmail = async () => {
     const emailSchema = yup.string().email("Email no válido").required("Email requerido");
@@ -168,10 +170,10 @@ const RegistrarEnPuertaDialog = ({
 
       if (response.ok) {
         const contacto = await response.json();
-        reset({ ...contacto, acreditar_ahora: true });
+        reset({ ...contacto, acreditar_ahora: showAcreditarToggle ? true : false }); // 👈
         toast.success("Contacto encontrado. Hemos rellenado sus datos.", { id: toastId });
       } else {
-        reset({ email, acreditar_ahora: true });
+        reset({ email, acreditar_ahora: showAcreditarToggle ? true : false }); // 👈
         toast.success("Contacto nuevo. Por favor, completa el formulario.", { id: toastId });
       }
 
@@ -206,7 +208,7 @@ const RegistrarEnPuertaDialog = ({
 
         if (standardContactFields.has(key)) {
           datosContacto[key] = value;
-        } else if (key !== "acreditar_ahora") {
+        } else if (key !== "acreditar_ahora" && key !== "estado_asistencia") {  // 👈 añade este filtro
           const campoConfig = formConfig.find((c) => c.nombre_interno === key);
           if (campoConfig && value) {
             respuestas.push({
@@ -218,10 +220,13 @@ const RegistrarEnPuertaDialog = ({
       }
     }
 
+    // 👇 Si el toggle está oculto, forzamos false (y opcionalmente lo omitimos)
+    const acreditar_ahora_final = showAcreditarToggle ? !!formData.acreditar_ahora : false;
+
     const payload = {
       ...datosContacto,
       respuestas,
-      acreditar_ahora: formData.acreditar_ahora ?? true,
+      acreditar_ahora: acreditar_ahora_final,
     };
 
     onSubmit(payload);
@@ -526,23 +531,25 @@ const RegistrarEnPuertaDialog = ({
               {/* Campos dinámicos */}
               {sortedFormConfig.map(renderCampo)}
 
-              {/* Checkbox acreditación */}
-              <div className="flex items-center space-x-2 border rounded-md p-2">
-                <Controller
-                  name="acreditar_ahora"
-                  control={control}
-                  render={({ field }) => (
-                    <Checkbox
-                      id="acreditar_ahora"
-                      checked={!!field.value}
-                      onCheckedChange={(checked) => field.onChange(!!checked)}
-                    />
-                  )}
-                />
-                <Label htmlFor="acreditar_ahora">
-                  Acreditar inmediatamente al guardar
-                </Label>
-              </div>
+              {/* Checkbox acreditación: solo si se permite mostrar */}
+              {showAcreditarToggle && (
+                <div className="flex items-center space-x-2 border rounded-md p-2">
+                  <Controller
+                    name="acreditar_ahora"
+                    control={control}
+                    render={({ field }) => (
+                      <Checkbox
+                        id="acreditar_ahora"
+                        checked={!!field.value}
+                        onCheckedChange={(checked) => field.onChange(!!checked)}
+                      />
+                    )}
+                  />
+                  <Label htmlFor="acreditar_ahora">
+                    Acreditar inmediatamente al guardar
+                  </Label>
+                </div>
+              )}
             </div>
 
             <DialogFooter>

@@ -266,7 +266,7 @@ export default function GestionEventos() {
               <Card key={evento.id_evento || evento.nombre} className="shadow-md hover:shadow-lg transition-shadow">
                 <CardHeader>
                   <CardTitle className="flex justify-between items-center">
-                    {evento.nombre}
+                   00{evento.id_evento} - {evento.nombre}
                     <Badge className={getBadgeColor(evento.estado)}>
                       {evento.estado}
                     </Badge>

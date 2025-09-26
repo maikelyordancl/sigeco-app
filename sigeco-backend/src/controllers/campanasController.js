@@ -2,6 +2,8 @@ const { validationResult } = require('express-validator');
 const Campana = require('../models/campanaModel');
 const SubeventoModel = require('../models/subeventoModel');
 const InscripcionModel = require('../models/inscripcionModel');
+const Formulario = require('../models/formularioModel');
+const ExcelJS = require('exceljs');
 
 /**
  * Obtiene todas las campanas (principal y de subeventos) de un evento específico.
@@ -286,6 +288,96 @@ exports.updateEmailTemplate = async (req, res) => {
     }
 };
 
+exports.getListadoSimple = async (req, res) => {
+    try {
+        const campanas = await Campana.getListadoSimple();
+        res.status(200).json(campanas);
+    } catch (error) {
+        console.error('Error al obtener el listado simple de campañas:', error);
+        res.status(500).json({ message: 'Error interno del servidor' });
+    }
+};
+
+exports.generarPlantillaImportacion = async (req, res) => {
+    // Validación de parámetros de entrada
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+    
+    try {
+        const { id_campana } = req.params;
+        
+        // 1. Obtenemos TODOS los campos configurados para el formulario de esta campaña.
+        // La función del modelo ya es correcta.
+        const camposFormulario = await Formulario.getCamposByCampanaId(id_campana);
+
+        if (camposFormulario.length === 0) {
+            return res.status(404).json({ message: 'No se encontró configuración de formulario para este evento.' });
+        }
+
+        // 2. Creamos el libro de trabajo de Excel.
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Plantilla de Importación');
+
+        // 3. (LÓGICA CORREGIDA) Mapeamos DIRECTAMENTE los campos del formulario a las columnas del Excel.
+        // Ya no hay cabeceras fijas, todo es dinámico.
+        worksheet.columns = camposFormulario.map(campo => {
+            // Asignamos un ancho de columna predeterminado o específico si es necesario.
+            const width = ['nombre', 'email', 'empresa', 'profesion'].includes(campo.nombre_interno) ? 30 : 20;
+            return {
+                header: campo.etiqueta, // La etiqueta visible para el usuario.
+                key: campo.nombre_interno, // La clave interna que usaremos al importar.
+                width: width
+            };
+        });
+        
+        // Ponemos la primera fila (cabeceras) en negrita.
+        worksheet.getRow(1).font = { bold: true };
+
+        // 4. Configuramos la respuesta HTTP para la descarga.
+        res.setHeader(
+            'Content-Type',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        );
+        res.setHeader(
+            'Content-Disposition',
+            'attachment; filename="plantilla_importacion_evento.xlsx"'
+        );
+
+        // 5. Enviamos el archivo Excel generado.
+        await workbook.xlsx.write(res);
+        res.end();
+
+    } catch (error) {
+        console.error('Error al generar la plantilla de importación:', error);
+        res.status(500).json({ message: 'Error interno del servidor' });
+    }
+};
+
+exports.importarInscripcionesDesdeExcel = async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { id_campana } = req.params;
+    const { contactos } = req.body;
+
+    try {
+        // Llamamos a una nueva función en el modelo de Inscripción que hará todo el trabajo.
+        const resultado = await InscripcionModel.importarMasivamente(id_campana, contactos);
+        res.status(201).json({ 
+            success: true, 
+            message: `Importación completada con éxito. Se procesaron ${resultado.totalProcesados} registros.`,
+            ...resultado 
+        });
+    } catch (error) {
+        console.error("Error en el controlador al importar inscripciones:", error);
+        // Devuelve un error específico si lo hay, o uno genérico.
+        res.status(500).json({ success: false, error: error.message || "Error interno del servidor al procesar el archivo." });
+    }
+};
 
 /**
  * Elimina un asistente (inscripción) de una campaña.

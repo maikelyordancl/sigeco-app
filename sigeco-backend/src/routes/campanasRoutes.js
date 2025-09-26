@@ -8,40 +8,12 @@ const { verificarToken } = require('../controllers/authController');
 // Proteger todas las rutas de campañas con autenticación JWT
 router.use(verificarToken);
 
-// --- Rutas de Formulario ---
-router.get(
-    '/:id_campana/formulario',
-    [param('id_campana').isInt({ gt: 0 })],
-    formularioController.getFormulario
-);
+// --- RUTAS ESPECÍFICAS (DEBEN IR ANTES QUE LAS RUTAS CON PARÁMETROS) ---
 
-router.put(
-    '/:id_campana/formulario',
-    [
-        param('id_campana').isInt({ gt: 0 }),
-        body('campos').isArray().withMessage('La configuración de campos debe ser un array.')
-    ],
-    formularioController.updateFormulario
-);
+// GET /api/campanas/listado-simple - Obtiene un listado simple de campañas para selectores.
+router.get('/listado-simple', campanasController.getListadoSimple);
 
-
-// POST /api/campanas - Crear una nueva sub-campaña
-router.post(
-    '/',
-    [
-        body('id_evento').isInt({ gt: 0 }).withMessage('El ID del evento es obligatorio.'),
-        body('id_subevento').isInt({ gt: 0 }).withMessage('El ID del subevento es obligatorio.'),
-        body('nombre').optional().isString().trim().notEmpty().withMessage('El nombre no puede estar vacío.'),
-        body('url_amigable')
-            .isString().trim().notEmpty().withMessage('La URL amigable no puede estar vacía.')
-            .matches(/^[A-Za-z0-9-]+$/).withMessage('La URL amigable contiene caracteres no válidos.'),
-        // --- NUEVA REGLA DE VALIDACIÓN ---
-        body('fecha_personalizada').optional({ nullable: true }).isString().withMessage('La fecha personalizada debe ser un texto.')
-    ],
-    campanasController.crearSubCampana
-);
-
-// GET /api/campanas/evento/:id_evento
+// GET /api/campanas/evento/:id_evento - Obtiene campañas por ID de evento.
 router.get(
     '/evento/:id_evento',
     [
@@ -49,61 +21,6 @@ router.get(
     ],
     campanasController.obtenerCampanasPorEvento
 );
-
-// GET /api/campanas/:id_campana
-router.get(
-    '/:id_campana',
-    [
-        param('id_campana').isInt({ gt: 0 }).withMessage('El ID de la campaña debe ser un número válido.')
-    ],
-    campanasController.obtenerDetalleCampana
-);
-
-// PUT /api/campanas/:id_campana
-router.put(
-    '/:id_campana',
-    [
-        param('id_campana').isInt({ gt: 0 }).withMessage('El ID de la campaña debe ser un número válido.'),
-        body('nombre').optional().isString().trim().notEmpty(),
-        body('estado').optional().isIn(['Borrador', 'Activa', 'Pausada', 'Finalizada']),
-        body('id_plantilla').optional().isInt({ min: 1, max: 2 }).withMessage('El ID de plantilla no es válido.'),
-        // --- NUEVA REGLA DE VALIDACIÓN ---
-        body('fecha_personalizada').optional({ nullable: true }).isString().withMessage('La fecha personalizada debe ser un texto.')
-    ],
-    campanasController.actualizarCampana
-);
-
-// DELETE /api/campanas/:id_campana
-router.delete(
-    '/:id_campana',
-    [
-        param('id_campana').isInt({ gt: 0 }).withMessage('El ID de la campaña debe ser un número válido.')
-    ],
-    campanasController.eliminarCampana
-);
-
-
-// --- INICIO DE LA NUEVA LÓGICA ---
-// POST /api/campanas/:id_campana/convocar - Añade contactos de bases de datos a una campaña
-router.post(
-    '/:id_campana/convocar',
-    [
-        param('id_campana').isInt({ gt: 0 }).withMessage('El ID de la campaña no es válido.'),
-        body('bases_origen').isArray({ min: 1 }).withMessage('Debes seleccionar al menos una base de datos.'),
-        body('bases_origen.*').isInt().withMessage('Los IDs de las bases de datos deben ser números.')
-    ],
-    campanasController.convocarContactos
-);
-
-router.put(
-    '/:id_campana/landing',
-    [
-        param('id_campana').isInt({ gt: 0 }),
-        body('landing_page_json').isJSON().withMessage('El contenido de la landing debe ser un JSON válido.')
-    ],
-    campanasController.guardarLanding
-);
-// --- FIN DE LA NUEVA LÓGICA ---
 
 // POST /api/campanas/formulario/campos - Crear un nuevo campo personalizado
 router.post(
@@ -134,9 +51,51 @@ router.put(
     formularioController.actualizarCampo
 );
 
-// Agrega esta línea en /src/routes/campanasRoutes.js, por ejemplo, después de la ruta para obtener asistentes.
+
+// --- RUTAS GENERALES Y CON PARÁMETROS ---
+
+// POST /api/campanas - Crear una nueva sub-campaña
+router.post(
+    '/',
+    [
+        body('id_evento').isInt({ gt: 0 }).withMessage('El ID del evento es obligatorio.'),
+        body('id_subevento').isInt({ gt: 0 }).withMessage('El ID del subevento es obligatorio.'),
+        body('nombre').optional().isString().trim().notEmpty().withMessage('El nombre no puede estar vacío.'),
+        body('url_amigable')
+            .isString().trim().notEmpty().withMessage('La URL amigable no puede estar vacía.')
+            .matches(/^[A-Za-z0-9-]+$/).withMessage('La URL amigable contiene caracteres no válidos.'),
+        body('fecha_personalizada').optional({ nullable: true }).isString().withMessage('La fecha personalizada debe ser un texto.')
+    ],
+    campanasController.crearSubCampana
+);
+
+// GET /api/campanas/:id_campana/plantilla-importacion - Genera la plantilla de Excel para importar.
 router.get(
-    '/:id_campana/asistentes-v2', 
+    '/:id_campana/plantilla-importacion',
+    [param('id_campana').isInt({ gt: 0 })],
+    campanasController.generarPlantillaImportacion
+);
+
+// GET /api/campanas/:id_campana/formulario - Rutas de Formulario para una campaña.
+router.get(
+    '/:id_campana/formulario',
+    [param('id_campana').isInt({ gt: 0 })],
+    formularioController.getFormulario
+);
+
+// PUT /api/campanas/:id_campana/formulario
+router.put(
+    '/:id_campana/formulario',
+    [
+        param('id_campana').isInt({ gt: 0 }),
+        body('campos').isArray().withMessage('La configuración de campos debe ser un array.')
+    ],
+    formularioController.updateFormulario
+);
+
+// GET /api/campanas/:id_campana/asistentes-v2 - Obtener asistentes con campos dinámicos
+router.get(
+    '/:id_campana/asistentes-v2',
     [
         param('id_campana').isInt({ gt: 0 }),
         query('page').optional().isInt({ min: 1 }).withMessage('La página debe ser un entero positivo.'),
@@ -144,19 +103,39 @@ router.get(
     ],
     campanasController.getAsistentesConCampos
 );
-router.put('/asistentes/:id_inscripcion/estado', campanasController.updateAsistenteStatus);
-router.put('/asistentes/:id_inscripcion/nota', campanasController.updateAsistenteNota);
-router.get('/:id_campana/formulario', formularioController.getCamposPorCampana);
-router.put('/asistentes/:id_inscripcion/respuestas', campanasController.updateAsistenteRespuestas);
 
-router.put('/asistentes/:id_inscripcion', campanasController.updateAsistenteCompleto);
-router.delete(
-    '/asistentes/:id_inscripcion',
-    [param('id_inscripcion').isInt({ gt: 0 }).withMessage('El ID de la inscripción debe ser un número válido.')],
-    campanasController.deleteAsistente
+// POST /api/campanas/:id_campana/convocar - Añade contactos de bases de datos a una campaña
+router.post(
+    '/:id_campana/convocar',
+    [
+        param('id_campana').isInt({ gt: 0 }).withMessage('El ID de la campaña no es válido.'),
+        body('bases_origen').isArray({ min: 1 }).withMessage('Debes seleccionar al menos una base de datos.'),
+        body('bases_origen.*').isInt().withMessage('Los IDs de las bases de datos deben ser números.')
+    ],
+    campanasController.convocarContactos
 );
 
-// NUEVA RUTA para actualizar la plantilla de correo
+// POST /api/campanas/:id_campana/importar-inscripciones
+router.post(
+    '/:id_campana/importar-inscripciones',
+    [
+        param('id_campana').isInt({ gt: 0 }).withMessage('El ID de la campaña no es válido.'),
+        body('contactos').isArray({ min: 1 }).withMessage('Se requiere un arreglo de contactos.')
+    ],
+    campanasController.importarInscripcionesDesdeExcel
+);
+
+// PUT /api/campanas/:id_campana/landing - Guarda el JSON de la landing page
+router.put(
+    '/:id_campana/landing',
+    [
+        param('id_campana').isInt({ gt: 0 }),
+        body('landing_page_json').isJSON().withMessage('El contenido de la landing debe ser un JSON válido.')
+    ],
+    campanasController.guardarLanding
+);
+
+// PUT /api/campanas/:id_campana/template - Actualiza la plantilla de correo
 router.put(
     '/:id_campana/template',
     [
@@ -165,6 +144,51 @@ router.put(
         body('emailBody').isString().withMessage('El cuerpo del correo es requerido.')
     ],
     campanasController.updateEmailTemplate
+);
+
+// GET /api/campanas/:id_campana - Obtener detalle de campaña (debe ir casi al final)
+router.get(
+    '/:id_campana',
+    [
+        param('id_campana').isInt({ gt: 0 }).withMessage('El ID de la campaña debe ser un número válido.')
+    ],
+    campanasController.obtenerDetalleCampana
+);
+
+// PUT /api/campanas/:id_campana - Actualizar campaña
+router.put(
+    '/:id_campana',
+    [
+        param('id_campana').isInt({ gt: 0 }).withMessage('El ID de la campaña debe ser un número válido.'),
+        body('nombre').optional().isString().trim().notEmpty(),
+        body('estado').optional().isIn(['Borrador', 'Activa', 'Pausada', 'Finalizada']),
+        body('id_plantilla').optional().isInt({ min: 1, max: 2 }).withMessage('El ID de plantilla no es válido.'),
+        body('fecha_personalizada').optional({ nullable: true }).isString().withMessage('La fecha personalizada debe ser un texto.')
+    ],
+    campanasController.actualizarCampana
+);
+
+// DELETE /api/campanas/:id_campana - Eliminar campaña
+router.delete(
+    '/:id_campana',
+    [
+        param('id_campana').isInt({ gt: 0 }).withMessage('El ID de la campaña debe ser un número válido.')
+    ],
+    campanasController.eliminarCampana
+);
+
+
+// --- RUTAS DE ASISTENTES (INSCRIPCIONES) ---
+
+router.put('/asistentes/:id_inscripcion/estado', campanasController.updateAsistenteStatus);
+router.put('/asistentes/:id_inscripcion/nota', campanasController.updateAsistenteNota);
+router.put('/asistentes/:id_inscripcion/respuestas', campanasController.updateAsistenteRespuestas);
+router.put('/asistentes/:id_inscripcion', campanasController.updateAsistenteCompleto);
+
+router.delete(
+    '/asistentes/:id_inscripcion',
+    [param('id_inscripcion').isInt({ gt: 0 }).withMessage('El ID de la inscripción debe ser un número válido.')],
+    campanasController.deleteAsistente
 );
 
 

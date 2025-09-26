@@ -294,6 +294,13 @@ const Campana = {
             formulario: formularioConfig
         };
     },
+    // AÑADE ESTE NUEVO MÉTODO DENTRO DEL OBJETO
+    getListadoSimple: async () => {
+        const [rows] = await pool.query(
+            'SELECT id_campana, nombre FROM campanas ORDER BY nombre ASC'
+        );
+        return rows;
+    },
 
 };
 
