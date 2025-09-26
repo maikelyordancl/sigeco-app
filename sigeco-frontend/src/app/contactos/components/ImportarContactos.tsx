@@ -17,7 +17,6 @@ interface CampanaSimple {
   nombre: string;
 }
 
-// --- TIPO MODIFICADO ---
 // Hacemos que el objeto pueda tener cualquier clave, ya que las columnas son dinámicas
 type ContactoData = Partial<Contacto> & { [key: string]: any };
 
