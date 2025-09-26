@@ -23,12 +23,27 @@ type Props = {
     id_campana: string;
 };
 
+// --- ESTADOS DE ASISTENCIA ---
+const ESTADOS = [
+  "Invitado",
+  "Registrado",
+  "Confirmado",
+  "Por Confirmar",
+  "No Asiste",
+  "Asistió",
+  "Cancelado",
+] as const;
+
+type EstadoAsistencia = (typeof ESTADOS)[number];
+
 export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo, onUpdate, id_campana }: Props) {
     const [formulario, setFormulario] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [formValues, setFormValues] = useState<Record<string, any>>({});
-    const [nota, setNota] = useState(asistente.nota || '');
-    const [estadoAsistencia, setEstadoAsistencia] = useState(asistente.estado_asistencia);
+    const [nota, setNota] = useState(asistente.nota || "");
+    const [estadoAsistencia, setEstadoAsistencia] = useState<EstadoAsistencia>(
+        asistente.estado_asistencia as EstadoAsistencia
+    );
 
     useEffect(() => {
         if (!isOpen || !id_campana) return;
@@ -44,13 +59,11 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
                 const initialValues: Record<string, any> = {};
                 data.data.forEach((field: any) => {
                     const valueFromBackend = asistente[field.nombre_interno];
-                    if (field.tipo_campo === 'CASILLAS' && typeof valueFromBackend === 'string') {
+                    if (field.tipo_campo === "CASILLAS" && typeof valueFromBackend === "string") {
                         try {
-                            // Intenta parsear como JSON.
                             initialValues[field.nombre_interno] = JSON.parse(valueFromBackend);
                         } catch (e) {
-                            // Si falla, asume que es una cadena separada por comas (para datos antiguos).
-                            initialValues[field.nombre_interno] = valueFromBackend.split(',').map((s: string) => s.trim());
+                            initialValues[field.nombre_interno] = valueFromBackend.split(",").map((s: string) => s.trim());
                         }
                     } else {
                         initialValues[field.nombre_interno] = valueFromBackend || "";
@@ -83,22 +96,20 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
 
     const handleSave = async () => {
         try {
-            const baseFields = ['nombre', 'email', 'telefono', 'rut', 'empresa', 'actividad', 'profesion', 'pais', 'comuna'];
+            const baseFields = ["nombre", "email", "telefono", "rut", "empresa", "actividad", "profesion", "pais", "comuna"];
             const datosContacto: Record<string, any> = {};
             const respuestas: { id_campo: number; valor: any }[] = [];
 
             if (formulario) {
                 formulario.forEach((field: any) => {
                     let value = formValues[field.nombre_interno];
-
                     if (Array.isArray(value)) {
-                        value = value.join(', ');
+                        value = value.join(", ");
                     }
-
                     if (field.es_de_sistema && baseFields.includes(field.nombre_interno)) {
                         datosContacto[field.nombre_interno] = value;
                     } else {
-                        respuestas.push({ id_campo: field.id_campo, valor: value === '' ? null : value });
+                        respuestas.push({ id_campo: field.id_campo, valor: value === "" ? null : value });
                     }
                 });
             }
@@ -107,22 +118,22 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
                 estado_asistencia: estadoAsistencia,
                 nota: nota,
                 respuestas,
-                ...datosContacto
+                ...datosContacto,
             };
 
             const res = await apiFetch(`/campanas/asistentes/${asistente.id_inscripcion}`, {
-                method: 'PUT',
-                body: JSON.stringify(payload)
+                method: "PUT",
+                body: JSON.stringify(payload),
             });
 
             if (!res.ok) {
                 const errorData = await res.json();
-                throw new Error(errorData.message || 'Error al actualizar asistente');
+                throw new Error(errorData.message || "Error al actualizar asistente");
             }
-            toast.success('Asistente actualizado correctamente');
+            toast.success("Asistente actualizado correctamente");
 
             const updatedAsistente: Asistente = { ...asistente };
-            Object.keys(formValues).forEach(key => {
+            Object.keys(formValues).forEach((key) => {
                 updatedAsistente[key] = formValues[key];
             });
             Object.assign(updatedAsistente, datosContacto, {
@@ -138,16 +149,26 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
     };
 
     const renderField = (field: any) => {
-        const value = formValues[field.nombre_interno] || '';
+        const value = formValues[field.nombre_interno] || "";
 
         switch (field.tipo_campo) {
-            case 'PARRAFO':
-                return <Textarea value={value} onChange={(e) => handleChange(field.nombre_interno, e.target.value)} className="border p-2 rounded" />;
-
-            case 'SELECCION_UNICA':
-            case 'DESPLEGABLE':
+            case "PARRAFO":
                 return (
-                    <select value={value} onChange={(e) => handleChange(field.nombre_interno, e.target.value)} className="border p-2 rounded w-full">
+                    <Textarea
+                        value={value}
+                        onChange={(e) => handleChange(field.nombre_interno, e.target.value)}
+                        className="border p-2 rounded"
+                    />
+                );
+
+            case "SELECCION_UNICA":
+            case "DESPLEGABLE":
+                return (
+                    <select
+                        value={value}
+                        onChange={(e) => handleChange(field.nombre_interno, e.target.value)}
+                        className="border p-2 rounded w-full"
+                    >
                         <option value="">-- Seleccione --</option>
                         {field.opciones?.map((opt: any) => (
                             <option key={opt.id_opcion} value={opt.etiqueta_opcion}>
@@ -157,7 +178,7 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
                     </select>
                 );
 
-            case 'CASILLAS':
+            case "CASILLAS":
                 return (
                     <div className="space-y-2">
                         {field.opciones?.map((opt: any) => (
@@ -165,27 +186,37 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
                                 <Checkbox
                                     id={`${field.nombre_interno}-${opt.id_opcion}`}
                                     checked={(value || []).includes(opt.etiqueta_opcion)}
-                                    onCheckedChange={(checked) => handleCheckboxChange(field.nombre_interno, opt.etiqueta_opcion, !!checked)}
+                                    onCheckedChange={(checked) =>
+                                        handleCheckboxChange(field.nombre_interno, opt.etiqueta_opcion, !!checked)
+                                    }
                                 />
-                                <Label htmlFor={`${field.nombre_interno}-${opt.id_opcion}`}>{opt.etiqueta_opcion}</Label>
+                                <Label htmlFor={`${field.nombre_interno}-${opt.id_opcion}`}>
+                                    {opt.etiqueta_opcion}
+                                </Label>
                             </div>
                         ))}
                     </div>
                 );
 
-            case 'ARCHIVO':
+            case "ARCHIVO":
                 return value ? (
-                    <a href={value} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center">
+                    <a
+                        href={value}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline flex items-center"
+                    >
                         Ver Archivo <ExternalLink className="ml-2 h-4 w-4" />
                     </a>
-                ) : <span className="text-gray-500">No hay archivo adjunto.</span>;
+                ) : (
+                    <span className="text-gray-500">No hay archivo adjunto.</span>
+                );
 
-            case 'TEXTO_CORTO':
+            case "TEXTO_CORTO":
             default:
-                // --- Campo especial: pais ---
-                if (field.nombre_interno === 'pais') {
-                    const options = countryList().getData(); // [{ value, label }]
-                    const selected = options.find(opt => opt.value === value) || null;
+                if (field.nombre_interno === "pais") {
+                    const options = countryList().getData();
+                    const selected = options.find((opt) => opt.value === value) || null;
                     return (
                         <Select
                             value={selected}
@@ -194,7 +225,14 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
                         />
                     );
                 }
-                return <Input type="text" value={value} onChange={(e) => handleChange(field.nombre_interno, e.target.value)} className="border p-2 rounded" />;
+                return (
+                    <Input
+                        type="text"
+                        value={value}
+                        onChange={(e) => handleChange(field.nombre_interno, e.target.value)}
+                        className="border p-2 rounded"
+                    />
+                );
         }
     };
 
@@ -205,7 +243,9 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
                     <DialogTitle>Editar Asistente: {asistente.nombre}</DialogTitle>
                 </DialogHeader>
 
-                {loading ? <p>Cargando formulario...</p> : (
+                {loading ? (
+                    <p>Cargando formulario...</p>
+                ) : (
                     <div className="space-y-4 py-4">
                         {formulario?.map((field: any) => (
                             <div key={field.nombre_interno} className="flex flex-col">
@@ -218,14 +258,16 @@ export function AsistenteDetalleSheet({ isOpen, onClose, asistente, campanaInfo,
 
                         <div className="flex flex-col">
                             <Label className="text-sm font-medium mb-2">Estado de Asistencia</Label>
-                            <select value={estadoAsistencia} onChange={(e) => setEstadoAsistencia(e.target.value)} className="border p-2 rounded w-full">
-                                <option value="Invitado">Invitado</option>
-                                <option value="Registrado">Registrado</option>
-                                <option value="Confirmado">Confirmado</option>
-                                <option value="Por Confirmar">Por Confirmar</option>
-                                <option value="No Asiste">No Asiste</option>
-                                <option value="Asistió">Asistió</option>
-                                <option value="Cancelado">Cancelado</option>
+                            <select
+                                value={estadoAsistencia}
+                                onChange={(e) => setEstadoAsistencia(e.target.value as EstadoAsistencia)}
+                                className="border p-2 rounded w-full"
+                            >
+                                {ESTADOS.map((estado) => (
+                                    <option key={estado} value={estado}>
+                                        {estado}
+                                    </option>
+                                ))}
                             </select>
                         </div>
 
