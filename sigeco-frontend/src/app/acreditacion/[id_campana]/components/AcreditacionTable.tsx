@@ -51,16 +51,26 @@ export function AcreditacionTable({
 
     if (campo.nombre_interno === 'estado_asistencia') {
       if (value === "Asistió") {
+        // Mostrar "Acreditado" (sin cambiar la lógica interna) y más marcado visualmente
         return (
-          <span className="inline-flex items-center text-green-600 font-medium">
-            <BadgeCheck className="w-4 h-4 mr-1" /> Asistió
+          <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-800 px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ring-green-200">
+            <BadgeCheck className="w-4 h-4" />
+            Acreditado
           </span>
         );
       }
       if (value === "Cancelado") {
-        return <span className="text-red-600 font-medium">Denegado</span>;
+        return (
+          <span className="inline-flex items-center gap-1 rounded-full bg-red-100 text-red-700 px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ring-red-200">
+            Denegado
+          </span>
+        );
       }
-      return <span className="text-gray-500">Pendiente</span>;
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-700 px-2 py-0.5 text-xs font-medium ring-1 ring-inset ring-gray-200">
+          Pendiente
+        </span>
+      );
     }
 
     return value ?? "-";
@@ -86,7 +96,14 @@ export function AcreditacionTable({
 
         <tbody className="divide-y divide-gray-200 bg-white">
           {asistentes.map((asistente, index) => (
-            <tr key={asistente.id_inscripcion} className={updatingId === asistente.id_inscripcion ? 'opacity-50' : ''}>
+            <tr
+              key={asistente.id_inscripcion}
+              className={[
+                updatingId === asistente.id_inscripcion ? 'opacity-50' : '',
+                // Resaltar fila acreditada sin cambiar la condición lógica
+                asistente.estado_asistencia === 'Asistió' ? 'bg-green-50' : ''
+              ].join(' ').trim()}
+            >
               <td className="px-4 py-2 text-sm text-gray-700">{index + 1}</td>
 
               {/* Celdas dinámicas */}
