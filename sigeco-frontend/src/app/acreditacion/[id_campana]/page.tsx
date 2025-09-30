@@ -50,7 +50,7 @@ export default function AcreditarCampanaPage() {
     setLoading(true);
     try {
       const [asistentesRes, formRes, campanaRes] = await Promise.all([
-        apiFetch(`/campanas/${id_campana}/asistentes-v2`),
+        apiFetch(`/campanas/${id_campana}/asistentes-v2?limit=2000`),
         apiFetch(`/campanas/${id_campana}/formulario`),
         apiFetch(`/campanas/${id_campana}`)
       ]);

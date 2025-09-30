@@ -4,12 +4,26 @@ import { Asistente, CampoFormulario } from "../types";
 import { Button } from "@/components/ui/button";
 import { BadgeCheck } from "lucide-react";
 import { useMemo } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface AcreditacionTableProps {
   asistentes: Asistente[];
   camposFormulario: CampoFormulario[];
   visibleColumns: string[];
-  onUpdateStatus: (id_inscripcion: number, nuevo_estado: 'acreditado' | 'denegado' | 'pendiente') => void;
+  onUpdateStatus: (
+    id_inscripcion: number,
+    nuevo_estado: "acreditado" | "denegado" | "pendiente"
+  ) => void;
   updatingId?: number | null;
 }
 
@@ -20,16 +34,15 @@ export function AcreditacionTable({
   onUpdateStatus,
   updatingId,
 }: AcreditacionTableProps) {
-
   // Creamos un mapa para buscar la info de cada campo por su nombre_interno fácilmente
   const camposMap = useMemo(() => {
     const map = new Map<string, CampoFormulario>();
-    camposFormulario.forEach(campo => {
+    camposFormulario.forEach((campo) => {
       map.set(campo.nombre_interno, campo);
     });
     return map;
   }, [camposFormulario]);
-  
+
   // Obtenemos los objetos completos de las columnas que son visibles, en el orden correcto
   // 🔧 Aseguramos que 'estado_asistencia' SIEMPRE esté visible por defecto
   const orderedVisibleColumns = useMemo(() => {
@@ -38,7 +51,7 @@ export function AcreditacionTable({
       : [...visibleColumns, "estado_asistencia"];
 
     return base
-      .map(nombre_interno => camposMap.get(nombre_interno))
+      .map((nombre_interno) => camposMap.get(nombre_interno))
       .filter((campo): campo is CampoFormulario => campo !== undefined);
   }, [visibleColumns, camposMap]);
 
@@ -52,9 +65,9 @@ export function AcreditacionTable({
 
   // Función para renderizar el contenido de una celda
   const renderCellContent = (asistente: Asistente, campo: CampoFormulario) => {
-    const value = asistente[campo.nombre_interno];
+    const value = (asistente as any)[campo.nombre_interno];
 
-    if (campo.nombre_interno === 'estado_asistencia') {
+    if (campo.nombre_interno === "estado_asistencia") {
       if (value === "Asistió") {
         // Mostrar "Acreditado" (sin cambiar la lógica interna) y más marcado visualmente
         return (
@@ -86,16 +99,23 @@ export function AcreditacionTable({
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
-            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">#</th>
-            
+            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+              #
+            </th>
+
             {/* Cabeceras dinámicas */}
             {orderedVisibleColumns.map((campo) => (
-              <th key={campo.id_campo} className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+              <th
+                key={campo.id_campo}
+                className="px-4 py-3 text-left text-sm font-semibold text-gray-700"
+              >
                 {campo.etiqueta}
               </th>
             ))}
 
-            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Acción</th>
+            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+              Acción
+            </th>
           </tr>
         </thead>
 
@@ -104,50 +124,85 @@ export function AcreditacionTable({
             <tr
               key={asistente.id_inscripcion}
               className={[
-                updatingId === asistente.id_inscripcion ? 'opacity-50' : '',
+                updatingId === asistente.id_inscripcion ? "opacity-50" : "",
                 // Resaltar fila acreditada sin cambiar la condición lógica
-                asistente.estado_asistencia === 'Asistió' ? 'bg-green-50' : ''
-              ].join(' ').trim()}
+                asistente.estado_asistencia === "Asistió" ? "bg-green-50" : "",
+              ]
+                .join(" ")
+                .trim()}
             >
               <td className="px-4 py-2 text-sm text-gray-700">{index + 1}</td>
 
               {/* Celdas dinámicas */}
               {orderedVisibleColumns.map((campo) => (
-                <td key={campo.id_campo} className="px-4 py-2 text-sm text-gray-700">
+                <td
+                  key={campo.id_campo}
+                  className="px-4 py-2 text-sm text-gray-700"
+                >
                   {renderCellContent(asistente, campo)}
                 </td>
               ))}
 
               <td className="px-4 py-2 text-sm">
                 {updatingId === asistente.id_inscripcion ? (
-                  <span className="text-gray-500 font-medium">Actualizando...</span>
-                ) : (
-                  asistente.estado_asistencia !== "Asistió" ? (
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        className="bg-green-600 hover:bg-green-700"
-                        onClick={() => onUpdateStatus(asistente.id_inscripcion, "acreditado")}
-                      >
-                        Acreditar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => onUpdateStatus(asistente.id_inscripcion, "denegado")}
-                      >
-                        Denegar
-                      </Button>
-                    </div>
-                  ) : (
+                  <span className="text-gray-500 font-medium">
+                    Actualizando...
+                  </span>
+                ) : asistente.estado_asistencia !== "Asistió" ? (
+                  <div className="flex gap-2">
                     <Button
                       size="sm"
-                      variant="outline"
-                      onClick={() => onUpdateStatus(asistente.id_inscripcion, "pendiente")}
+                      className="bg-green-600 hover:bg-green-700"
+                      onClick={() =>
+                        onUpdateStatus(asistente.id_inscripcion, "acreditado")
+                      }
                     >
-                      Revertir
+                      Acreditar
                     </Button>
-                  )
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() =>
+                        onUpdateStatus(asistente.id_inscripcion, "denegado")
+                      }
+                    >
+                      Denegar
+                    </Button>
+                  </div>
+                ) : (
+                  // ⚠️ Confirmación al revertir
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button size="sm" variant="outline">
+                        Revertir
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          ¿Revertir acreditación?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Esta acción marcará al asistente como{" "}
+                          <strong>Pendiente</strong>. Puedes volver a
+                          acreditarlo más tarde.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() =>
+                            onUpdateStatus(
+                              asistente.id_inscripcion,
+                              "pendiente"
+                            )
+                          }
+                        >
+                          Sí, revertir
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 )}
               </td>
             </tr>

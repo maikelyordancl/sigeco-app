@@ -1,12 +1,12 @@
 const pool = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const RefreshTokenModel = require('../models/refreshTokenModel'); // Importamos el nuevo modelo
+const RefreshTokenModel = require('../models/refreshTokenModel');
 
 // Función para generar tokens
 const generateTokens = (user) => {
     const accessToken = jwt.sign(
-        { id_usuario: user.id_usuario, nombre: user.nombre },
+        { id_usuario: user.id_usuario, nombre: user.nombre, role: user.role },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN }
     );
@@ -29,7 +29,15 @@ exports.login = async (req, res) => {
     }
 
     try {
-        const [rows] = await pool.query('SELECT * FROM usuarios WHERE email = ?', [email]);
+        // CORRECCIÓN FINAL: Se usa ur.user_id que es el nombre correcto de la columna.
+        const [rows] = await pool.query(
+            `SELECT u.*, r.name as role 
+             FROM usuarios u
+             LEFT JOIN user_roles ur ON u.id_usuario = ur.user_id
+             LEFT JOIN roles r ON ur.role_id = r.id
+             WHERE u.email = ?`,
+            [email]
+        );
 
         if (rows.length === 0) {
             return res.status(401).json({ success: false, error: 'Credenciales inválidas.' });
@@ -45,7 +53,6 @@ exports.login = async (req, res) => {
         const { accessToken, refreshToken } = generateTokens(usuario);
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 días
 
-        // Limpiamos tokens viejos y guardamos el nuevo
         await RefreshTokenModel.deleteByUserId(usuario.id_usuario);
         await RefreshTokenModel.create(usuario.id_usuario, refreshToken, expiresAt);
 
@@ -77,7 +84,15 @@ exports.refreshToken = async (req, res) => {
                 return res.status(403).json({ success: false, error: 'Fallo en la verificación del token.' });
             }
 
-            const [rows] = await pool.query('SELECT * FROM usuarios WHERE id_usuario = ?', [user.id_usuario]);
+            // CORRECCIÓN FINAL: Se usa ur.user_id también aquí.
+            const [rows] = await pool.query(
+                `SELECT u.*, r.name as role 
+                 FROM usuarios u
+                 LEFT JOIN user_roles ur ON u.id_usuario = ur.user_id
+                 LEFT JOIN roles r ON ur.role_id = r.id
+                 WHERE u.id_usuario = ?`,
+                [user.id_usuario]
+            );
             if (rows.length === 0) {
                  return res.status(403).json({ success: false, error: 'Usuario no encontrado.' });
             }
@@ -86,8 +101,8 @@ exports.refreshToken = async (req, res) => {
             const { accessToken, refreshToken: newRefreshToken } = generateTokens(usuario);
             const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 días
 
-            await RefreshTokenModel.delete(refreshToken); // Eliminamos el token viejo
-            await RefreshTokenModel.create(usuario.id_usuario, newRefreshToken, expiresAt); // Guardamos el nuevo
+            await RefreshTokenModel.delete(refreshToken);
+            await RefreshTokenModel.create(usuario.id_usuario, newRefreshToken, expiresAt);
 
             res.json({ success: true, data: { accessToken, refreshToken: newRefreshToken } });
         });
@@ -120,7 +135,6 @@ exports.verificarToken = (req, res, next) => {
 
     jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
         if (err) {
-            // Distinguimos entre token expirado y otros errores
             if (err.name === 'TokenExpiredError') {
                 return res.status(401).json({ success: false, error: 'Token expirado.' });
             }

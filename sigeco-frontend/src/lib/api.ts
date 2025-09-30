@@ -1,127 +1,131 @@
-import { jwtDecode } from 'jwt-decode';
-import { getAccessToken, getRefreshToken, setTokens, clearTokens } from './auth';
+import { getAccessToken, getRefreshToken, setAccessToken, setRefreshToken, clearTokens } from './auth';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
+// Interceptor para refrescar el token
+const refreshTokenInterceptor = async (url: string, options: RequestInit): Promise<Response> => {
+    let response = await fetch(url, options);
 
-// Variable para evitar múltiples peticiones de refresco simultáneas
-let isRefreshing = false;
+    if (response.status === 401) {
+        const refreshToken = getRefreshToken();
+        if (refreshToken) {
+            try {
+                const refreshResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ refreshToken }),
+                });
 
-// Función para refrescar el token
-const refreshToken = async (): Promise<boolean> => {
-    const currentRefreshToken = getRefreshToken();
-    if (!currentRefreshToken) {
-        clearTokens();
-        // Solo redirigimos si no estamos ya en la página de login
-        if (window.location.pathname !== '/login') {
-            window.location.href = '/login';
-        }
-        return false;
-    }
-
-    // Evita que múltiples llamadas a la API intenten refrescar el token al mismo tiempo
-    if (isRefreshing) {
-        // Espera a que la promesa de refresco en curso se resuelva
-        return new Promise(resolve => {
-            const interval = setInterval(() => {
-                if (!isRefreshing) {
-                    clearInterval(interval);
-                    resolve(!!getAccessToken());
+                if (refreshResponse.ok) {
+                    const { accessToken, refreshToken: newRefreshToken } = await refreshResponse.json();
+                    
+                    setAccessToken(accessToken);
+                    setRefreshToken(newRefreshToken);
+                    
+                    // Reintentar la solicitud original con el nuevo token
+                    const newOptions = {
+                        ...options,
+                        headers: {
+                            ...options.headers,
+                            'Authorization': `Bearer ${accessToken}`,
+                        },
+                    };
+                    response = await fetch(url, newOptions);
+                } else {
+                    clearTokens();
+                    if (typeof window !== 'undefined') {
+                        window.location.href = '/login';
+                    }
                 }
-            }, 100);
-        });
-    }
-
-    isRefreshing = true;
-
-    try {
-        const response = await fetch(`${API_URL}/auth/refresh`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refreshToken: currentRefreshToken }),
-        });
-
-        const result = await response.json();
-
-        if (result.success && result.data.accessToken && result.data.refreshToken) {
-            setTokens(result.data.accessToken, result.data.refreshToken);
-            return true;
+            } catch (error) {
+                clearTokens();
+                if (typeof window !== 'undefined') {
+                    window.location.href = '/login';
+                }
+            }
         } else {
             clearTokens();
-            if (window.location.pathname !== '/login') {
+            if (typeof window !== 'undefined') {
                 window.location.href = '/login';
             }
-            return false;
-        }
-    } catch (error) {
-        clearTokens();
-        if (window.location.pathname !== '/login') {
-            window.location.href = '/login';
-        }
-        return false;
-    } finally {
-        isRefreshing = false;
-    }
-};
-
-// Nueva función para verificar y refrescar el token si es necesario
-const ensureValidToken = async (): Promise<string | null> => {
-    let token = getAccessToken();
-
-    if (token) {
-        try {
-            const decoded: { exp: number } = jwtDecode(token);
-            const currentTime = Date.now() / 1000;
-            // Refrescar si el token expira en la próxima hora (3600 segundos)
-            if (decoded.exp < currentTime + 3600) {
-                const refreshed = await refreshToken();
-                if (refreshed) {
-                    token = getAccessToken();
-                } else {
-                    token = null; // No se pudo refrescar, se anula el token
-                }
-            }
-        } catch (error) {
-            console.error("Token inválido, intentando refrescar...", error);
-            const refreshed = await refreshToken();
-            token = refreshed ? getAccessToken() : null;
-        }
-    } else if (getRefreshToken()) {
-        // Si no hay accessToken pero sí refreshToken (ej. al recargar la página)
-        const refreshed = await refreshToken();
-        token = refreshed ? getAccessToken() : null;
-    }
-    
-    return token;
-}
-
-
-// Nuestro wrapper de fetch mejorado
-export const apiFetch = async (endpoint: string, options: RequestInit = {}): Promise<Response> => {
-    const token = await ensureValidToken();
-
-    const headers = new Headers(options.headers);
-
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
-    }
-    
-    if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
-        headers.set('Content-Type', 'application/json');
-    }
-
-    const response = await fetch(`${API_URL}${endpoint}`, { ...options, headers });
-    
-    // Mantenemos esto como un fallback por si el token expira entre la verificación y la llamada
-    if (response.status === 401) {
-        const refreshed = await refreshToken();
-        if (refreshed) {
-            const newToken = getAccessToken();
-             if (newToken) {
-                headers.set('Authorization', `Bearer ${newToken}`);
-            }
-            return fetch(`${API_URL}${endpoint}`, { ...options, headers });
         }
     }
 
     return response;
 };
+
+
+export const apiFetch = async (endpoint: string, options: RequestInit = {}): Promise<Response> => {
+    const token = getAccessToken();
+    const url = `${process.env.NEXT_PUBLIC_API_URL}${endpoint}`;
+
+    const defaultHeaders: HeadersInit = {
+        'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` }),
+    };
+
+    const config: RequestInit = {
+        ...options,
+        headers: {
+            ...defaultHeaders,
+            ...options.headers,
+        },
+    };
+
+    const response = await refreshTokenInterceptor(url, config);
+    
+    // Dejamos que los componentes manejen las respuestas no exitosas (ej. para leer mensajes de error)
+    return response;
+};
+
+// --- FUNCIONES PARA PERMISOS Y ROLES ---
+
+export const getRoles = () => apiFetch('/permisos/roles');
+
+export const createRole = (name: string) => apiFetch('/permisos/roles', {
+  method: 'POST',
+  body: JSON.stringify({ name }),
+});
+
+export const assignUserRole = (userId: number, roleId: number) => apiFetch('/permisos/user-roles', {
+  method: 'POST',
+  body: JSON.stringify({ user_id: userId, role_id: roleId }),
+});
+
+export const removeUserRole = (userId: number, roleId: number) => apiFetch(`/permisos/user-roles?user_id=${userId}&role_id=${roleId}`, {
+  method: 'DELETE',
+});
+
+export const getUserPermissionsByEvent = (userId: number) => apiFetch(`/permisos/event?user_id=${userId}`);
+
+export const upsertUserPermission = (permission: any) => apiFetch('/permisos/event', {
+  method: 'POST',
+  body: JSON.stringify(permission),
+});
+
+export const deleteUserPermission = (userId: number, eventId: number, module: string) => apiFetch(`/permisos/event?user_id=${userId}&event_id=${eventId}&module=${module}`, {
+  method: 'DELETE',
+});
+
+export const getUserSummary = (userId: number) => apiFetch(`/permisos/user/${userId}`);
+
+
+// --- FUNCIONES PARA GESTIÓN DE USUARIOS (CRUD) ---
+
+export const getUsuarios = () => apiFetch('/usuarios');
+
+export const createUsuario = (usuarioData: { nombre: string; email: string; password?: string; role_id?: number }) => apiFetch('/usuarios', {
+  method: 'POST',
+  body: JSON.stringify(usuarioData),
+});
+
+export const updateUsuario = (id_usuario: number, usuarioData: { nombre: string; email: string; }) => apiFetch(`/usuarios/${id_usuario}`, {
+  method: 'PUT',
+  body: JSON.stringify(usuarioData),
+});
+
+export const deleteUsuario = (id_usuario: number) => apiFetch(`/usuarios/${id_usuario}`, {
+  method: 'DELETE',
+});
+
+// Nota: Mantengo esta función `findUsers` porque la usamos en la UI para buscar. 
+// Asegúrate de que tu backend tenga un endpoint como /api/usuarios/buscar?q=...
+export const findUsers = (searchTerm: string) => apiFetch(`/usuarios?search=${searchTerm}`);
