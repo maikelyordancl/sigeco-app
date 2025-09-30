@@ -1,79 +1,55 @@
 const express = require('express');
 const router = express.Router();
-const { body, query, param } = require('express-validator');
-const eventoController = require('../controllers/eventoController');
-// --- LÍNEA EXISTENTE ---
+const { param, body } = require('express-validator');
+const acreditacionController = require('../controllers/acreditacionController');
 const { verificarToken } = require('../controllers/authController');
 
-// --- NUEVO ---
+// ⬇️ NUEVO: coincide con tu patrón de eventos ('../middleware/authorize')
 const authorize = require('../middleware/authorize');
 
-// --- EXISTENTE ---
-// Proteger todas las rutas de este fichero con autenticación
+// Proteger todas las rutas
 router.use(verificarToken);
 
-// GET /api/eventos -> Obtener todos los eventos
+// GET /api/acreditacion/campanas -> Obtiene eventos con sus campañas acreditables
 router.get(
-  '/',
-  // --- NUEVO: lectura del módulo 'eventos' (filtra dentro del controller)
-  authorize('eventos', 'read'),
-  eventoController.getAllEventos
+  '/campanas',
+  authorize('acreditacion', 'read'),
+  acreditacionController.getCampanasParaAcreditar
 );
 
+// GET /api/acreditacion/campana/:id_campana/asistentes_acreditacion
 router.get(
-  '/:id',
-  [
-    param('id').isInt({ min: 1 }).withMessage('El ID del evento debe ser un número entero válido.')
-  ],
-  // --- NUEVO: lectura sobre un evento específico
-  authorize('eventos', 'read'),
-  eventoController.getEventoById
+  '/campana/:id_campana/asistentes_acreditacion',
+  [param('id_campana').isInt({ gt: 0 }).withMessage('ID de campaña no válido.')],
+  authorize('acreditacion', 'read'), // el controller valida que la campaña pertenezca a un evento permitido
+  acreditacionController.getAsistentesAcreditacion
 );
 
-// POST /api/eventos -> Crear un nuevo evento con validación
+// GET /api/acreditacion/campana/:id_campana/asistentes
+router.get(
+  '/campana/:id_campana/asistentes',
+  [param('id_campana').isInt({ gt: 0 }).withMessage('ID de campaña no válido.')],
+  authorize('acreditacion', 'read'),
+  acreditacionController.getAsistentes
+);
+
+// Nueva ruta para registrar un asistente en puerta
 router.post(
-  '/',
-  [
-    body('nombre').notEmpty().withMessage('El nombre es obligatorio.').trim().escape(),
-    body('fecha_inicio').isISO8601().toDate().withMessage('La fecha de inicio debe ser una fecha válida.'),
-    body('fecha_fin').isISO8601().toDate().withMessage('La fecha de fin debe ser una fecha válida.'),
-    body('ciudad').notEmpty().withMessage('La ciudad es obligatoria.').trim().escape(),
-    body('lugar').notEmpty().withMessage('El lugar es obligatorio.').trim().escape(),
-    body('presupuesto_marketing').isFloat({ min: 0 }).withMessage('El presupuesto debe ser un número positivo.').optional({ nullable: true }),
-    body('estado').isInt({ min: 1, max: 4 }).withMessage('El estado no es válido.')
-  ],
-  // --- NUEVO: crear evento
-  authorize('eventos', 'create'),
-  eventoController.createEvento
+  '/registrar-en-puerta/:id_campana',
+  authorize('acreditacion', 'update'),
+  acreditacionController.registrarEnPuerta
 );
 
-// PUT /api/eventos?id=:id -> Actualizar un evento con validación
+// PUT /api/acreditacion/inscripcion/:id_inscripcion/estado -> Actualiza el estado de un asistente
 router.put(
-  '/',
+  '/inscripcion/:id_inscripcion/estado',
   [
-    query('id').isInt({ min: 1 }).withMessage('El ID del evento debe ser un número entero válido.'),
-    body('nombre').notEmpty().withMessage('El nombre es obligatorio.').trim().escape(),
-    body('fecha_inicio').isISO8601().toDate().withMessage('La fecha de inicio debe ser una fecha válida.'),
-    body('fecha_fin').isISO8601().toDate().withMessage('La fecha de fin debe ser una fecha válida.'),
-    body('ciudad').notEmpty().withMessage('La ciudad es obligatoria.').trim().escape(),
-    body('lugar').notEmpty().withMessage('El lugar es obligatorio.').trim().escape(),
-    body('presupuesto_marketing').isFloat({ min: 0 }).withMessage('El presupuesto debe ser un número positivo.').optional({ nullable: true }),
-    body('estado').isInt({ min: 1, max: 4 }).withMessage('El estado no es válido.')
+    param('id_inscripcion').isInt({ gt: 0 }).withMessage('ID de inscripción no válido.'),
+    body('nuevo_estado').isIn(['Asistió', 'Cancelado', 'Confirmado'])
+      .withMessage('El nuevo estado no es válido.')
   ],
-  // --- NUEVO: actualizar evento (authorize detecta ?id=... por req.query)
-  authorize('eventos', 'update'),
-  eventoController.updateEvento
-);
-
-// DELETE /api/eventos/:id -> Eliminar un evento con validación
-router.delete(
-  '/:id',
-  [
-    param('id').isInt({ min: 1 }).withMessage('El ID del evento debe ser un número entero válido.')
-  ],
-  // --- NUEVO: eliminar evento
-  authorize('eventos', 'delete'),
-  eventoController.deleteEvento
+  authorize('acreditacion', 'update'),
+  acreditacionController.updateAsistencia
 );
 
 module.exports = router;
