@@ -31,8 +31,13 @@ export function AcreditacionTable({
   }, [camposFormulario]);
   
   // Obtenemos los objetos completos de las columnas que son visibles, en el orden correcto
+  // 🔧 Aseguramos que 'estado_asistencia' SIEMPRE esté visible por defecto
   const orderedVisibleColumns = useMemo(() => {
-    return visibleColumns
+    const base = visibleColumns.includes("estado_asistencia")
+      ? visibleColumns
+      : [...visibleColumns, "estado_asistencia"];
+
+    return base
       .map(nombre_interno => camposMap.get(nombre_interno))
       .filter((campo): campo is CampoFormulario => campo !== undefined);
   }, [visibleColumns, camposMap]);
