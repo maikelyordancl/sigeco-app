@@ -269,70 +269,78 @@ const Inscripcion = {
         await connection.beginTransaction();
 
         try {
-            // --- PASO 1: Mapeo de Cabeceras a IDs de Campos ---
-            // Obtenemos todos los campos del formulario para esta campaña UNA SOLA VEZ.
+            console.log('--- Iniciando Proceso de Importación Masiva ---');
+
             const camposQuery = `
-                SELECT fc.id_campo, fc.etiqueta, fc.nombre_interno
+                SELECT fc.id_campo, fc.etiqueta, fc.nombre_interno, fc.es_de_sistema
                 FROM campana_formulario_config cfc
                 JOIN formulario_campos fc ON cfc.id_campo = fc.id_campo
                 WHERE cfc.id_campana = ?
             `;
             const [camposDelFormulario] = await connection.query(camposQuery, [id_campana]);
 
-            // Creamos un mapa para buscar rápidamente el ID de un campo a partir de su etiqueta (la cabecera del Excel).
             const mapaEtiquetaAId = camposDelFormulario.reduce((mapa, campo) => {
-                mapa[campo.etiqueta] = campo.id_campo;
+                mapa[campo.etiqueta.trim().toLowerCase()] = campo.id_campo;
                 return mapa;
             }, {});
             
-            // Creamos otro mapa para buscar el nombre_interno a partir de la etiqueta, útil para los campos fijos.
-            const mapaEtiquetaANombreInterno = camposDelFormulario.reduce((mapa, campo) => {
-                mapa[campo.etiqueta] = campo.nombre_interno;
-                return mapa;
-            }, {});
+            // Este mapa es para identificar qué campos deben ir a la tabla 'contactos'
+            const camposDeSistema = camposDelFormulario
+                .filter(c => c.es_de_sistema === 1) // Filtra solo los que son columnas en la tabla 'contactos'
+                .reduce((mapa, campo) => {
+                    mapa[campo.etiqueta.trim().toLowerCase()] = campo.nombre_interno;
+                    return mapa;
+                }, {});
 
+            console.log('Mapa de Campos de Sistema (para tabla contactos):', camposDeSistema);
             let totalProcesados = 0;
 
-            // --- PASO 2: Procesar cada fila del Excel (cada contacto) ---
             for (const [index, fila] of contactos.entries()) {
-                
-                // Extraemos el email. Es el único campo obligatorio para la importación.
-                // Buscamos el email sin importar cómo se llame la columna ("Email", "email", "Correo Electrónico").
-                const emailKey = Object.keys(fila).find(k => k.toLowerCase().includes('email'));
+                console.log(`\n-------------------- Fila ${index + 2} --------------------`);
+                console.log('Datos CRUDOS del Excel:', fila); // LOG AÑADIDO
+
+                const emailKey = Object.keys(fila).find(k => k.toLowerCase().trim() === 'email');
                 const email = emailKey ? fila[emailKey]?.toLowerCase().trim() : null;
 
-                if (!email) {
-                    // Si no hay email, lanzamos un error que cancelará TODA la transacción.
-                    throw new Error(`Fila ${index + 2}: La columna de email es obligatoria y no fue encontrada o está vacía.`);
+                if (!email || email === '') {
+                    throw new Error(`Fila ${index + 2}: La columna de email es obligatoria y está vacía.`);
                 }
                 
-                // --- PASO 2.1: Buscar o Crear el Contacto ---
+                const datosContacto = {};
+                for (const cabecera in fila) {
+                    const cabeceraNormalizada = cabecera.trim().toLowerCase();
+                    const nombreColumna = camposDeSistema[cabeceraNormalizada];
+                    if (nombreColumna && fila[cabecera] !== null && fila[cabecera] !== '') {
+                        datosContacto[nombreColumna] = fila[cabecera];
+                    }
+                }
+                datosContacto.email = email;
+
+                console.log('-> Preparando para tabla "contactos":', datosContacto); // LOG MEJORADO
+
                 let [contactosExistentes] = await connection.query('SELECT id_contacto FROM contactos WHERE email = ?', [email]);
                 let id_contacto;
 
                 if (contactosExistentes.length > 0) {
                     id_contacto = contactosExistentes[0].id_contacto;
+                    const { email, ...datosParaActualizar } = datosContacto;
+                    if (Object.keys(datosParaActualizar).length > 0) {
+                        await connection.query('UPDATE contactos SET ? WHERE id_contacto = ?', [datosParaActualizar, id_contacto]);
+                    }
                 } else {
-                    // Si el contacto no existe, lo creamos con los datos básicos que tengamos.
-                    const nombreKey = Object.keys(fila).find(k => k.toLowerCase().includes('nombre'));
-                    const nombre = nombreKey ? fila[nombreKey] : 'N/A';
-                    
-                    const [result] = await connection.query('INSERT INTO contactos (email, nombre) VALUES (?, ?)', [email, nombre]);
+                    const [result] = await connection.query('INSERT INTO contactos SET ?', datosContacto);
                     id_contacto = result.insertId;
                 }
 
-                // --- PASO 2.2: Crear la Inscripción ---
-                // Usamos INSERT IGNORE para evitar errores si el contacto ya estaba inscrito en esta campaña.
                 const [resultInscripcion] = await connection.query(
                     'INSERT IGNORE INTO inscripciones (id_campana, id_contacto, estado_asistencia) VALUES (?, ?, ?)',
-                    [id_campana, id_contacto, 'Registrado'] // O 'Invitado', según tu lógica.
+                    [id_campana, id_contacto, 'Registrado']
                 );
                 
                 let id_inscripcion;
                 if (resultInscripcion.insertId > 0) {
                     id_inscripcion = resultInscripcion.insertId;
                 } else {
-                    // Si no se insertó, es porque ya existía. La buscamos.
                     const [inscripcionExistente] = await connection.query(
                         'SELECT id_inscripcion FROM inscripciones WHERE id_campana = ? AND id_contacto = ?',
                         [id_campana, id_contacto]
@@ -343,21 +351,20 @@ const Inscripcion = {
                     id_inscripcion = inscripcionExistente[0].id_inscripcion;
                 }
                 
-                // --- PASO 2.3: Guardar las Respuestas del Formulario ---
                 const respuestasParaInsertar = [];
                 for (const cabecera in fila) {
-                    const id_campo = mapaEtiquetaAId[cabecera];
+                    const cabeceraNormalizada = cabecera.trim().toLowerCase();
+                    const id_campo = mapaEtiquetaAId[cabeceraNormalizada];
                     const valor = fila[cabecera];
 
-                    // Solo guardamos si encontramos un campo correspondiente y el valor no es nulo/vacío.
                     if (id_campo && valor !== null && valor !== '') {
                         respuestasParaInsertar.push([id_inscripcion, id_campo, String(valor)]);
                     }
                 }
                 
+                console.log('-> Preparando para tabla "inscripcion_respuestas":', respuestasParaInsertar); // LOG AÑADIDO
+
                 if (respuestasParaInsertar.length > 0) {
-                    // Usamos una sola consulta para insertar todas las respuestas de esta fila.
-                    // `ON DUPLICATE KEY UPDATE` actualizará la respuesta si ya existía.
                     const queryRespuestas = `
                         INSERT INTO inscripcion_respuestas (id_inscripcion, id_campo, valor) VALUES ?
                         ON DUPLICATE KEY UPDATE valor = VALUES(valor)
@@ -368,22 +375,19 @@ const Inscripcion = {
                 totalProcesados++;
             }
 
-            // --- PASO 3: Si todo fue bien, confirmar la transacción ---
             await connection.commit();
+            console.log('--- Proceso de Importación Masiva Finalizado con Éxito ---');
             return { totalProcesados };
 
         } catch (error) {
-            // --- PASO 4: Si algo falló, revertir todo ---
             await connection.rollback();
-            console.error("Error en la transacción de importación masiva:", error);
-            // Re-lanzamos el error para que el controlador lo atrape y envíe al frontend.
+            console.error("--- ERROR GRAVE: Se revirtió la transacción de importación masiva ---");
+            console.error(error);
             throw error;
         } finally {
-            // --- PASO 5: Liberar la conexión ---
             connection.release();
         }
     }
-
 
 };
 

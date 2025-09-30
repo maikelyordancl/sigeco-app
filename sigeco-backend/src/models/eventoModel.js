@@ -36,7 +36,20 @@ exports.deleteById = async (id) => {
     return result;
 };
 
+// Modelo para buscar un evento por id
 exports.findById = async (id) => {
-  const [rows] = await pool.query('SELECT * FROM eventos WHERE id_evento = ? LIMIT 1', [id]);
-  return rows[0] || null;
+    const [rows] = await pool.query('SELECT * FROM eventos WHERE id_evento = ? LIMIT 1', [id]);
+    return rows[0] || null;
+};
+
+// -------- NUEVO --------
+// Modelo para buscar varios eventos por lista de IDs (para roles)
+exports.findByIds = async (ids) => {
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+    const placeholders = ids.map(() => '?').join(',');
+    const [rows] = await pool.query(
+        `SELECT * FROM eventos WHERE id_evento IN (${placeholders}) ORDER BY fecha_creado DESC`,
+        ids
+    );
+    return rows;
 };
