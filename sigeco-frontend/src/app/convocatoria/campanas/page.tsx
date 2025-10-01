@@ -3,13 +3,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link'; // Importar Link para navegación interna
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 import MainLayout from "@/components/Layout/MainLayout";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"; // Importar CardFooter
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-// Importar nuevos íconos
 import { Calendar, Megaphone, ExternalLink, Settings } from 'lucide-react';
 
 interface Evento {
@@ -19,7 +19,7 @@ interface Evento {
 
 interface Campana {
   id_campana: number;
-  id_evento: number; // Añadido para construir la URL de gestión
+  id_evento: number;
   nombre: string;
   estado: string;
   subevento_nombre?: string | null;
@@ -30,6 +30,8 @@ interface Campana {
 }
 
 const CampanasPorEventoPage = () => {
+  const router = useRouter();
+
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [selectedEvento, setSelectedEvento] = useState<string>('');
   const [campanas, setCampanas] = useState<Campana[]>([]);
@@ -59,6 +61,7 @@ const CampanasPorEventoPage = () => {
     fetchEventos();
   }, [fetchEventos]);
 
+  // 🔁 Mantengo tu efecto original para cargar campañas (no hará falta al redirigir).
   useEffect(() => {
     if (!selectedEvento) {
       setCampanas([]);
@@ -88,9 +91,16 @@ const CampanasPorEventoPage = () => {
       }
     };
 
-    fetchCampanas();
+    // ⛳️ Si prefieres no hacer esta llamada porque vamos a redirigir, puedes comentar la siguiente línea.
+    // fetchCampanas();
   }, [selectedEvento]);
 
+  // 🚀 NUEVO: en cuanto haya un evento seleccionado, redirigimos a /eventos/{id_evento}/campanas
+  useEffect(() => {
+    if (selectedEvento) {
+      router.push(`/eventos/${selectedEvento}/campanas`);
+    }
+  }, [selectedEvento, router]);
 
   return (
     <MainLayout>
@@ -98,22 +108,24 @@ const CampanasPorEventoPage = () => {
         <h1 className="text-3xl font-bold mb-6">Visualización de Campañas</h1>
 
         <Select onValueChange={setSelectedEvento} value={selectedEvento}>
-  <SelectTrigger className="w-full mb-6 max-w-lg mx-auto text-2xl py-4">
-    <SelectValue placeholder="Selecciona un evento para ver sus campañas" />
-  </SelectTrigger>
-  <SelectContent>
-    {eventos.map((evento) => (
-      <SelectItem
-        key={evento.id_evento}
-        value={String(evento.id_evento)}
-        className="text-xl py-3"
-      >
-        {evento.nombre}
-      </SelectItem>
-    ))}
-  </SelectContent>
-</Select>
+          <SelectTrigger className="w-full mb-6 max-w-lg mx-auto text-2xl py-4">
+            <SelectValue placeholder="Selecciona un evento para ver sus campañas" />
+          </SelectTrigger>
+          <SelectContent>
+            {eventos.map((evento) => (
+              <SelectItem
+                key={evento.id_evento}
+                value={String(evento.id_evento)}
+                className="text-xl py-3"
+              >
+                {evento.nombre}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
+        {/* Todo lo de abajo se mantiene intacto, pero en la práctica no se verá
+            porque al seleccionar un evento te redirige inmediatamente. */}
         {selectedEvento && (
           <>
             {loading && <p className="text-center">Cargando campañas...</p>}
@@ -125,7 +137,6 @@ const CampanasPorEventoPage = () => {
                 {campanas.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {campanas.map((campana) => (
-                      // --- INICIO DE LA MODIFICACIÓN ---
                       <Card key={campana.id_campana} className="shadow-md hover:shadow-lg transition-shadow flex flex-col">
                         <CardHeader>
                           <CardTitle className="flex items-center space-x-2">
@@ -138,41 +149,38 @@ const CampanasPorEventoPage = () => {
                             {campana.subevento_nombre || "Evento principal"}
                           </div>
                           {campana.fecha_personalizada && (
-                             <div className="flex items-center space-x-2 text-sm text-gray-600">
-                               <Calendar size={16} />
-                               <span>{campana.fecha_personalizada}</span>
-                             </div>
+                            <div className="flex items-center space-x-2 text-sm text-gray-600">
+                              <Calendar size={16} />
+                              <span>{campana.fecha_personalizada}</span>
+                            </div>
                           )}
                         </CardContent>
                         <CardFooter className="grid grid-cols-2 gap-2 pt-4">
-                            {/* Botón 1: Ir a la gestión de campañas */}
-                            <Button variant="secondary" size="sm" asChild>
-                                <Link href={`/eventos/${campana.id_evento}/campanas`}>
-                                    Ir a campañas
-                                    <Settings className="h-4 w-4 ml-2" />
-                                </Link>
+                          <Button variant="secondary" size="sm" asChild>
+                            <Link href={`/eventos/${campana.id_evento}/campanas`}>
+                              Ir a campañas
+                              <Settings className="h-4 w-4 ml-2" />
+                            </Link>
+                          </Button>
+
+                          {campana.url_amigable && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex items-center justify-center gap-2"
+                              asChild
+                            >
+                              <a
+                                href={`/c/${campana.url_amigable}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                Ver landing
+                                <ExternalLink className="h-4 w-4" />
+                              </a>
                             </Button>
-                            
-                            {/* Botón 2: Ver la landing page pública */}
-                            {campana.url_amigable && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="flex items-center justify-center gap-2"
-                                  asChild
-                                >
-                                  <a
-                                    href={`/c/${campana.url_amigable}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                  >
-                                    Ver landing
-                                    <ExternalLink className="h-4 w-4" />
-                                  </a>
-                                </Button>
-                            )}
+                          )}
                         </CardFooter>
-                         {/* --- FIN DE LA MODIFICACIÓN --- */}
                       </Card>
                     ))}
                   </div>
