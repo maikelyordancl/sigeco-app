@@ -129,11 +129,13 @@ const ModernaLayout: React.FC<Props> = ({ data }) => {
           <h1 className="text-3xl font-bold text-gray-900">
             {(campana as any)?.evento_nombre}
           </h1>
+           {/*  texto convocatorioa
           {(campana as any)?.nombre && (
             <h3 className="text-xl font-semibold text-gray-700 mt-1">
               {(campana as any).nombre}
             </h3>
           )}
+             */}
           <InfoCard campana={campana} />
         </div>
 
