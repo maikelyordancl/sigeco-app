@@ -224,7 +224,7 @@ export default function AcreditarCampanaPage() {
   placeholder="Buscar asistente (nombre, email, rut...)"
   value={searchTerm}
   onChange={(e) => setSearchTerm(e.target.value)}
-  className="bg-yellow-100 focus:bg-yellow-50 focus:ring-2 focus:ring-yellow-300 border-yellow-200"
+  className="bg-yellow-2  00 focus:bg-yellow-50 focus:ring-2 focus:ring-yellow-300 border-yellow-200"
 />
 
               <div className="flex gap-2">

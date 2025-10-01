@@ -97,9 +97,9 @@ export function AcreditacionTable({
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200 shadow">
       <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+        <thead>
+          <tr className="bg-cyan-400 border-b border-cyan-500">
+            <th className="px-4 py-3 text-left text-sm font-semibold text-black">
               #
             </th>
 
@@ -107,13 +107,13 @@ export function AcreditacionTable({
             {orderedVisibleColumns.map((campo) => (
               <th
                 key={campo.id_campo}
-                className="px-4 py-3 text-left text-sm font-semibold text-gray-700"
+                className="px-4 py-3 text-left text-sm font-semibold text-black"
               >
                 {campo.etiqueta}
               </th>
             ))}
 
-            <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+            <th className="px-4 py-3 text-left text-sm font-semibold text-black">
               Acción
             </th>
           </tr>
