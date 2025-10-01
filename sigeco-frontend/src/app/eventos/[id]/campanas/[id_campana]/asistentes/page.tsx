@@ -135,8 +135,8 @@ export default function AsistentesPage() {
         <div className="flex justify-between items-center mb-3">
           <div className="space-y-1">
             <h1 className="text-3xl font-bold leading-tight m-0">
-              {eventoInfo?.nombre || 'Evento'}
-            </h1>
+  {eventoInfo ? `${id_evento.toString().padStart(4, "00")} - ${eventoInfo.nombre}` : `Evento`}
+</h1>
             <h3 className="text-xl font-semibold leading-snug m-0">
               {campanaInfo?.nombre || 'Campaña'}
             </h3>

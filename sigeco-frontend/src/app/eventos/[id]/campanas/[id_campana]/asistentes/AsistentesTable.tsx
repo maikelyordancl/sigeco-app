@@ -305,7 +305,7 @@ export function AsistentesTable({
     className="pl-8 bg-yellow-200 focus:bg-yellow-100 border-2 border-yellow-400 focus:ring-2 focus:ring-yellow-400 shadow-md"
   />
 </div>
-      
+
         <div className="justify-self-center">
           <p>Filtros: </p>
           <Select value={estadoFiltro as string} onValueChange={v => setEstadoFiltro(v as EstadoAsistencia | typeof ALL)}>
@@ -336,7 +336,7 @@ export function AsistentesTable({
 
             <Button onClick={() => setIsRegistrarOpen(true)} className="bg-cyan-600 hover:bg-cyan-700">
                 <UserPlus className="mr-2 h-4 w-4" />
-                Registrar en Puerta
+                Nuevo Registro
             </Button>
 
             <div className="flex items-center gap-2">
