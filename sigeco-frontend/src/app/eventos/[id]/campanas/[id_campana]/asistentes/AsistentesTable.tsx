@@ -296,8 +296,16 @@ export function AsistentesTable({
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3 py-4">
-        <div className="relative max-w-sm"><span className="absolute inset-y-0 left-0 pl-2 text-cyan-600">🔍</span><Input placeholder="Buscar..." value={globalFilter} onChange={e => setGlobalFilter(e.target.value)} className="pl-8 border-2 border-cyan-500 shadow-md" /></div>
-        
+        <div className="relative max-w-sm">
+  <span className="absolute inset-y-0 left-0 pl-2 text-yellow-600">🔍</span>
+  <Input
+    placeholder="Buscar..."
+    value={globalFilter}
+    onChange={e => setGlobalFilter(e.target.value)}
+    className="pl-8 bg-yellow-200 focus:bg-yellow-100 border-2 border-yellow-400 focus:ring-2 focus:ring-yellow-400 shadow-md"
+  />
+</div>
+      
         <div className="justify-self-center">
           <p>Filtros: </p>
           <Select value={estadoFiltro as string} onValueChange={v => setEstadoFiltro(v as EstadoAsistencia | typeof ALL)}>
