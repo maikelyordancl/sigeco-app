@@ -98,17 +98,21 @@ const CampanasPorEventoPage = () => {
         <h1 className="text-3xl font-bold mb-6">Visualización de Campañas</h1>
 
         <Select onValueChange={setSelectedEvento} value={selectedEvento}>
-          <SelectTrigger className="w-full mb-6 max-w-lg mx-auto">
-            <SelectValue placeholder="Selecciona un evento para ver sus campañas" />
-          </SelectTrigger>
-          <SelectContent>
-            {eventos.map((evento) => (
-              <SelectItem key={evento.id_evento} value={String(evento.id_evento)}>
-                {evento.nombre}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+  <SelectTrigger className="w-full mb-6 max-w-lg mx-auto text-2xl py-4">
+    <SelectValue placeholder="Selecciona un evento para ver sus campañas" />
+  </SelectTrigger>
+  <SelectContent>
+    {eventos.map((evento) => (
+      <SelectItem
+        key={evento.id_evento}
+        value={String(evento.id_evento)}
+        className="text-xl py-3"
+      >
+        {evento.nombre}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
 
         {selectedEvento && (
           <>
