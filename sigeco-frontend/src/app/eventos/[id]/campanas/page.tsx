@@ -123,12 +123,16 @@ const GestionCampanasPage = () => {
       <CardHeader>
         {/* ... (código de CardHeader sin cambios) ... */}
         <div className="flex justify-between items-start">
-          <CardTitle>ID: 00{campana.id_campana} - {campana.nombre}</CardTitle>
+          <CardTitle>00{campana.id_campana} - {campana.nombre}</CardTitle>
           <div className="flex items-center space-x-2">
             <Badge className={campana.estado === "Activa" ? "bg-green-600 text-white" : ""}>{campana.estado}</Badge>
-            <Button variant="secondary" size="sm" onClick={() => handleGoToAsistentes(campana.id_campana)} disabled={!campana.id_subevento}>
-              <Users className="mr-2 h-4 w-4" /> Asistentes
-            </Button>
+            <Button 
+  onClick={() => handleGoToAsistentes(campana.id_campana)} 
+  disabled={!campana.id_subevento}
+  className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold px-4 py-2 rounded-md text-base"
+>
+  <Users className="mr-2 h-5 w-5" /> Asistentes
+</Button>
             {!!campana.id_subevento && (
               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleOpenFormConfigModal(campana.id_campana)}>
                 <Settings className="h-4 w-4" />
@@ -150,7 +154,7 @@ const GestionCampanasPage = () => {
         )}
         {/* --- FIN DE LA MODIFICACIÓN --- */}
         <p className="text-sm text-gray-500 break-all">
-          URL:{" "}
+          URL (form):{" "}
           <a href={`/c/${campana.url_amigable}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
             /c/{campana.url_amigable}
           </a>
@@ -196,7 +200,7 @@ const GestionCampanasPage = () => {
           <Ticket className="mr-2 h-4 w-4" /> Tickets
         </Button>
         <Button variant="secondary" size="sm" onClick={() => handleGoToConvocatoria(campana.id_campana)} disabled={!campana.id_subevento}>
-          <Send className="mr-2 h-4 w-4" /> Convocar
+          <Send className="mr-2 h-4 w-4" /> Convocar - BD
         </Button>
       </CardFooter>
     </Card>
