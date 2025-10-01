@@ -165,7 +165,6 @@ exports.guardarLanding = async (req, res) => {
 
 exports.getAsistentesConCampos = async (req, res) => {
   try {
-    // 1. Validar y obtener los parámetros de la petición
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -173,13 +172,18 @@ exports.getAsistentesConCampos = async (req, res) => {
 
     const { id_campana } = req.params;
     const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 50; // Sincronizado con el frontend
+    const limit = parseInt(req.query.limit, 10) || 50;
     const offset = (page - 1) * limit;
 
-    // 2. Llamar a la función del modelo que ya hace todo el trabajo
-    const paginatedData = await InscripcionModel.findWithCustomFieldsByCampanaId(id_campana, limit, offset);
+    // --- INICIO DE LA MODIFICACIÓN ---
+    // Leer los nuevos parámetros de la query
+    const searchTerm = req.query.search || null;
+    const estadoFiltro = req.query.estado || null;
+    
+    // Llamar a la función del modelo con los nuevos parámetros
+    const paginatedData = await InscripcionModel.findWithCustomFieldsByCampanaId(id_campana, limit, offset, searchTerm, estadoFiltro);
+    // --- FIN DE LA MODIFICACIÓN ---
 
-    // 3. Enviar la respuesta completa directamente al frontend
     res.json(paginatedData);
 
   } catch (error) {

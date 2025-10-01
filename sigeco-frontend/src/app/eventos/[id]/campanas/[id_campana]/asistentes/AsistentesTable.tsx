@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   ColumnDef, flexRender, getCoreRowModel, getSortedRowModel,
-  getFilteredRowModel, useReactTable, SortingState, VisibilityState, FilterFn
+  useReactTable, SortingState, VisibilityState
 } from '@tanstack/react-table';
 import { Pencil, Trash, UserPlus } from 'lucide-react';
 import Cookies from 'js-cookie';
@@ -11,8 +11,6 @@ import toast from 'react-hot-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-// --- LÍNEA MODIFICADA ---
-// Volvemos a la importación local, que ahora es la correcta y unificada.
 import { Asistente, CampoFormulario, EstadoAsistencia } from './types';
 import { ConfigurarColumnas } from './ConfigurarColumnas';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -24,7 +22,7 @@ interface AsistentesTableProps {
   onEdit: (asistente: Asistente) => void;
   id_campana: string;
   camposFormulario: CampoFormulario[];
-  onEstadoChange: (id_inscripcion: number, nuevoEstado: EstadoAsistencia) => void | Promise<void>; // <- tipado
+  onEstadoChange: (id_inscripcion: number, nuevoEstado: EstadoAsistencia) => void | Promise<void>;
   limit: number;
   onLimitChange: (n: number) => void;
   page: number;
@@ -33,9 +31,16 @@ interface AsistentesTableProps {
   onPageChange: (newPage: number) => void;
   statusCounts: Record<string, number>;
   onRefreshData: () => void;
+  searchTerm: string;
+  onSearchChange: (value: string) => void;
+  estadoFiltro: string;
+  onEstadoFiltroChange: (value: string) => void;
+  // --- INICIO DE LA MODIFICACIÓN ---
+  isRefreshing: boolean; // Añadimos la nueva prop
+  // --- FIN DE LA MODIFICACIÓN ---
 }
 
-const PaginationControls = ({ page, totalPages, totalInscripciones, limit, onPageChange }: Omit<AsistentesTableProps, 'data' | 'onEdit' | 'id_campana' | 'camposFormulario' | 'onEstadoChange' | 'onLimitChange' | 'statusCounts' | 'onRefreshData'>) => (
+const PaginationControls = ({ page, totalPages, totalInscripciones, limit, onPageChange }: any) => (
   <div className="flex items-center justify-between space-x-2 py-4">
     <div className="text-sm text-muted-foreground">
       {totalInscripciones > 0
@@ -50,13 +55,6 @@ const PaginationControls = ({ page, totalPages, totalInscripciones, limit, onPag
     </div>
   </div>
 );
-
-const multiWordGlobalFilter: FilterFn<Asistente> = (row, _columnId, filterValue) => {
-  const searchWords = String(filterValue).toLowerCase().split(' ').filter(Boolean);
-  if (searchWords.length === 0) return true;
-  const rowSearchableString = Object.values(row.original).join(' ').toLowerCase();
-  return searchWords.every(word => rowSearchableString.includes(word));
-};
 
 const getColumnasVisiblesDesdeCookie = (id_campana: string): VisibilityState | null => {
   const cookieKey = `config_columnas_campana_${id_campana}`;
@@ -89,10 +87,13 @@ const getEstadoStyle = (estado?: string): EstadoStyle => estado ? (ESTADO_STYLES
 export function AsistentesTable({
   data, onEdit, id_campana, camposFormulario, onEstadoChange,
   limit, onLimitChange, page, totalPages, totalInscripciones, onPageChange,
-  statusCounts, onRefreshData
+  statusCounts, onRefreshData,
+  searchTerm, onSearchChange, estadoFiltro, onEstadoFiltroChange,
+  // --- INICIO DE LA MODIFICACIÓN ---
+  isRefreshing
+  // --- FIN DE LA MODIFICACIÓN ---
 }: AsistentesTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [globalFilter, setGlobalFilter] = useState('');
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
   const [isInitialVisibilitySet, setIsInitialVisibilitySet] = useState(false);
   const [dataState, setDataState] = useState<Asistente[]>(Array.isArray(data) ? data : []);
@@ -102,12 +103,9 @@ export function AsistentesTable({
 
   useEffect(() => { setDataState(Array.isArray(data) ? data : []); }, [data]);
   
-  const [estadoFiltro, setEstadoFiltro] = useState<EstadoAsistencia | typeof ALL>(ALL);
-
   const dataConNumeroFila = useMemo(() => {
-    const base = estadoFiltro === ALL ? dataState : dataState.filter(a => a?.estado_asistencia === estadoFiltro);
-    return (Array.isArray(base) ? base : []).map(row => ({ ...row, numero_fila: (row as any)['#'] }));
-  }, [dataState, estadoFiltro]);
+    return (Array.isArray(dataState) ? dataState : []).map(row => ({ ...row, numero_fila: (row as any)['#'] }));
+  }, [dataState]);
 
   useEffect(() => {
     if (dataState.length > 0 && !isInitialVisibilitySet) {
@@ -165,12 +163,11 @@ export function AsistentesTable({
   setIsSubmitting(true);
   const toastId = toast.loading('Registrando asistente...');
   try {
-    // 🔒 Forzamos a NO acreditar desde esta pantalla
     const sanitized = {
       ...formData,
       acreditar: false,
       acreditar_inmediatamente: false,
-      acreditacion_inmediata: false, // por si el dialog usa otro nombre
+      acreditacion_inmediata: false,
     };
     delete (sanitized as any).acreditar;
     delete (sanitized as any).acreditar_inmediatamente;
@@ -196,7 +193,6 @@ export function AsistentesTable({
     setIsSubmitting(false);
   }
 };
-
 
   const columns = useMemo<ColumnDef<Asistente>[]>(() => {
     if (dataState.length === 0) return [];
@@ -284,10 +280,12 @@ export function AsistentesTable({
   }, [dataState, onEdit, camposFormulario, onEstadoChange]);
   
   const table = useReactTable({
-    data: dataConNumeroFila, columns, state: { sorting, globalFilter, columnVisibility },
-    globalFilterFn: multiWordGlobalFilter, onSortingChange: setSorting, onGlobalFilterChange: setGlobalFilter,
-    onColumnVisibilityChange: setColumnVisibility, getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(), getFilteredRowModel: getFilteredRowModel(),
+    data: dataConNumeroFila, columns,
+    state: { sorting, columnVisibility },
+    onSortingChange: setSorting,
+    onColumnVisibilityChange: setColumnVisibility, 
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
   });
 
   const estiloFiltro = estadoFiltro === ALL ? ESTILO_DEFAULT : getEstadoStyle(estadoFiltro as string);
@@ -300,15 +298,18 @@ export function AsistentesTable({
   <span className="absolute inset-y-0 left-0 pl-2 text-yellow-600">🔍</span>
   <Input
     placeholder="Buscar..."
-    value={globalFilter}
-    onChange={e => setGlobalFilter(e.target.value)}
+    value={searchTerm}
+    onChange={e => onSearchChange(e.target.value)}
+    // --- INICIO DE LA MODIFICACIÓN ---
+    disabled={isRefreshing} // Deshabilitamos mientras se refresca
+    // --- FIN DE LA MODIFICACIÓN ---
     className="pl-8 bg-yellow-200 focus:bg-yellow-100 border-2 border-yellow-400 focus:ring-2 focus:ring-yellow-400 shadow-md"
   />
 </div>
 
         <div className="justify-self-center">
           <p>Filtros: </p>
-          <Select value={estadoFiltro as string} onValueChange={v => setEstadoFiltro(v as EstadoAsistencia | typeof ALL)}>
+          <Select value={estadoFiltro} onValueChange={onEstadoFiltroChange} disabled={isRefreshing}>
             <SelectTrigger className={`w-[220px] border-2 border-cyan-500 shadow-md ${estiloFiltro.bg} ${estiloFiltro.text}`}>
               <SelectValue />
             </SelectTrigger>
@@ -375,7 +376,11 @@ export function AsistentesTable({
       />
 
       <PaginationControls {...paginationProps} />
-      <div className="rounded-md border">
+      <div className="rounded-md border relative">
+        {/* --- INICIO DE LA MODIFICACIÓN --- */}
+        {/* Div que pone la tabla semitransparente mientras carga */}
+        {isRefreshing && <div className="absolute inset-0 bg-white/50 dark:bg-black/50 z-10" />}
+        {/* --- FIN DE LA MODIFICACIÓN --- */}
         <Table>
           <TableHeader><TableRow className="bg-cyan-400">{table.getHeaderGroups().map(hg => hg.headers.map(h => <TableHead key={h.id} onClick={h.column.getToggleSortingHandler()} className="font-bold text-black !bg-cyan-400 hover:!bg-cyan-400">{flexRender(h.column.columnDef.header, h.getContext())}{{asc:'🔼',desc:'🔽'}[h.column.getIsSorted() as string]??null}</TableHead>))}</TableRow></TableHeader>
           <TableBody>

@@ -11,6 +11,21 @@ import { ArrowLeft } from "lucide-react";
 import toast from "react-hot-toast";
 import MainLayout from "@/components/Layout/MainLayout";
 
+const useDebounce = (value: string, delay: number) => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedValue(value);
+        }, delay);
+        return () => {
+            clearTimeout(handler);
+        };
+    }, [value, delay]);
+    return debouncedValue;
+};
+
+const ALL_STATUS = "__ALL__";
+
 export default function AsistentesPage() {
   const params = useParams();
   const id_evento = params.id as string;
@@ -18,28 +33,50 @@ export default function AsistentesPage() {
   const router = useRouter();
 
   const [asistentes, setAsistentes] = useState<Asistente[]>([]);
-  const [loading, setLoading] = useState(true);
+  
+  // --- INICIO DE LA MODIFICACIÓN ---
+  const [initialLoading, setInitialLoading] = useState(true); // Para la carga inicial
+  const [isRefreshing, setIsRefreshing] = useState(false); // Para búsquedas y filtros
+  // --- FIN DE LA MODIFICACIÓN ---
+
   const [selectedAsistente, setSelectedAsistente] = useState<Asistente | null>(null);
   const [isSheetOpen, setSheetOpen] = useState(false);
   const [campanaInfo, setCampanaInfo] = useState<any>(null);
   const [camposFormulario, setCamposFormulario] = useState<CampoFormulario[]>([]);
   const [eventoInfo, setEventoInfo] = useState<any>(null);
-
-  // --- PAGINACIÓN ---
+  
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(50); // default 50
+  const [limit, setLimit] = useState(50);
   const [totalPages, setTotalPages] = useState(1);
   const [totalInscripciones, setTotalInscripciones] = useState(0);
-
-  // --- NUEVO: Estado para los conteos de estado ---
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
+
+  const [estadoFiltro, setEstadoFiltro] = useState<string>(ALL_STATUS);
+  const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
   const fetchData = useCallback(async () => {
     if (!id_campana || !id_evento) return;
-    setLoading(true);
+    
+    // --- INICIO DE LA MODIFICACIÓN ---
+    setIsRefreshing(true); // Activamos el indicador de actualización
+    // --- FIN DE LA MODIFICACIÓN ---
+
+    const queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+    });
+
+    if (debouncedSearchTerm) {
+        queryParams.append('search', debouncedSearchTerm);
+    }
+    if (estadoFiltro !== ALL_STATUS) {
+        queryParams.append('estado', estadoFiltro);
+    }
+
     try {
       const [asistentesRes, campanaRes, formularioRes, eventoRes] = await Promise.all([
-        apiFetch(`/campanas/${id_campana}/asistentes-v2?page=${page}&limit=${limit}`),
+        apiFetch(`/campanas/${id_campana}/asistentes-v2?${queryParams.toString()}`),
         apiFetch(`/campanas/${id_campana}`),
         apiFetch(`/campanas/${id_campana}/formulario`),
         apiFetch(`/eventos/${id_evento}`),
@@ -59,8 +96,6 @@ export default function AsistentesPage() {
       setAsistentes(arr);
       setTotalInscripciones(asistentesData.totalInscripciones ?? 0);
       setTotalPages(asistentesData.totalPages ?? 1);
-
-      // --- NUEVO: Guardar los conteos en el estado ---
       setStatusCounts(asistentesData.statusCounts ?? {});
       
       setCampanaInfo(campanaData.data);
@@ -69,14 +104,21 @@ export default function AsistentesPage() {
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
-      setLoading(false);
+        // --- INICIO DE LA MODIFICACIÓN ---
+        setInitialLoading(false); // Desactivamos la carga inicial (solo la primera vez)
+        setIsRefreshing(false); // Desactivamos el indicador de actualización
+        // --- FIN DE LA MODIFICACIÓN ---
     }
-  }, [id_campana, id_evento, page, limit]);
+  }, [id_campana, id_evento, page, limit, debouncedSearchTerm, estadoFiltro]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearchTerm, estadoFiltro]);
+  
   const handleEditAsistente = (asistente: Asistente) => {
     setSelectedAsistente(asistente);
     setSheetOpen(true);
@@ -112,7 +154,6 @@ export default function AsistentesPage() {
         throw new Error('No se pudo actualizar el estado.');
       }
       toast.success('Estado actualizado');
-      // Opcional: Refrescar los conteos después de un cambio de estado
       fetchData(); 
     } catch (error) {
       toast.error('Error al actualizar. Intente de nuevo.');
@@ -127,7 +168,10 @@ export default function AsistentesPage() {
     }
   };
 
-  if (loading) return <div className="p-10">Cargando asistentes...</div>;
+  // --- INICIO DE LA MODIFICACIÓN ---
+  // Ahora solo mostramos la pantalla de carga la primera vez
+  if (initialLoading) return <div className="p-10">Cargando asistentes...</div>;
+  // --- FIN DE LA MODIFICACIÓN ---
 
   return (
     <MainLayout>
@@ -135,8 +179,8 @@ export default function AsistentesPage() {
         <div className="flex justify-between items-center mb-3">
           <div className="space-y-1">
             <h1 className="text-3xl font-bold leading-tight m-0">
-  {eventoInfo ? `${id_evento.toString().padStart(4, "00")} - ${eventoInfo.nombre}` : `Evento`}
-</h1>
+              {eventoInfo ? `${id_evento.toString().padStart(4, "00")} - ${eventoInfo.nombre}` : `Evento`}
+            </h1>
             <h3 className="text-xl font-semibold leading-snug m-0">
               {campanaInfo?.nombre || 'Campaña'}
             </h3>
@@ -168,9 +212,14 @@ export default function AsistentesPage() {
           totalInscripciones={totalInscripciones}
           onPageChange={handlePageChange}
           statusCounts={statusCounts}
-          // --- LÍNEA MODIFICADA ---
-          // Le pasamos la función fetchData a la tabla para que pueda refrescarse
           onRefreshData={fetchData}
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          estadoFiltro={estadoFiltro}
+          onEstadoFiltroChange={setEstadoFiltro}
+          // --- INICIO DE LA MODIFICACIÓN ---
+          isRefreshing={isRefreshing} // Pasamos el nuevo estado a la tabla
+          // --- FIN DE LA MODIFICACIÓN ---
         />
 
         {selectedAsistente && campanaInfo && (

@@ -78,10 +78,31 @@ const Inscripcion = {
         }
     },
 
-    findWithCustomFieldsByCampanaId: async (id_campana, limit = 100, offset = 0) => {
-        // --- INICIO DE LA MODIFICACIÓN ---
+    // --- INICIO DE LA MODIFICACIÓN ---
+    findWithCustomFieldsByCampanaId: async (id_campana, limit = 100, offset = 0, searchTerm = null, estadoFiltro = null) => {
+        
+        const whereConditions = ['i.id_campana = ?'];
+        const params = [id_campana];
 
-        // 1. Consulta para obtener los conteos por estado y el total de inscripciones
+        if (estadoFiltro) {
+            whereConditions.push('i.estado_asistencia = ?');
+            params.push(estadoFiltro);
+        }
+
+        if (searchTerm) {
+            const searchWords = searchTerm.split(' ').filter(Boolean);
+            if (searchWords.length > 0) {
+                const searchClauses = searchWords.map(word => {
+                    params.push(`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`);
+                    return `(c.nombre LIKE ? OR c.email LIKE ? OR c.empresa LIKE ? OR c.rut LIKE ?)`;
+                });
+                whereConditions.push(`(${searchClauses.join(' AND ')})`);
+            }
+        }
+        
+        const whereClause = whereConditions.length > 1 ? `WHERE ${whereConditions.join(' AND ')}` : `WHERE ${whereConditions[0]}`;
+
+        // 1. Consulta para obtener los conteos por estado y el total de inscripciones (AHORA CON FILTROS)
         const countQuery = `
             SELECT 
                 COUNT(*) AS total,
@@ -93,15 +114,15 @@ const Inscripcion = {
                 SUM(CASE WHEN estado_asistencia = 'Asistió' THEN 1 ELSE 0 END) AS "Asistió",
                 SUM(CASE WHEN estado_asistencia = 'No Asiste' THEN 1 ELSE 0 END) AS "No Asiste",
                 SUM(CASE WHEN estado_asistencia = 'Cancelado' THEN 1 ELSE 0 END) AS "Cancelado"
-            FROM inscripciones 
-            WHERE id_campana = ?
+            FROM inscripciones i
+            JOIN contactos c ON i.id_contacto = c.id_contacto
+            ${whereClause} 
         `;
-
-        const [countRows] = await pool.execute(countQuery, [id_campana]);
+        
+        const [countRows] = await pool.execute(countQuery, params);
         const counts = countRows[0];
         const totalInscripciones = counts.total || 0;
         
-        // Creamos el objeto de conteos para el frontend
         const statusCounts = {
             "Invitado": parseInt(counts["Invitado"] || 0),
             "Abrio Email": parseInt(counts["Abrio Email"] || 0),
@@ -113,8 +134,7 @@ const Inscripcion = {
             "Cancelado": parseInt(counts["Cancelado"] || 0)
         };
         
-        // --- FIN DE LA MODIFICACIÓN ---
-
+        // 2. Obtener los campos personalizados (esto no cambia)
         const [campos] = await pool.execute(
             `SELECT fc.id_campo, fc.nombre_interno, fc.etiqueta 
              FROM campana_formulario_config cfc
@@ -130,7 +150,8 @@ const Inscripcion = {
             ).join(', ');
         }
         
-        const query = `
+        // 3. Consulta principal para obtener los datos paginados (AHORA CON FILTROS)
+        const dataQuery = `
             SELECT 
                 ROW_NUMBER() OVER (ORDER BY i.fecha_inscripcion ASC) as '#',
                 i.id_inscripcion, i.estado_asistencia, i.estado_pago, i.nota,
@@ -143,24 +164,25 @@ const Inscripcion = {
             LEFT JOIN inscripcion_respuestas ir ON i.id_inscripcion = ir.id_inscripcion
             LEFT JOIN pagos p ON i.id_inscripcion = p.id_inscripcion
             LEFT JOIN tipos_de_entrada te ON i.id_tipo_entrada = te.id_tipo_entrada
-            WHERE i.id_campana = ?
+            ${whereClause}
             GROUP BY i.id_inscripcion
             ORDER BY i.fecha_inscripcion ASC
             LIMIT ? OFFSET ?
         `;
 
-        const [rows] = await pool.execute(query, [id_campana, limit, offset]);
+        const finalParams = [...params, limit, offset];
+        const [rows] = await pool.execute(dataQuery, finalParams);
         
-        // Devolvemos el nuevo objeto con los conteos
         return {
             asistentes: rows,
             totalInscripciones,
             totalPages: Math.ceil(totalInscripciones / limit),
-            statusCounts // <-- ¡AQUÍ ESTÁ LA NUEVA DATA!
+            statusCounts
         };
     },
+    // --- FIN DE LA MODIFICACIÓN ---
+
     updateStatus: async (id_inscripcion, estado_asistencia) => {
-        // CORRECCIÓN: Se usa 'pool' en lugar de 'db'
         const [result] = await pool.execute(
             'UPDATE inscripciones SET estado_asistencia = ? WHERE id_inscripcion = ?',
             [estado_asistencia, id_inscripcion]
@@ -169,15 +191,13 @@ const Inscripcion = {
     },
 
     updateNota: async (id_inscripcion, nota) => {
-        // CORRECCIÓN: Se usa 'pool' en lugar de 'db'
         const [result] = await pool.execute(
             'UPDATE inscripciones SET nota = ? WHERE id_inscripcion = ?',
             [nota, id_inscripcion]
         );
         return result.affectedRows > 0;
     },
-    // --- FIN DE LAS NUEVAS FUNCIONES CORREGIDAS ---
-
+    
     updateOrInsertRespuestas: async (id_inscripcion, asistenteData) => {
         const connection = await db.getConnection();
         try {
@@ -185,16 +205,13 @@ const Inscripcion = {
 
             const { custom_fields, ...contactInfo } = asistenteData;
 
-            // 1. Actualizar datos del contacto
             if (Object.keys(contactInfo).length > 0) {
                 const { id_contacto } = (await connection.query('SELECT id_contacto FROM inscripciones WHERE id_inscripcion = ?', [id_inscripcion]))[0][0];
                 await connection.query('UPDATE contactos SET ? WHERE id_contacto = ?', [contactInfo, id_contacto]);
             }
 
-            // 2. Actualizar/Insertar respuestas de campos personalizados
             if (custom_fields) {
                 for (const field of custom_fields) {
-                    // Solo insertar si hay valor definido (no vacío)
                     if (field.valor !== undefined && field.valor !== null && field.valor !== '') {
                         await connection.query(
                             'INSERT INTO inscripcion_respuestas (id_inscripcion, id_campo, valor) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE valor = VALUES(valor)',
@@ -220,24 +237,19 @@ const Inscripcion = {
         try {
             await connection.beginTransaction();
 
-            // 1. Actualizar estado y nota en la tabla de inscripciones
             await connection.query(
                 'UPDATE inscripciones SET estado_asistencia = ?, nota = ? WHERE id_inscripcion = ?',
                 [estado_asistencia, nota, id_inscripcion]
             );
 
-            // 2. Actualizar datos base del contacto (si vienen)
             if (Object.keys(datosContacto).length > 0) {
                 const { id_contacto } = (await connection.query('SELECT id_contacto FROM inscripciones WHERE id_inscripcion = ?', [id_inscripcion]))[0][0];
                 await connection.query('UPDATE contactos SET ? WHERE id_contacto = ?', [datosContacto, id_contacto]);
             }
 
-            // 3. Actualizar/Insertar respuestas de campos personalizados
             if (respuestas && respuestas.length > 0) {
                 for (const resp of respuestas) {
-                    // Elimina el condicional 'if (resp.valor !== undefined && resp.valor !== null)'
                     const valorAGuardar = resp.valor === '' ? null : resp.valor;
-
                     await connection.query(
                         'INSERT INTO inscripcion_respuestas (id_inscripcion, id_campo, valor) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE valor = VALUES(valor)',
                         [id_inscripcion, resp.id_campo, valorAGuardar]
@@ -284,9 +296,8 @@ const Inscripcion = {
                 return mapa;
             }, {});
             
-            // Este mapa es para identificar qué campos deben ir a la tabla 'contactos'
             const camposDeSistema = camposDelFormulario
-                .filter(c => c.es_de_sistema === 1) // Filtra solo los que son columnas en la tabla 'contactos'
+                .filter(c => c.es_de_sistema === 1)
                 .reduce((mapa, campo) => {
                     mapa[campo.etiqueta.trim().toLowerCase()] = campo.nombre_interno;
                     return mapa;
@@ -297,7 +308,7 @@ const Inscripcion = {
 
             for (const [index, fila] of contactos.entries()) {
                 console.log(`\n-------------------- Fila ${index + 2} --------------------`);
-                console.log('Datos CRUDOS del Excel:', fila); // LOG AÑADIDO
+                console.log('Datos CRUDOS del Excel:', fila);
 
                 const emailKey = Object.keys(fila).find(k => k.toLowerCase().trim() === 'email');
                 const email = emailKey ? fila[emailKey]?.toLowerCase().trim() : null;
@@ -316,7 +327,7 @@ const Inscripcion = {
                 }
                 datosContacto.email = email;
 
-                console.log('-> Preparando para tabla "contactos":', datosContacto); // LOG MEJORADO
+                console.log('-> Preparando para tabla "contactos":', datosContacto);
 
                 let [contactosExistentes] = await connection.query('SELECT id_contacto FROM contactos WHERE email = ?', [email]);
                 let id_contacto;
@@ -362,7 +373,7 @@ const Inscripcion = {
                     }
                 }
                 
-                console.log('-> Preparando para tabla "inscripcion_respuestas":', respuestasParaInsertar); // LOG AÑADIDO
+                console.log('-> Preparando para tabla "inscripcion_respuestas":', respuestasParaInsertar);
 
                 if (respuestasParaInsertar.length > 0) {
                     const queryRespuestas = `

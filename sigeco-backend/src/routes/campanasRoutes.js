@@ -99,7 +99,11 @@ router.get(
     [
         param('id_campana').isInt({ gt: 0 }),
         query('page').optional().isInt({ min: 1 }).withMessage('La página debe ser un entero positivo.'),
-        query('limit').optional().isInt({ min: 1 }).withMessage('El límite debe ser un entero positivo.')
+        query('limit').optional().isInt({ min: 1 }).withMessage('El límite debe ser un entero positivo.'),
+        // --- INICIO DE LA MODIFICACIÓN ---
+        query('search').optional().isString().trim(),
+        query('estado').optional().isString().trim()
+        // --- FIN DE LA MODIFICACIÓN ---
     ],
     campanasController.getAsistentesConCampos
 );

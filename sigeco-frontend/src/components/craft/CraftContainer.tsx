@@ -24,9 +24,11 @@ export const CraftContainer = ({ children, className, padding = 8 }: CraftContai
       {React.Children.count(children) > 0 ? (
         children
       ) : (
-        <div className="text-center text-gray-400 p-8 border-dashed border-2 rounded-md">
+        /*<div className="text-center text-gray-400 p-8 border-dashed border-2 rounded-md">
           Arrastra un componente aquí dentro
         </div>
+        */
+        <div className="hidden" />
       )}
     </div>
   );
