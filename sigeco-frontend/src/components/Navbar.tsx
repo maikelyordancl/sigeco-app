@@ -58,7 +58,7 @@ export default function Navbar({ fontSize, increaseFontSize, decreaseFontSize, r
 
       <div className="hidden md:flex space-x-6 items-center">
         <div className="flex items-center space-x-2">
-          <span>Tamaño Fuente ({formattedFontSize})</span>
+          <span>Fuente ({formattedFontSize})</span>
           <Button variant="ghost" size="icon" onClick={decreaseFontSize}><ZoomOut size={20} /></Button>
           <Button variant="ghost" size="icon" onClick={increaseFontSize}><ZoomIn size={20} /></Button>
           <Button variant="ghost" size="icon" onClick={resetFontSize}><RotateCcw size={20} /></Button>
