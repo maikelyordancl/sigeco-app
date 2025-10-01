@@ -34,10 +34,8 @@ export default function AsistentesPage() {
 
   const [asistentes, setAsistentes] = useState<Asistente[]>([]);
   
-  // --- INICIO DE LA MODIFICACIÓN ---
-  const [initialLoading, setInitialLoading] = useState(true); // Para la carga inicial
-  const [isRefreshing, setIsRefreshing] = useState(false); // Para búsquedas y filtros
-  // --- FIN DE LA MODIFICACIÓN ---
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [selectedAsistente, setSelectedAsistente] = useState<Asistente | null>(null);
   const [isSheetOpen, setSheetOpen] = useState(false);
@@ -53,14 +51,16 @@ export default function AsistentesPage() {
 
   const [estadoFiltro, setEstadoFiltro] = useState<string>(ALL_STATUS);
   const [searchTerm, setSearchTerm] = useState('');
-  const debouncedSearchTerm = useDebounce(searchTerm, 500);
+  
+  // --- INICIO DE LA MODIFICACIÓN ---
+  // Aumentamos el tiempo de espera para una escritura más fluida.
+  const debouncedSearchTerm = useDebounce(searchTerm, 700);
+  // --- FIN DE LA MODIFICACIÓN ---
 
   const fetchData = useCallback(async () => {
     if (!id_campana || !id_evento) return;
     
-    // --- INICIO DE LA MODIFICACIÓN ---
-    setIsRefreshing(true); // Activamos el indicador de actualización
-    // --- FIN DE LA MODIFICACIÓN ---
+    setIsRefreshing(true);
 
     const queryParams = new URLSearchParams({
         page: page.toString(),
@@ -104,10 +104,8 @@ export default function AsistentesPage() {
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
-        // --- INICIO DE LA MODIFICACIÓN ---
-        setInitialLoading(false); // Desactivamos la carga inicial (solo la primera vez)
-        setIsRefreshing(false); // Desactivamos el indicador de actualización
-        // --- FIN DE LA MODIFICACIÓN ---
+        setInitialLoading(false);
+        setIsRefreshing(false);
     }
   }, [id_campana, id_evento, page, limit, debouncedSearchTerm, estadoFiltro]);
 
@@ -168,10 +166,7 @@ export default function AsistentesPage() {
     }
   };
 
-  // --- INICIO DE LA MODIFICACIÓN ---
-  // Ahora solo mostramos la pantalla de carga la primera vez
   if (initialLoading) return <div className="p-10">Cargando asistentes...</div>;
-  // --- FIN DE LA MODIFICACIÓN ---
 
   return (
     <MainLayout>
@@ -217,9 +212,7 @@ export default function AsistentesPage() {
           onSearchChange={setSearchTerm}
           estadoFiltro={estadoFiltro}
           onEstadoFiltroChange={setEstadoFiltro}
-          // --- INICIO DE LA MODIFICACIÓN ---
-          isRefreshing={isRefreshing} // Pasamos el nuevo estado a la tabla
-          // --- FIN DE LA MODIFICACIÓN ---
+          isRefreshing={isRefreshing}
         />
 
         {selectedAsistente && campanaInfo && (

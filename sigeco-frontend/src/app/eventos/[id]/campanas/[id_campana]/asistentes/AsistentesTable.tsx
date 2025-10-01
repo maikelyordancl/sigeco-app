@@ -35,9 +35,7 @@ interface AsistentesTableProps {
   onSearchChange: (value: string) => void;
   estadoFiltro: string;
   onEstadoFiltroChange: (value: string) => void;
-  // --- INICIO DE LA MODIFICACIÓN ---
-  isRefreshing: boolean; // Añadimos la nueva prop
-  // --- FIN DE LA MODIFICACIÓN ---
+  isRefreshing: boolean;
 }
 
 const PaginationControls = ({ page, totalPages, totalInscripciones, limit, onPageChange }: any) => (
@@ -89,9 +87,7 @@ export function AsistentesTable({
   limit, onLimitChange, page, totalPages, totalInscripciones, onPageChange,
   statusCounts, onRefreshData,
   searchTerm, onSearchChange, estadoFiltro, onEstadoFiltroChange,
-  // --- INICIO DE LA MODIFICACIÓN ---
   isRefreshing
-  // --- FIN DE LA MODIFICACIÓN ---
 }: AsistentesTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
@@ -301,7 +297,7 @@ export function AsistentesTable({
     value={searchTerm}
     onChange={e => onSearchChange(e.target.value)}
     // --- INICIO DE LA MODIFICACIÓN ---
-    disabled={isRefreshing} // Deshabilitamos mientras se refresca
+    // Se elimina la propiedad `disabled`
     // --- FIN DE LA MODIFICACIÓN ---
     className="pl-8 bg-yellow-200 focus:bg-yellow-100 border-2 border-yellow-400 focus:ring-2 focus:ring-yellow-400 shadow-md"
   />
@@ -309,7 +305,10 @@ export function AsistentesTable({
 
         <div className="justify-self-center">
           <p>Filtros: </p>
-          <Select value={estadoFiltro} onValueChange={onEstadoFiltroChange} disabled={isRefreshing}>
+          {/* --- INICIO DE LA MODIFICACIÓN --- */}
+          {/* Se elimina la propiedad `disabled` */}
+          <Select value={estadoFiltro} onValueChange={onEstadoFiltroChange}>
+          {/* --- FIN DE LA MODIFICACIÓN --- */}
             <SelectTrigger className={`w-[220px] border-2 border-cyan-500 shadow-md ${estiloFiltro.bg} ${estiloFiltro.text}`}>
               <SelectValue />
             </SelectTrigger>
@@ -377,10 +376,7 @@ export function AsistentesTable({
 
       <PaginationControls {...paginationProps} />
       <div className="rounded-md border relative">
-        {/* --- INICIO DE LA MODIFICACIÓN --- */}
-        {/* Div que pone la tabla semitransparente mientras carga */}
         {isRefreshing && <div className="absolute inset-0 bg-white/50 dark:bg-black/50 z-10" />}
-        {/* --- FIN DE LA MODIFICACIÓN --- */}
         <Table>
           <TableHeader><TableRow className="bg-cyan-400">{table.getHeaderGroups().map(hg => hg.headers.map(h => <TableHead key={h.id} onClick={h.column.getToggleSortingHandler()} className="font-bold text-black !bg-cyan-400 hover:!bg-cyan-400">{flexRender(h.column.columnDef.header, h.getContext())}{{asc:'🔼',desc:'🔽'}[h.column.getIsSorted() as string]??null}</TableHead>))}</TableRow></TableHeader>
           <TableBody>
