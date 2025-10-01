@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, PlusCircle, Ticket, Edit, Send, Settings, Users, Calendar } from "lucide-react"; // Añadido Calendar
+import { ArrowLeft, PlusCircle, Ticket, Edit, Send, Settings, Users, Calendar } from "lucide-react";
 import { CrearSubCampanaDialog } from "@/components/dialogs/CrearSubCampanaDialog";
 import { GestionTicketsDialog } from "@/components/dialogs/GestionTicketsDialog";
 import { EditarCampanaDialog } from "@/components/dialogs/EditarCampanaDialog";
@@ -24,13 +24,19 @@ import toast from "react-hot-toast";
 import { apiFetch } from "@/lib/api";
 import { CampanaAdmin } from "@/app/c/[slug]/types";
 
+/**
+ * Toggle global para mostrar/ocultar la Campaña Principal en la UI.
+ * - false: oculta la sección de Campaña Principal
+ * - true : muestra la sección de Campaña Principal
+ */
+const SHOW_CAMPANA_PRINCIPAL = false;
+
 const GestionCampanasPage = () => {
   const router = useRouter();
   const params = useParams();
   const id_evento = params.id as string;
 
-  // ... (estados y funciones sin cambios)
-  const [eventName, setEventName] = useState<string>('');
+  const [eventName, setEventName] = useState<string>("");
   const [campanaPrincipal, setCampanaPrincipal] = useState<CampanaAdmin | null>(null);
   const [subCampanas, setSubCampanas] = useState<CampanaAdmin[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,21 +54,26 @@ const GestionCampanasPage = () => {
     setLoading(true);
     try {
       const res = await apiFetch(`/campanas/evento/${id_evento}`);
-
       if (!res.ok) throw new Error("No se pudieron obtener las campañas.");
       const responseData = await res.json();
-      
+
       if (responseData.success && responseData.data) {
         const { eventName, campaigns } = responseData.data;
         setEventName(eventName);
-        setCampanaPrincipal(campaigns.find((c: CampanaAdmin) => !c.id_subevento) || null);
-        setSubCampanas(campaigns.filter((c: CampanaAdmin) => !!c.id_subevento));
+        const principal = campaigns.find((c: CampanaAdmin) => !c.id_subevento) || null;
+        const subs = campaigns.filter((c: CampanaAdmin) => !!c.id_subevento);
+
+        setCampanaPrincipal(principal);
+        setSubCampanas(subs);
+
+        // ⤵️ OPCIONAL: si quieres forzar que NO exista la principal en estado (aunque no es necesario):
+        // setCampanaPrincipal(null);
       } else {
         throw new Error(responseData.message || "La respuesta de la API no tiene el formato esperado.");
       }
     } catch (error: any) {
       toast.error(error.message || "No se pudieron cargar las campañas.");
-      setEventName('');
+      setEventName("");
       setCampanaPrincipal(null);
       setSubCampanas([]);
     } finally {
@@ -113,26 +124,25 @@ const GestionCampanasPage = () => {
   const handleGoToEditor = (id_campana: number) => {
     router.push(`/eventos/${id_evento}/campanas/${id_campana}/editor`);
   };
+
   const handleGoToAsistentes = (id_campana: number) => {
     router.push(`/eventos/${id_evento}/campanas/${id_campana}/asistentes`);
   };
 
-
   const renderCard = (campana: CampanaAdmin) => (
     <Card key={campana.id_campana} className="flex flex-col shadow-md hover:shadow-lg transition-shadow">
       <CardHeader>
-        {/* ... (código de CardHeader sin cambios) ... */}
         <div className="flex justify-between items-start">
           <CardTitle>00{campana.id_campana} - {campana.nombre}</CardTitle>
           <div className="flex items-center space-x-2">
             <Badge className={campana.estado === "Activa" ? "bg-green-600 text-white" : ""}>{campana.estado}</Badge>
-            <Button 
-  onClick={() => handleGoToAsistentes(campana.id_campana)} 
-  disabled={!campana.id_subevento}
-  className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold px-4 py-2 rounded-md text-base"
->
-  <Users className="mr-2 h-5 w-5" /> Asistentes
-</Button>
+            <Button
+              onClick={() => handleGoToAsistentes(campana.id_campana)}
+              disabled={!campana.id_subevento}
+              className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold px-4 py-2 rounded-md text-base"
+            >
+              <Users className="mr-2 h-5 w-5" /> Asistentes
+            </Button>
             {!!campana.id_subevento && (
               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleOpenFormConfigModal(campana.id_campana)}>
                 <Settings className="h-4 w-4" />
@@ -145,23 +155,25 @@ const GestionCampanasPage = () => {
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-grow">
-        {/* --- INICIO DE LA MODIFICACIÓN --- */}
         {campana.fecha_personalizada && (
           <div className="flex items-center text-sm text-gray-600 mb-2">
             <Calendar className="mr-2 h-4 w-4" />
             <span>{campana.fecha_personalizada}</span>
           </div>
         )}
-        {/* --- FIN DE LA MODIFICACIÓN --- */}
         <p className="text-sm text-gray-500 break-all">
           URL (form):{" "}
-          <a href={`/c/${campana.url_amigable}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+          <a
+            href={`/c/${campana.url_amigable}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline"
+          >
             /c/{campana.url_amigable}
           </a>
         </p>
         <div className="mt-4 border-t pt-2 text-sm">
           <h4 className="font-semibold mb-1">Asistencia:</h4>
-          {/* ... (código de estadísticas sin cambios) ... */}
           <div className="flex flex-wrap gap-x-4 gap-y-1">
             {!campana.obligatorio_registro && !campana.obligatorio_pago && (
               <>
@@ -184,13 +196,16 @@ const GestionCampanasPage = () => {
                 <p>Asistieron: <span className="font-bold">{campana.asistieron || 0}</span></p>
               </>
             )}
-            {!!campana.cancelados && <p className="text-red-600">Cancelados: <span className="font-bold">{campana.cancelados}</span></p>}
+            {!!campana.cancelados && (
+              <p className="text-red-600">
+                Cancelados: <span className="font-bold">{campana.cancelados}</span>
+              </p>
+            )}
           </div>
         </div>
       </CardContent>
       <CardFooter className="grid grid-cols-2 lg:grid-cols-5 gap-2 pt-4">
-        {/* ... (código de CardFooter sin cambios) ... */}
-         <Button variant="outline" size="sm" onClick={() => handleOpenEditModal(campana)}>
+        <Button variant="outline" size="sm" onClick={() => handleOpenEditModal(campana)}>
           <Edit className="mr-2 h-4 w-4" /> Config.
         </Button>
         <Button variant="outline" size="sm" onClick={() => handleGoToEditor(campana.id_campana)} disabled={!campana.id_subevento}>
@@ -207,8 +222,7 @@ const GestionCampanasPage = () => {
   );
 
   return (
-    // ... (resto del componente sin cambios)
-     <MainLayout>
+    <MainLayout>
       <div className="p-4 md:p-6">
         <div className="flex justify-between items-center mb-6">
           <Button variant="outline" onClick={() => router.push("/eventos/gestion")}>
@@ -226,7 +240,7 @@ const GestionCampanasPage = () => {
           <p className="text-center py-10">Cargando campañas...</p>
         ) : (
           <>
-            {campanaPrincipal && (
+            {SHOW_CAMPANA_PRINCIPAL && campanaPrincipal && (
               <div className="mb-8">
                 <h2 className="text-2xl font-semibold mb-4 border-l-4 border-blue-600 pl-3">Campaña Principal</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -234,8 +248,11 @@ const GestionCampanasPage = () => {
                 </div>
               </div>
             )}
+
             <div>
-              <h2 className="text-2xl font-semibold mb-4 border-l-4 border-blue-600 pl-3">Sub-Campañas</h2>
+              <h2 className="text-2xl font-semibold mb-4 border-l-4 border-blue-600 pl-3">
+                Sub-Campañas
+              </h2>
               {subCampanas.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {subCampanas.map(renderCard)}
