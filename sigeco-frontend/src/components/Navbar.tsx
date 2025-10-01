@@ -106,20 +106,6 @@ export default function Navbar({ fontSize, increaseFontSize, decreaseFontSize, r
           )}
         </div>
 
-        <div className="relative">
-          <Button variant="ghost" className="flex items-center space-x-1" onClick={() => handleToggle("difusion")}>
-            <span>Difusión</span>
-            {openMenu === "difusion" ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </Button>
-          {openMenu === "difusion" && (
-            <div className="absolute bg-white text-black shadow-lg rounded mt-2 p-2 space-y-2 animate-fade-in">
-              <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/difusion/redes-sociales")}>Redes Sociales</Button>
-              <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/difusion/influencers")}>Influencers</Button>
-              <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/difusion/whatsapp")}>WhatsApp</Button>
-            </div>
-          )}
-        </div>
-
         {/* --- INICIO: NUEVO MENÚ DE ADMINISTRACIÓN --- */}
         {userRole === 'SUPER_ADMIN' && (
           <div className="relative">
@@ -183,15 +169,6 @@ export default function Navbar({ fontSize, increaseFontSize, decreaseFontSize, r
 
               <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/contactos")}>Contactos</Button>
               <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/convocatoria")}>Convocatoria</Button>
-
-              <AccordionItem value="difusion">
-                <AccordionTrigger className="text-left">Difusión</AccordionTrigger>
-                <AccordionContent>
-                  <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/difusion/redes-sociales")}>Redes Sociales</Button>
-                  <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/difusion/influencers")}>Influencers</Button>
-                  <Button variant="ghost" className="w-full justify-start" onClick={() => router.push("/dashboard/difusion/whatsapp")}>WhatsApp</Button>
-                </AccordionContent>
-              </AccordionItem>
 
               {/* --- INICIO: NUEVO MENÚ DE ADMINISTRACIÓN (MÓVIL) --- */}
               {userRole === 'SUPER_ADMIN' && (
