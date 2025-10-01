@@ -216,15 +216,17 @@ export default function AcreditarCampanaPage() {
 
             <div className="flex flex-col flex-1 gap-2">
               <Input
-                type="search"
-                name="tabla_busqueda"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="none"
-                placeholder="Buscar asistente (nombre, email, rut...)"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+  type="search"
+  name="tabla_busqueda"
+  autoComplete="off"
+  autoCorrect="off"
+  autoCapitalize="none"
+  placeholder="Buscar asistente (nombre, email, rut...)"
+  value={searchTerm}
+  onChange={(e) => setSearchTerm(e.target.value)}
+  className="bg-yellow-100 focus:bg-yellow-50 focus:ring-2 focus:ring-yellow-300 border-yellow-200"
+/>
+
               <div className="flex gap-2">
                 {campanaInfo && !campanaInfo.obligatorio_pago && (
                   <Button
