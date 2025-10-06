@@ -35,6 +35,76 @@ interface EmailSettings {
   headerColor: string;
 }
 
+/* ===================== Helpers (solo header) ===================== */
+const normalizeHex = (v: string) => (v?.trim().startsWith("#") ? v.trim() : `#${v?.trim()}`);
+const isHex = (v: string) => /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v || "");
+
+/** Pinta SOLO el header (id=email-header-preview o fallback primer h1/h2 + span) */
+const applyPrimaryColorToHtml = (html: string, hex: string) => {
+  const color = normalizeHex(hex);
+  if (!isHex(color) || !html) return html;
+  let out = html;
+
+  // 1) Si existe un contenedor con id=email-header-preview
+  out = out.replace(
+    /(<div[^>]*id=["']email-header-preview["'][^>]*style=")([^"]*)(")/i,
+    (_m, p1, style, p3) => {
+      const cleaned = style.replace(/background(?:-color|-image)?\s*:\s*[^;"]*;?/gi, "").trim();
+      const newStyle = `background:${color};background-color:${color};background-image:none;${cleaned ? cleaned + ";" : ""}`;
+      return `${p1}${newStyle}${p3}`;
+    }
+  );
+  out = out.replace(
+    /(<div[^>]*id=["']email-header-preview["'](?![^>]*style=)[^>]*)(>)/i,
+    (_m, p1, p2) => `${p1} style="background:${color};background-color:${color};background-image:none"${p2}`
+  );
+
+  // Si ya pintamos el header con id, salimos.
+  if (/id=["']email-header-preview["'][^>]*style="[^"]*background/i.test(out)) return out;
+
+  // 2) Fallback: primer bloque <h1>/<h2> (y spans internos) con background
+  const headerBlockMatch = out.match(/<h[12][^>]*>[\s\S]*?<\/h[12]>/i);
+  if (headerBlockMatch) {
+    const original = headerBlockMatch[0];
+    let modified = original;
+
+    // spans internos con fondo
+    modified = modified.replace(
+      /(<span[^>]*style=")([^"]*)(")/gi,
+      (_m, p1, style, p3) => {
+        const newStyle = style.replace(/background(?:-color|-image)?\s*:\s*[^;"]*;?/gi, "").trim();
+        const withBg = `background:${color};background-color:${color};background-image:none;${newStyle ? newStyle + ";" : ""}`;
+        return `${p1}${withBg}${p3}`;
+      }
+    );
+
+    // el propio h1/h2 si tiene fondo
+    modified = modified.replace(
+      /(<h[12][^>]*style=")([^"]*)(")/i,
+      (_m, p1, style, p3) => {
+        const cleaned = style.replace(/background(?:-color|-image)?\s*:\s*[^;"]*;?/gi, "").trim();
+        const newStyle = `background:${color};background-color:${color};background-image:none;${cleaned ? cleaned + ";" : ""}`;
+        return `${p1}${newStyle}${p3}`;
+      }
+    );
+
+    out = out.replace(original, modified);
+  }
+
+  return out;
+};
+
+/** Detecta el color actual del header desde el HTML (id, h1/h2 o span) */
+const extractHeaderColor = (html: string): string | null => {
+  if (!html) return null;
+  const m =
+    html.match(/id=["']email-header-preview["'][^>]*style="[^"]*background(?:-color)?\s*:\s*(#[0-9a-fA-F]{3,6})/i) ||
+    html.match(/<h[12][^>]*style="[^"]*background(?:-color)?\s*:\s*(#[0-9a-fA-F]{3,6})/i) ||
+    html.match(/<span[^>]*style="[^"]*background(?:-color)?\s*:\s*(#[0-9a-fA-F]{3,6})/i);
+  return m ? normalizeHex(m[1]) : null;
+};
+/* =============================================================== */
+
 const getDefaultEmailHtml = (eventName: string, settings: EmailSettings) => {
   return `
   <!DOCTYPE html>
@@ -74,64 +144,23 @@ const EditorPageContent = () => {
   const [landingJson, setLandingJson] = useState<string | null>(null);
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
-  const [emailSettings, setEmailSettings] = useState<EmailSettings>({
-    headerColor: "#4cd964",
-  });
+  const [emailSettings, setEmailSettings] = useState<EmailSettings>({ headerColor: "#4cd964" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const updateEditorColor = (color: string) => {
-    const editor = emailEditorRef.current;
-    if (!editor || !editor.getDoc) return;
-
-    const doc = editor.getDoc();
-
-    let header: HTMLElement | null = doc.getElementById("email-header-preview") as HTMLElement | null;
-
-    if (!header) {
-      const body = editor.getBody?.();
-      const wrapperDiv = body?.querySelector("div");
-      const firstDiv = wrapperDiv?.querySelector("div");
-      header = (firstDiv as HTMLElement) || null;
-    }
-    if (!header) return;
-
-    editor.undoManager?.transact?.(() => {
-      header!.style.setProperty("background", color, "important");
-      header!.style.setProperty("background-color", color, "important");
-      header!.style.setProperty("background-image", "none", "important");
-      header!.setAttribute("bgcolor", color);
-    });
-
-    const html = editor.getContent({ format: "html" }) as string;
-
-    let updated = html.replace(
-      /(<div[^>]*id=["']email-header-preview["'][^>]*style="[^"]*)(background(?:-color)?\s*:\s*[^;"]+)([^"]*")/i,
-      (_m, p1, _bg, p3) => `${p1}background:${color};background-color:${color};background-image:none${p3}`
-    );
-
-    if (updated === html) {
-      updated = html.replace(
-        /(<div[^>]*id=["']email-header-preview["'][^>]*)(>)/i,
-        (_m, p1, p2) => `${p1} style="background:${color};background-color:${color};background-image:none" ${p2}`
-      );
-    }
-
-    if (updated !== html) {
-      editor.setContent(updated);
+  // Cambiar color (solo header)
+  const handlePrimaryColorChange = (value: string) => {
+    const color = normalizeHex(value);
+    setEmailSettings((s) => ({ ...s, headerColor: color }));
+    const ed = emailEditorRef.current;
+    if (!ed || !isHex(color)) return;
+    const currentHtml = ed.getContent({ format: "html" }) as string;
+    const updatedHtml = applyPrimaryColorToHtml(currentHtml, color);
+    if (updatedHtml !== currentHtml) {
+      ed.undoManager?.transact?.(() => ed.setContent(updatedHtml));
     }
   };
-
-  useEffect(() => {
-    updateEditorColor(emailSettings.headerColor);
-  }, [emailSettings.headerColor]);
-
-  useEffect(() => {
-    if (emailEditorRef.current) {
-      updateEditorColor(emailSettings.headerColor);
-    }
-  }, [emailBody]);
 
   useEffect(() => {
     if (!id_campana) return;
@@ -148,36 +177,45 @@ const EditorPageContent = () => {
 
         const publicDataResponse = await apiFetch(`/public/campana/${campanaData.url_amigable}`);
         const publicData = await publicDataResponse.json();
-        if (!publicData.success) {
-          throw new Error("No se pudo cargar la data pública");
-        }
+        if (!publicData.success) throw new Error("No se pudo cargar la data pública");
 
         setData(publicData.data);
-
         const jsonString = campanaData.landing_page_json;
         if (jsonString && jsonString !== "null") setLandingJson(jsonString);
 
         const eventName = publicData.data?.campana?.evento_nombre || "el evento";
+        setEmailSubject(campanaData.email_subject || `Confirmación de inscripción a ${eventName}`);
 
-        if (campanaData.email_subject) setEmailSubject(campanaData.email_subject);
-        else setEmailSubject(`Confirmación de inscripción a ${eventName}`);
-
-        let currentSettings = { headerColor: "#4cd964" };
+        // 1) color desde settings (si es válido)
+        let colorFromSettings: string | null = null;
         if (campanaData.email_settings) {
           try {
             const parsed =
               typeof campanaData.email_settings === "string"
                 ? JSON.parse(campanaData.email_settings)
                 : campanaData.email_settings;
-            if (parsed && typeof parsed === "object") {
-              currentSettings = { headerColor: parsed.headerColor || "#4cd964" };
+            if (parsed && typeof parsed === "object" && parsed.headerColor && isHex(parsed.headerColor)) {
+              colorFromSettings = normalizeHex(parsed.headerColor);
             }
-          } catch {}
+          } catch {
+            /* ignore parse errors */
+          }
         }
-        setEmailSettings(currentSettings);
 
-        if (campanaData.email_body) setEmailBody(campanaData.email_body);
-        else setEmailBody(getDefaultEmailHtml(eventName, currentSettings));
+        // 2) color detectado desde el HTML guardado
+        const htmlFromDb: string | null = campanaData.email_body || null;
+        const colorFromHtml = htmlFromDb ? extractHeaderColor(htmlFromDb) : null;
+
+        // 3) color final
+        const resolvedColor = colorFromSettings || colorFromHtml || "#4cd964";
+        setEmailSettings({ headerColor: resolvedColor });
+
+        // HTML efectivo
+        if (htmlFromDb) {
+          setEmailBody(htmlFromDb);
+        } else {
+          setEmailBody(getDefaultEmailHtml(eventName, { headerColor: resolvedColor }));
+        }
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -186,6 +224,16 @@ const EditorPageContent = () => {
     };
     fetchAndLoadCampaign();
   }, [id_campana]);
+
+  // Pintar SOLO el header cuando llega HTML o cambia el color
+  useEffect(() => {
+    const ed = emailEditorRef.current;
+    if (!ed) return;
+    const color = emailSettings.headerColor;
+    const html = emailBody || "";
+    const painted = isHex(color) ? applyPrimaryColorToHtml(html, color) : html;
+    ed.setContent(painted);
+  }, [emailBody, emailSettings.headerColor]);
 
   const handleSave = async () => {
     if (activeTab === "landing") await handleSaveLanding();
@@ -212,43 +260,39 @@ const EditorPageContent = () => {
   };
 
   const handleSaveEmail = async () => {
-  try {
-    setSaving(true);
+    try {
+      setSaving(true);
+      const editor = emailEditorRef.current;
+      if (!editor) throw new Error("Editor de correo no disponible.");
 
-    const editor = emailEditorRef.current;
-    if (!editor) throw new Error("Editor de correo no disponible.");
+      // Guardar con header ya pintado
+      const currentHtml = editor.getContent({ format: "html" }) as string;
+      const bodyHtml = isHex(emailSettings.headerColor)
+        ? applyPrimaryColorToHtml(currentHtml, emailSettings.headerColor)
+        : currentHtml;
 
-    const bodyHtml = editor.getContent();
+      const payload = {
+        emailSubject: emailSubject,
+        emailBody: bodyHtml,
+        emailSettings: { headerColor: normalizeHex(emailSettings.headerColor) },
+      };
 
-    // ⬅️  CAMBIA a camelCase:
-    const payload = {
-      emailSubject: emailSubject,
-      emailBody: bodyHtml,
-      emailSettings: emailSettings, // puede ser objeto; el backend lo serializa
-    };
+      const resp = await apiFetch(`/campanas/${id_campana}/template`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
 
-    // OJO con el path: usa exactamente el mismo que te funciona en Network.
-    // Si apiFetch ya agrega /api, deja "/campanas/..."; si no, usa "/api/campanas/..."
-    const resp = await apiFetch(`/campanas/${id_campana}/template`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data?.message || "No se pudo guardar el correo.");
 
-    // Sé tolerante con la respuesta (algunos controladores no devuelven {success:true})
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) {
-      throw new Error(data?.message || "No se pudo guardar el correo.");
+      toast.success(data?.message || "Correo guardado correctamente.");
+    } catch (e: any) {
+      toast.error(e?.message || "Error al guardar el correo.");
+    } finally {
+      setSaving(false);
     }
-
-    toast.success(data?.message || "Correo guardado correctamente.");
-  } catch (e: any) {
-    toast.error(e?.message || "Error al guardar el correo.");
-  } finally {
-    setSaving(false);
-  }
-};
-
+  };
 
   const insertVariable = (variable: string) => {
     const editor = emailEditorRef.current;
@@ -321,23 +365,13 @@ const EditorPageContent = () => {
                         type="color"
                         className="p-1 h-10 w-14"
                         value={emailSettings.headerColor}
-                        onChange={(e) =>
-                          setEmailSettings({
-                            ...emailSettings,
-                            headerColor: e.target.value,
-                          })
-                        }
+                        onChange={(e) => handlePrimaryColorChange(e.target.value)}
                       />
                       <Input
                         type="text"
                         className="flex-1"
                         value={emailSettings.headerColor}
-                        onChange={(e) =>
-                          setEmailSettings({
-                            ...emailSettings,
-                            headerColor: e.target.value,
-                          })
-                        }
+                        onChange={(e) => handlePrimaryColorChange(e.target.value)}
                       />
                     </div>
                   </div>
@@ -388,7 +422,10 @@ const EditorPageContent = () => {
                       apiKey={process.env.NEXT_PUBLIC_TINYMCE_API_KEY}
                       onInit={(_evt, editor) => {
                         emailEditorRef.current = editor;
-                        updateEditorColor(emailSettings.headerColor);
+                        const color = emailSettings.headerColor;
+                        const html = emailBody || "";
+                        const painted = isHex(color) ? applyPrimaryColorToHtml(html, color) : html;
+                        editor.setContent(painted);
                       }}
                       initialValue={emailBody}
                       init={{
