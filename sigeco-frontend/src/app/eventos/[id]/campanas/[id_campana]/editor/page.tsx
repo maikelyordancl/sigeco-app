@@ -212,30 +212,43 @@ const EditorPageContent = () => {
   };
 
   const handleSaveEmail = async () => {
-    try {
-      setSaving(true);
-      const editor = emailEditorRef.current;
-      if (!editor) throw new Error("Editor de correo no disponible.");
-      const bodyHtml = editor.getContent();
-      const payload = {
-        email_subject: emailSubject,
-        email_body: bodyHtml,
-        email_settings: emailSettings,
-      };
-      const resp = await apiFetch(`/campanas/${id_campana}/email`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await resp.json();
-      if (!resp.ok || !data.success) throw new Error(data.message || "No se pudo guardar el correo.");
-      toast.success("Correo guardado correctamente.");
-    } catch (e: any) {
-      toast.error(e.message || "Error al guardar el correo.");
-    } finally {
-      setSaving(false);
+  try {
+    setSaving(true);
+
+    const editor = emailEditorRef.current;
+    if (!editor) throw new Error("Editor de correo no disponible.");
+
+    const bodyHtml = editor.getContent();
+
+    // ⬅️  CAMBIA a camelCase:
+    const payload = {
+      emailSubject: emailSubject,
+      emailBody: bodyHtml,
+      emailSettings: emailSettings, // puede ser objeto; el backend lo serializa
+    };
+
+    // OJO con el path: usa exactamente el mismo que te funciona en Network.
+    // Si apiFetch ya agrega /api, deja "/campanas/..."; si no, usa "/api/campanas/..."
+    const resp = await apiFetch(`/campanas/${id_campana}/template`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    // Sé tolerante con la respuesta (algunos controladores no devuelven {success:true})
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      throw new Error(data?.message || "No se pudo guardar el correo.");
     }
-  };
+
+    toast.success(data?.message || "Correo guardado correctamente.");
+  } catch (e: any) {
+    toast.error(e?.message || "Error al guardar el correo.");
+  } finally {
+    setSaving(false);
+  }
+};
+
 
   const insertVariable = (variable: string) => {
     const editor = emailEditorRef.current;
