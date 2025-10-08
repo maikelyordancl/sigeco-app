@@ -34,7 +34,6 @@ export function AcreditacionTable({
   onUpdateStatus,
   updatingId,
 }: AcreditacionTableProps) {
-  // Creamos un mapa para buscar la info de cada campo por su nombre_interno fácilmente
   const camposMap = useMemo(() => {
     const map = new Map<string, CampoFormulario>();
     camposFormulario.forEach((campo) => {
@@ -43,8 +42,6 @@ export function AcreditacionTable({
     return map;
   }, [camposFormulario]);
 
-  // Obtenemos los objetos completos de las columnas que son visibles, en el orden correcto
-  // 🔧 Aseguramos que 'estado_asistencia' SIEMPRE esté visible por defecto
   const orderedVisibleColumns = useMemo(() => {
     const base = visibleColumns.includes("estado_asistencia")
       ? visibleColumns
@@ -63,13 +60,174 @@ export function AcreditacionTable({
     );
   }
 
-  // Función para renderizar el contenido de una celda
+  // --- DIMENSIONES FÍSICAS (GC420t 100x50mm a ~203dpi) ---
+  const LABEL_MM = { w: 100, h: 50 };
+  const DPI = 203;
+  const PX_PER_MM = DPI / 25.4;
+  const CANVAS_W = Math.round(LABEL_MM.w * PX_PER_MM); // ~800
+  const CANVAS_H = Math.round(LABEL_MM.h * PX_PER_MM); // ~400
+
+  const getAsistenteNombre = (a: Asistente) =>
+    (a as any).nombre || (a as any).Nombre || (a as any).NOMBRE || "";
+
+  // Split de 2 líneas balanceadas por longitud
+  const splitNameForTwoLines = (full: string) => {
+    const words = full.trim().split(/\s+/);
+    if (words.length <= 1) return [full];
+    let best: [string, string] = [full, ""];
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (let i = 1; i < words.length; i++) {
+      const l1 = words.slice(0, i).join(" ");
+      const l2 = words.slice(i).join(" ");
+      const score = Math.abs(l1.length - l2.length);
+      if (score < bestScore) {
+        best = [l1, l2];
+        bestScore = score;
+      }
+    }
+    return best;
+  };
+
+  const drawNameToCanvas = (nameInput: string): string => {
+    const name = (nameInput || "").toUpperCase().trim(); // 🔒 medir y dibujar en MAYÚSCULAS
+    const canvas = document.createElement("canvas");
+    canvas.width = CANVAS_W;
+    canvas.height = CANVAS_H;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    // Márgenes y área útil
+    const marginX = Math.round(CANVAS_W * 0.10); // 10%
+    const marginY = Math.round(CANVAS_H * 0.18); // 18%
+    const usableW = CANVAS_W - 2 * marginX;
+    const usableH = CANVAS_H - 2 * marginY;
+
+    // Factor de seguridad para no “quedar justo”
+    const SAFE_W = usableW * 0.92;
+
+    const FONT_FAMILY = "Arial Black, Impact, Arial, Helvetica, sans-serif";
+    const LINE_HEIGHT = 1.12;
+    const minFont = 10;
+
+    // -------- INTENTO 1: UNA LÍNEA --------
+    let fontSize = Math.floor(usableH); // límite superior
+    const fitsSingle = () => {
+      ctx.font = `900 ${fontSize}px ${FONT_FAMILY}`;
+      const w = ctx.measureText(name).width;
+      const h = fontSize * LINE_HEIGHT;
+      return w <= SAFE_W && h <= usableH;
+    };
+    while (fontSize >= minFont && !fitsSingle()) fontSize -= 2;
+
+    if (fontSize >= minFont) {
+      ctx.fillStyle = "#000000";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = `900 ${fontSize}px ${FONT_FAMILY}`;
+      ctx.fillText(name, CANVAS_W / 2, CANVAS_H / 2);
+      return canvas.toDataURL("image/png");
+    }
+
+    // -------- INTENTO 2: DOS LÍNEAS --------
+    const [l1raw, l2raw] = splitNameForTwoLines(name);
+    const l1 = l1raw.toUpperCase();
+    const l2 = l2raw.toUpperCase();
+
+    fontSize = Math.floor(usableH / (2 * LINE_HEIGHT));
+    const fitsDouble = () => {
+      ctx.font = `900 ${fontSize}px ${FONT_FAMILY}`;
+      const w1 = ctx.measureText(l1).width;
+      const w2 = ctx.measureText(l2).width;
+      const hTotal = 2 * (fontSize * LINE_HEIGHT);
+      return w1 <= SAFE_W && w2 <= SAFE_W && hTotal <= usableH;
+    };
+    while (fontSize >= minFont && !fitsDouble()) fontSize -= 2;
+
+    // Dibujo centrado de 2 líneas
+    ctx.fillStyle = "#000000";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.font = `900 ${fontSize}px ${FONT_FAMILY}`;
+
+    const totalH = 2 * (fontSize * LINE_HEIGHT);
+    const startY = (CANVAS_H - totalH) / 2 + fontSize; // baseline primera línea
+    ctx.fillText(l1, CANVAS_W / 2, startY);
+    ctx.fillText(l2, CANVAS_W / 2, startY + fontSize * LINE_HEIGHT);
+
+    return canvas.toDataURL("image/png");
+  };
+
+  // Impresión con iframe oculto
+  const printBadge = (asistente: Asistente) => {
+    const raw = (getAsistenteNombre(asistente) || "").toString();
+    const nombre = raw.replace(/\s+/g, " ").trim();
+
+    const dataUrl = drawNameToCanvas(nombre);
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Etiqueta</title>
+<style>
+  @page { size: ${LABEL_MM.w}mm ${LABEL_MM.h}mm; margin: 0; }
+  html, body { margin:0; padding:0; width:${LABEL_MM.w}mm; height:${LABEL_MM.h}mm; }
+  .wrap { width:100%; height:100%; display:flex; align-items:center; justify-content:center; padding:1mm; box-sizing:border-box; }
+  img { width:98%; height:98%; object-fit:contain; display:block; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+  <div class="wrap"><img src="${dataUrl}" alt="etiqueta" /></div>
+</body>
+</html>`.trim();
+
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+
+    const doPrint = () => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } finally {
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+        }, 1200);
+      }
+    };
+
+    if ("srcdoc" in iframe) {
+      iframe.onload = doPrint;
+      (iframe as HTMLIFrameElement).srcdoc = html;
+    } else {
+      const doc = iframe.contentWindow?.document;
+      if (doc) {
+        iframe.onload = doPrint;
+        doc.open();
+        doc.write(html);
+        doc.close();
+      }
+    }
+  };
+
+  const handleAcreditar = (asistente: Asistente) => {
+    onUpdateStatus(asistente.id_inscripcion, "acreditado");
+    printBadge(asistente);
+  };
+
   const renderCellContent = (asistente: Asistente, campo: CampoFormulario) => {
     const value = (asistente as any)[campo.nombre_interno];
 
     if (campo.nombre_interno === "estado_asistencia") {
       if (value === "Asistió") {
-        // Mostrar "Acreditado" (sin cambiar la lógica interna) y más marcado visualmente
         return (
           <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-800 px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ring-green-200">
             <BadgeCheck className="w-4 h-4" />
@@ -99,23 +257,15 @@ export function AcreditacionTable({
       <table className="min-w-full divide-y divide-gray-200">
         <thead>
           <tr className="bg-cyan-400 border-b border-cyan-500">
-            <th className="px-4 py-3 text-left text-sm font-semibold text-black">
-              #
-            </th>
+            <th className="px-4 py-3 text-left text-sm font-semibold text-black">#</th>
 
-            {/* Cabeceras dinámicas */}
             {orderedVisibleColumns.map((campo) => (
-              <th
-                key={campo.id_campo}
-                className="px-4 py-3 text-left text-sm font-semibold text-black"
-              >
+              <th key={campo.id_campo} className="px-4 py-3 text-left text-sm font-semibold text-black">
                 {campo.etiqueta}
               </th>
             ))}
 
-            <th className="px-4 py-3 text-left text-sm font-semibold text-black">
-              Acción
-            </th>
+            <th className="px-4 py-3 text-left text-sm font-semibold text-black">Acción</th>
           </tr>
         </thead>
 
@@ -125,7 +275,6 @@ export function AcreditacionTable({
               key={asistente.id_inscripcion}
               className={[
                 updatingId === asistente.id_inscripcion ? "opacity-50" : "",
-                // Resaltar fila acreditada sin cambiar la condición lógica
                 asistente.estado_asistencia === "Asistió" ? "bg-green-50" : "",
               ]
                 .join(" ")
@@ -133,71 +282,43 @@ export function AcreditacionTable({
             >
               <td className="px-4 py-2 text-sm text-gray-700">{index + 1}</td>
 
-              {/* Celdas dinámicas */}
               {orderedVisibleColumns.map((campo) => (
-                <td
-                  key={campo.id_campo}
-                  className="px-4 py-2 text-sm text-gray-700"
-                >
+                <td key={campo.id_campo} className="px-4 py-2 text-sm text-gray-700">
                   {renderCellContent(asistente, campo)}
                 </td>
               ))}
 
               <td className="px-4 py-2 text-sm">
                 {updatingId === asistente.id_inscripcion ? (
-                  <span className="text-gray-500 font-medium">
-                    Actualizando...
-                  </span>
+                  <span className="text-gray-500 font-medium">Actualizando...</span>
                 ) : asistente.estado_asistencia !== "Asistió" ? (
                   <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      className="bg-green-600 hover:bg-green-700"
-                      onClick={() =>
-                        onUpdateStatus(asistente.id_inscripcion, "acreditado")
-                      }
-                    >
+                    <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleAcreditar(asistente)}>
                       Acreditar
                     </Button>
                     <Button
                       size="sm"
                       variant="destructive"
-                      onClick={() =>
-                        onUpdateStatus(asistente.id_inscripcion, "denegado")
-                      }
+                      onClick={() => onUpdateStatus(asistente.id_inscripcion, "denegado")}
                     >
                       Denegar
                     </Button>
                   </div>
                 ) : (
-                  // ⚠️ Confirmación al revertir
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button size="sm" variant="outline">
-                        Revertir
-                      </Button>
+                      <Button size="sm" variant="outline">Revertir</Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>
-                          ¿Revertir acreditación?
-                        </AlertDialogTitle>
+                        <AlertDialogTitle>¿Revertir acreditación?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Esta acción marcará al asistente como{" "}
-                          <strong>Pendiente</strong>. Puedes volver a
-                          acreditarlo más tarde.
+                          Esta acción marcará al asistente como <strong>Pendiente</strong>. Puedes volver a acreditarlo más tarde.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() =>
-                            onUpdateStatus(
-                              asistente.id_inscripcion,
-                              "pendiente"
-                            )
-                          }
-                        >
+                        <AlertDialogAction onClick={() => onUpdateStatus(asistente.id_inscripcion, "pendiente")}>
                           Sí, revertir
                         </AlertDialogAction>
                       </AlertDialogFooter>
