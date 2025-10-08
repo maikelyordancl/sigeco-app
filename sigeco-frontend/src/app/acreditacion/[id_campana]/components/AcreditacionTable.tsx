@@ -89,7 +89,7 @@ export function AcreditacionTable({
   };
 
   const drawNameToCanvas = (nameInput: string): string => {
-    const name = (nameInput || "").toUpperCase().trim(); // 🔒 medir y dibujar en MAYÚSCULAS
+    const name = (nameInput || "").toUpperCase().trim(); // medir y dibujar en MAYÚSCULAS
     const canvas = document.createElement("canvas");
     canvas.width = CANVAS_W;
     canvas.height = CANVAS_H;
@@ -98,7 +98,7 @@ export function AcreditacionTable({
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
     // Márgenes y área útil
-    const marginX = Math.round(CANVAS_W * 0.10); // 10%
+    const marginX = Math.round(CANVAS_W * 0.1); // 10%
     const marginY = Math.round(CANVAS_H * 0.18); // 18%
     const usableW = CANVAS_W - 2 * marginX;
     const usableH = CANVAS_H - 2 * marginY;
@@ -111,7 +111,7 @@ export function AcreditacionTable({
     const minFont = 10;
 
     // -------- INTENTO 1: UNA LÍNEA --------
-    let fontSize = Math.floor(usableH); // límite superior
+    let fontSize = Math.floor(usableH);
     const fitsSingle = () => {
       ctx.font = `900 ${fontSize}px ${FONT_FAMILY}`;
       const w = ctx.measureText(name).width;
@@ -158,7 +158,7 @@ export function AcreditacionTable({
     return canvas.toDataURL("image/png");
   };
 
-  // Impresión con iframe oculto
+  // Impresión con iframe oculto (arreglo de tipado TS)
   const printBadge = (asistente: Asistente) => {
     const raw = (getAsistenteNombre(asistente) || "").toString();
     const nombre = raw.replace(/\s+/g, " ").trim();
@@ -184,7 +184,7 @@ export function AcreditacionTable({
 </body>
 </html>`.trim();
 
-    const iframe = document.createElement("iframe");
+    const iframe = document.createElement("iframe") as HTMLIFrameElement;
     iframe.style.position = "fixed";
     iframe.style.right = "0";
     iframe.style.bottom = "0";
@@ -199,21 +199,35 @@ export function AcreditacionTable({
         iframe.contentWindow?.print();
       } finally {
         setTimeout(() => {
-          document.body.removeChild(iframe);
+          if (iframe.parentNode) document.body.removeChild(iframe);
         }, 1200);
       }
     };
 
-    if ("srcdoc" in iframe) {
+    // 👇 Evitamos el narrowing que convierte el else en `never`
+    const supportsSrcdoc = typeof (iframe as any).srcdoc !== "undefined";
+
+    if (supportsSrcdoc) {
       iframe.onload = doPrint;
-      (iframe as HTMLIFrameElement).srcdoc = html;
+      (iframe as any).srcdoc = html; // usar any para no forzar narrowing
     } else {
-      const doc = iframe.contentWindow?.document;
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
       if (doc) {
         iframe.onload = doPrint;
         doc.open();
         doc.write(html);
         doc.close();
+      } else {
+        // Fallback defensivo
+        const w = window.open("", "_blank");
+        if (w) {
+          w.document.open();
+          w.document.write(html);
+          w.document.close();
+          w.focus();
+          w.print();
+          w.close();
+        }
       }
     }
   };
