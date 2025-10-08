@@ -8,9 +8,9 @@ const app = express();
 
 // --- CONFIGURACIÓN DE CORS RECOMENDADA ---
 const allowedOrigins = [
-    'https://sigeco.mindshot.cl', 
-    'http://localhost:3000',      
-    'http://51.75.40.103:3091'     
+  'https://sigeco.mindshot.cl',
+  'http://localhost:3000',
+  'http://51.75.40.103:3091',
 ];
 
 const corsOptions = {
@@ -21,16 +21,17 @@ const corsOptions = {
       callback(new Error('Origen no permitido por CORS'));
     }
   },
-  credentials: true, 
+  credentials: true,
 };
 
 app.use(cors(corsOptions));
 
-// Middlewares
-app.use(express.json());
-// --- LÍNEA AÑADIDA ---
-// Añade este middleware para parsear cuerpos de petición URL-encoded
-app.use(express.urlencoded({ extended: true }));
+// -------------------------
+// Middlewares de parsing
+// -------------------------
+// ⬇️ Aumenta los límites del body a 100 MB
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
 // --- Importación de Rutas ---
 const authRoutes = require('./src/routes/authRoutes');
@@ -57,7 +58,11 @@ app.use('/api/campanas', campanasRoutes);
 app.use('/api/tickets', ticketsRoutes);
 app.use('/api/acreditacion', acreditacionRoutes);
 app.use('/api/public', publicRoutes);
+
+// Si /api/upload recibe cuerpos muy grandes (JSON/base64 o multipart),
+// mantener el límite alto también aquí (por si montas parsers específicos).
 app.use('/api/upload', uploadRoutes);
+
 app.use('/api/eventos', eventoArchivosRoutes);
 app.use('/api/permisos', permisosRoutes);
 app.use('/api/usuarios', usuarioRoutes);
