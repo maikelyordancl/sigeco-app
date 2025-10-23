@@ -18,8 +18,8 @@ exports.findByEmail = async (email) => {
 };
 
 exports.create = async ({ nombre, email, password_hash }) => {
-  const [result] = await pool.query(
-    `INSERT INTO ${TABLE} (nombre, email, password_hash) VALUES (?, ?, ?)`,
+  const [result] = await pool.query( 
+    `INSERT INTO ${TABLE} (nombre, email, password) VALUES (?, ?, ?)`,
     [nombre, email, password_hash]
   );
   return { id_usuario: result.insertId, nombre, email };
