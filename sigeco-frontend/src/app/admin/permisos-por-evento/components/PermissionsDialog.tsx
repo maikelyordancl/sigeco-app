@@ -94,7 +94,8 @@ export function PermissionsDialog({ isOpen, setIsOpen, user }: Props) {
   };
 
   const handleSavePermission = async (index: number) => {
-    const currentPermission = permissions[index]; // Obtener el permiso del estado (con booleanos)
+    // Obtener el permiso actual directamente del estado
+    const currentPermission = permissions[index];
 
     // Validación básica en el frontend
     if (!currentPermission.event_id || currentPermission.event_id <= 0 || !currentPermission.module) {
@@ -102,44 +103,41 @@ export function PermissionsDialog({ isOpen, setIsOpen, user }: Props) {
       return;
     }
 
-    // Crear el objeto payload para enviar a la API, convirtiendo booleanos a números (0 o 1)
-    const payload: PermissionPayload = {
+    // *** PASO CRÍTICO: Conversión de Booleanos a Números (0 o 1) ***
+    // Crear el objeto payload que se enviará a la API
+    const payload = {
       user_id: user.id_usuario,
       event_id: currentPermission.event_id,
       module: currentPermission.module,
-      can_read: currentPermission.can_read ? 1 : 0,
-      can_create: currentPermission.can_create ? 1 : 0,
-      can_update: currentPermission.can_update ? 1 : 0,
-      can_delete: currentPermission.can_delete ? 1 : 0,
+      can_read: currentPermission.can_read ? 1 : 0,     // true -> 1, false -> 0
+      can_create: currentPermission.can_create ? 1 : 0, // true -> 1, false -> 0
+      can_update: currentPermission.can_update ? 1 : 0, // true -> 1, false -> 0
+      can_delete: currentPermission.can_delete ? 1 : 0, // true -> 1, false -> 0
     };
+    // *** FIN DEL PASO CRÍTICO ***
 
-    console.log("Enviando payload:", payload); // Para depuración
+    console.log("Payload que se enviará a la API:", payload); // Verifica en la consola que aquí se vean 0s y 1s
 
     try {
-      // Enviar el payload transformado a la API
+      // Enviar el payload con números (0 o 1) a la API
       const response = await upsertUserPermission(payload);
       const result = await response.json();
 
       if (result.success) {
          toast.success('Permiso guardado.');
-         // Podrías recargar los permisos si es necesario actualizar la vista
+         // Opcional: Recargar permisos si la API no devuelve el objeto actualizado
          // fetchPermissions();
       } else {
          // Mostrar errores de validación del backend si existen
-         const errorMessages = result.errors?.map((e: any) => e.msg).join(', ') || result.error || 'Error desconocido del servidor.';
+         const errorMessages = result.errors?.map((e: any) => `${e.path}: ${e.msg}`).join('; ') || result.error || 'Error desconocido del servidor.';
          toast.error(`Error al guardar: ${errorMessages}`);
+         console.error("Errores de validación del backend:", result.errors);
       }
     } catch (error: any) {
-        console.error('Error al guardar permiso:', error);
-        // Intentar mostrar un mensaje más específico si la API lo envía
-        let errorMessage = 'Error al guardar el permiso.';
-         if (error.message) {
-             errorMessage = error.message;
-         }
-       toast.error(errorMessage);
+        console.error('Error en fetch al guardar permiso:', error);
+        toast.error(`Error de red al intentar guardar: ${error.message}`);
     }
   };
-
   const handleRemovePermissionRow = (index: number) => {
     setPermissions(permissions.filter((_, i) => i !== index));
   };
