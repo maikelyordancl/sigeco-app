@@ -50,6 +50,20 @@ router.put(
 );
 
 /**
+ * PUT /api/usuarios/:id/password
+ * Actualizar solo la contraseña
+ * body: { password }
+ */
+router.put(
+  '/:id/password',
+  [
+    param('id').isInt({ gt: 0 }).withMessage('ID de usuario inválido.'),
+    body('password').isLength({ min: 6 }).withMessage('Password mínimo 6 caracteres.')
+  ],
+  usuarioController.updatePassword // Usamos el nuevo controlador
+);
+
+/**
  * DELETE /api/usuarios/:id
  * Eliminar usuario
  */

@@ -40,3 +40,15 @@ exports.deleteById = async (id) => {
   );
   return result;
 };
+
+/**
+ * Actualiza solo la contraseña de un usuario por su ID.
+ * La columna en la BD se llama 'password' pero almacena el hash.
+ */
+exports.updatePasswordById = async (id, password_hash) => {
+  const [result] = await pool.query(
+    `UPDATE ${TABLE} SET password = ? WHERE id_usuario = ?`,
+    [password_hash, id]
+  );
+  return result;
+};

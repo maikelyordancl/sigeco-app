@@ -122,9 +122,18 @@ export const updateUsuario = (id_usuario: number, usuarioData: { nombre: string;
   body: JSON.stringify(usuarioData),
 });
 
+/**
+ * Actualiza la contraseña de un usuario (Admin)
+ */
+export const updatePassword = (id_usuario: number, password: string) => apiFetch(`/usuarios/${id_usuario}/password`, {
+  method: 'PUT',
+  body: JSON.stringify({ password }),
+});
+
 export const deleteUsuario = (id_usuario: number) => apiFetch(`/usuarios/${id_usuario}`, {
   method: 'DELETE',
 });
+
 
 // Nota: Mantengo esta función `findUsers` porque la usamos en la UI para buscar. 
 // Asegúrate de que tu backend tenga un endpoint como /api/usuarios/buscar?q=...

@@ -104,3 +104,34 @@ exports.getAllUsers = async (req, res) => {
         res.status(500).json({ success: false, error: 'Error en el servidor.' });
     }
 };
+
+/**
+ * Actualizar solo la contraseña de un usuario (Admin)
+ */
+exports.updatePassword = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
+  const { id } = req.params;
+  const { password } = req.body;
+
+  try {
+    // Hashear la nueva contraseña
+    const hash = await bcrypt.hash(password, 10);
+    
+    // Actualizar en la BD
+    const result = await usuarioModel.updatePasswordById(id, hash);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, error: 'Usuario no encontrado.' });
+    }
+
+    return res.json({ success: true, message: 'Contraseña actualizada con éxito.' });
+
+  } catch (e) {
+    console.error('updatePassword', e);
+    return res.status(500).json({ success: false, error: 'Error del servidor al actualizar contraseña.' });
+  }
+};

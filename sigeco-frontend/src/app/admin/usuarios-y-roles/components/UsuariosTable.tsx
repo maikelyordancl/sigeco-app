@@ -9,6 +9,8 @@ import { toast } from "react-hot-toast";
 import { UsuarioDialog } from "./UsuarioDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { GestionarRolesDialog } from "./GestionarRolesDialog";
+// 1. Importar el nuevo diálogo de cambio de contraseña
+import { CambiarPasswordDialog } from "./CambiarPasswordDialog";
 
 interface Usuario {
   id_usuario: number;
@@ -22,6 +24,8 @@ export function UsuariosTable() {
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isRolesDialogOpen, setIsRolesDialogOpen] = useState(false);
+  // 2. Añadir estado para el diálogo de contraseña
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<Usuario | null>(null);
 
   const fetchUsuarios = async () => {
@@ -76,6 +80,12 @@ export function UsuariosTable() {
     setIsRolesDialogOpen(true);
   };
 
+  // 3. Añadir handler para abrir el diálogo de contraseña
+  const handleChangePassword = (user: Usuario) => {
+    setSelectedUser(user);
+    setIsPasswordDialogOpen(true);
+  };
+
   const handleDelete = async (id_usuario: number) => {
     try {
       const res = await deleteUsuario(id_usuario);
@@ -113,6 +123,14 @@ export function UsuariosTable() {
         onSuccess={fetchUsuarios}
       />}
 
+      {/* 4. Renderizar el nuevo diálogo */}
+      {selectedUser && <CambiarPasswordDialog
+        isOpen={isPasswordDialogOpen}
+        setIsOpen={setIsPasswordDialogOpen}
+        user={selectedUser}
+        onSuccess={() => { /* No es necesario recargar, solo cerrar */ }}
+      />}
+
       <div className="rounded-md border">
         <Table>
           <TableHeader>
@@ -132,6 +150,12 @@ export function UsuariosTable() {
                 <TableCell className="text-right space-x-2">
                   <Button variant="outline" size="sm" onClick={() => handleManageRoles(user)}>Roles</Button>
                   <Button variant="outline" size="sm" onClick={() => handleEdit(user)}>Editar</Button>
+                  
+                  {/* 5. Añadir el botón de "Cambiar Clave" */}
+                  <Button variant="secondary" size="sm" onClick={() => handleChangePassword(user)}>
+                    Cambiar Clave
+                  </Button>
+
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="destructive" size="sm">Eliminar</Button>
