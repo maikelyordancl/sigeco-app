@@ -27,12 +27,28 @@ enum EstadoAsistencia {
 type CampanaInfo = {
   nombre: string;
   obligatorio_pago: boolean;
+  // --- INICIO DE LA MODIFICACIÓN (Problema 2) ---
+  // Nos aseguramos que el tipo incluya id_evento
+  id_evento?: number;
+  // --- FIN DE LA MODIFICACIÓN ---
   [key: string]: any;
 };
 
-// --- INICIO DE LA MODIFICACIÓN ---
-// 1. Definir el tipo para el nuevo filtro
 type FiltroEstado = 'todos' | 'acreditados' | 'no_acreditados';
+
+// --- INICIO DE LA MODIFICACIÓN (Problema 1) ---
+/**
+ * Normaliza un string: quita acentos y convierte a minúsculas.
+ * Ej: "ROCÍO" -> "rocio"
+ */
+const normalizeStr = (str: string | null | undefined): string => {
+  if (!str) return "";
+  return str
+    .toString()
+    .normalize("NFD") // Separa los caracteres base de los diacríticos (acentos)
+    .replace(/[\u0300-\u036f]/g, "") // Elimina los diacríticos
+    .toLowerCase(); // Convierte a minúsculas
+};
 // --- FIN DE LA MODIFICACIÓN ---
 
 export default function AcreditarCampanaPage() {
@@ -43,33 +59,54 @@ export default function AcreditarCampanaPage() {
   const [asistentes, setAsistentes] = useState<Asistente[]>([]);
   const [camposFormulario, setCamposFormulario] = useState<CampoFormulario[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  // --- INICIO DE LA MODIFICACIÓN ---
-  // 2. Añadir el nuevo estado para el filtro
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todos');
-  // --- FIN DE LA MODIFICACIÓN ---
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [campanaInfo, setCampanaInfo] = useState<CampanaInfo | null>(null);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  
+  // --- INICIO DE LA MODIFICACIÓN (Problema 2) ---
+  // 1. Nuevo estado para el nombre del evento
+  const [eventName, setEventName] = useState<string>('');
+  // --- FIN DE LA MODIFICACIÓN ---
 
   const { visibleColumns, toggleColumnVisibility } = useVisibleColumns(camposFormulario, id_campana);
 
-  // ... (fetchPageData no necesita cambios) ...
+  // --- INICIO DE LA MODIFICACIÓN (Problema 2) ---
+  // 2. Modificamos fetchPageData para que obtenga el id_evento y luego el nombre del evento
   const fetchPageData = useCallback(async () => {
     if (!id_campana) return;
     setLoading(true);
     try {
-      const [asistentesRes, formRes, campanaRes] = await Promise.all([
-        apiFetch(`/campanas/${id_campana}/asistentes-v2?limit=2000`),
-        apiFetch(`/campanas/${id_campana}/formulario`),
-        apiFetch(`/campanas/${id_campana}`)
-      ]);
-
-      const asistentesData = await asistentesRes.json();
-      const formResult = await formRes.json();
+      // 2.A. Obtenemos primero la info de la campaña para sacar el id_evento
+      const campanaRes = await apiFetch(`/campanas/${id_campana}`);
       const campanaResult = await campanaRes.json();
 
-      // Aseguramos que siempre se guarde un array
+      if (!campanaResult.success) {
+        throw new Error(campanaResult.error || 'No se pudo cargar la info de la campaña.');
+      }
+      
+      const infoCampana: CampanaInfo = campanaResult.data;
+      setCampanaInfo(infoCampana); // Guardamos la info de la campaña
+      
+      const eventId = infoCampana.id_evento; // Extraemos el id_evento
+
+      // 2.B. Preparamos los fetches paralelos
+      const fetches: Promise<Response>[] = [
+        apiFetch(`/campanas/${id_campana}/asistentes-v2?limit=2000`),
+        apiFetch(`/campanas/${id_campana}/formulario`),
+      ];
+
+      // 2.C. Si encontramos un eventId, añadimos el fetch del evento
+      if (eventId) {
+        fetches.push(apiFetch(`/campanas/evento/${eventId}`));
+      }
+
+      // 2.D. Ejecutamos los fetches en paralelo
+      const [asistentesRes, formRes, eventRes] = await Promise.all(fetches);
+
+      // Procesamos asistentes (sin cambios)
+      const asistentesData = await asistentesRes.json();
       if (Array.isArray(asistentesData)) {
         setAsistentes(asistentesData);
       } else if (asistentesData?.data && Array.isArray(asistentesData.data)) {
@@ -80,36 +117,38 @@ export default function AcreditarCampanaPage() {
         setAsistentes([]);
       }
 
+      // Procesamos formulario (sin cambios)
+      const formResult = await formRes.json();
       if (formResult.success) {
-        // Mapeo para que coincida con CampoFormulario y TipoCampo
         let campos: CampoFormulario[] = formResult.data.map((c: any) => ({
           ...c,
           es_de_sistema: c.es_de_sistema,
           tipo_campo: c.tipo_campo as TipoCampo
         }));
-
-        // Añadimos manualmente el campo de estado de asistencia para que sea configurable
         const estadoAsistenciaCampo: CampoFormulario = {
-          id_campo: -1, // Un ID único que no entre en conflicto
+          id_campo: -1,
           nombre_interno: 'estado_asistencia',
           etiqueta: 'Estado',
           es_visible: true,
           es_de_sistema: true,
-          tipo_campo: 'TEXTO_CORTO', // O cualquier tipo genérico
+          tipo_campo: 'TEXTO_CORTO',
           es_obligatorio: false,
           orden: -999,
         };
-
-        // Lo insertamos al principio de la lista de campos
         campos.unshift(estadoAsistenciaCampo);
-
         setCamposFormulario(campos);
       } else {
         throw new Error('No se pudo cargar la configuración del formulario.');
       }
 
-      if (campanaResult.success) {
-        setCampanaInfo(campanaResult.data);
+      // 2.E. Procesamos la respuesta del evento (si existió)
+      if (eventRes) {
+        const eventResult = await eventRes.json();
+        if (eventResult.success) {
+          setEventName(eventResult.data.eventName); // Guardamos el nombre del evento
+        } else {
+          console.warn("No se pudo cargar el nombre del evento.");
+        }
       }
 
     } catch (error: any) {
@@ -118,6 +157,7 @@ export default function AcreditarCampanaPage() {
       setLoading(false);
     }
   }, [id_campana]);
+  // --- FIN DE LA MODIFICACIÓN ---
 
 
   useEffect(() => {
@@ -125,36 +165,35 @@ export default function AcreditarCampanaPage() {
   }, [fetchPageData]);
 
   const filteredAsistentes = useMemo(() => {
-    // Mientras el modal esté abierto, NO aplicar filtros
     if (isModalOpen) return asistentes;
 
-    // --- INICIO DE LA MODIFICACIÓN ---
-    // 3. Actualizar lógica de filtrado
     let filtrados = [...asistentes];
 
-    // 3.A. Aplicar filtro de estado
+    // Filtro de estado (sin cambios)
     if (filtroEstado === 'acreditados') {
       filtrados = filtrados.filter(a => a.estado_asistencia === EstadoAsistencia.Asistio);
     } else if (filtroEstado === 'no_acreditados') {
       filtrados = filtrados.filter(a => a.estado_asistencia !== EstadoAsistencia.Asistio);
     }
-    // Si es 'todos', no se filtra por estado (se usa la lista 'filtrados' completa).
 
-    // 3.B. Aplicar filtro de búsqueda (sobre la lista ya filtrada por estado)
+    // Filtro de búsqueda
     if (searchTerm) {
+      // --- INICIO DE LA MODIFICACIÓN (Problema 1) ---
+      // 1. Normalizamos el término de búsqueda UNA sola vez
+      const normalizedSearchTerm = normalizeStr(searchTerm);
+      
       filtrados = filtrados.filter(asistente =>
+        // 2. Iteramos sobre los valores y normalizamos CADA valor para comparar
         Object.values(asistente).some(value =>
-          String(value).toLowerCase().includes(searchTerm.toLowerCase())
+          normalizeStr(value).includes(normalizedSearchTerm)
         )
       );
+      // --- FIN DE LA MODIFICACIÓN ---
     }
 
     return filtrados;
-    // --- FIN DE LA MODIFICACIÓN ---
+  }, [asistentes, searchTerm, isModalOpen, filtroEstado]);
 
-  }, [asistentes, searchTerm, isModalOpen, filtroEstado]); // 👈 4. AÑADIR filtroEstado a las dependencias
-
-  // ... (handleUpdateStatus no necesita cambios) ...
   const handleUpdateStatus = async (
     id_inscripcion: number,
     nuevo_estado: 'acreditado' | 'denegado' | 'pendiente'
@@ -200,7 +239,6 @@ export default function AcreditarCampanaPage() {
     }
   };
 
-  // ... (stats no necesita cambios) ...
   const stats = useMemo(() => {
     const list = Array.isArray(asistentes) ? asistentes : [];
     const total = list.length;
@@ -209,19 +247,39 @@ export default function AcreditarCampanaPage() {
     return { total, acreditados, pendientes };
   }, [asistentes]);
 
-
   return (
     <MainLayout>
       <div className="p-4 md:p-6 space-y-6">
-        {/* ... (Cabecera y Panel de Control no necesitan cambios) ... */}
         <div className="flex items-center justify-between">
           <Button variant="outline" size="sm" onClick={() => router.push('/eventos/gestion')}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Volver a Eventos
           </Button>
-          <h1 className="text-2xl font-bold text-center">
-            {campanaInfo ? `ACREDITACION ${campanaInfo.nombre}` : 'Acreditación'}
-          </h1>
-          <div style={{ width: '150px' }}></div>
+
+          {/* --- INICIO DE LA MODIFICACIÓN --- */}
+          <div className="flex flex-col items-center justify-center text-center flex-1 min-w-0 px-4">
+            
+            {/* Título Principal (Evento) */}
+            <h1 
+              className="text-2xl font-bold truncate w-full" 
+              title={loading ? 'Cargando...' : `ACREDITACIÓN ${eventName}`}
+            >
+              {loading ? 'Cargando...' : `ACREDITACIÓN ${eventName || 'Evento'}`}
+            </h1>
+            
+            {/* Subtítulo (Campaña) - CON TAMAÑO CORREGIDO */}
+            {campanaInfo && (
+              <p 
+                className="text-lg text-gray-600 font-medium truncate w-full" 
+                title={campanaInfo.nombre}
+              >
+               Campaña: {campanaInfo.nombre}
+              </p>
+            )}
+          </div>
+          {/* --- FIN DE LA MODIFICACIÓN --- */}
+
+          {/* Este div invisible ayuda a mantener el título centrado correctamente */}
+          <div style={{ width: '150px' }} className="flex-shrink-0"></div>
         </div>
 
         <Card>
@@ -271,7 +329,6 @@ export default function AcreditarCampanaPage() {
           </CardContent>
         </Card>
 
-
         {loading ? (
           <div className="text-center py-10">Cargando asistentes...</div>
         ) : (
@@ -280,16 +337,12 @@ export default function AcreditarCampanaPage() {
             camposFormulario={camposFormulario}
             onUpdateStatus={handleUpdateStatus}
             updatingId={updatingId}
-            // --- INICIO DE LA MODIFICACIÓN ---
-            // 5. Pasar los nuevos props al container
             filtroEstado={filtroEstado}
             onFiltroChange={setFiltroEstado}
-            // --- FIN DE LA MODIFICACIÓN ---
           />
         )}
       </div>
 
-      {/* ... (RegistrarEnPuertaDialog no necesita cambios) ... */}
       <RegistrarEnPuertaDialog
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
