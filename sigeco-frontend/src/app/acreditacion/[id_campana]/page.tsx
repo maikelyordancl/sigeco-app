@@ -30,6 +30,11 @@ type CampanaInfo = {
   [key: string]: any;
 };
 
+// --- INICIO DE LA MODIFICACIÓN ---
+// 1. Definir el tipo para el nuevo filtro
+type FiltroEstado = 'todos' | 'acreditados' | 'no_acreditados';
+// --- FIN DE LA MODIFICACIÓN ---
+
 export default function AcreditarCampanaPage() {
   const router = useRouter();
   const params = useParams();
@@ -38,6 +43,10 @@ export default function AcreditarCampanaPage() {
   const [asistentes, setAsistentes] = useState<Asistente[]>([]);
   const [camposFormulario, setCamposFormulario] = useState<CampoFormulario[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  // --- INICIO DE LA MODIFICACIÓN ---
+  // 2. Añadir el nuevo estado para el filtro
+  const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todos');
+  // --- FIN DE LA MODIFICACIÓN ---
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [campanaInfo, setCampanaInfo] = useState<CampanaInfo | null>(null);
@@ -45,6 +54,7 @@ export default function AcreditarCampanaPage() {
 
   const { visibleColumns, toggleColumnVisibility } = useVisibleColumns(camposFormulario, id_campana);
 
+  // ... (fetchPageData no necesita cambios) ...
   const fetchPageData = useCallback(async () => {
     if (!id_campana) return;
     setLoading(true);
@@ -78,7 +88,6 @@ export default function AcreditarCampanaPage() {
           tipo_campo: c.tipo_campo as TipoCampo
         }));
 
-        // --- INICIO DE LA MODIFICACIÓN ---
         // Añadimos manualmente el campo de estado de asistencia para que sea configurable
         const estadoAsistenciaCampo: CampoFormulario = {
           id_campo: -1, // Un ID único que no entre en conflicto
@@ -93,7 +102,6 @@ export default function AcreditarCampanaPage() {
 
         // Lo insertamos al principio de la lista de campos
         campos.unshift(estadoAsistenciaCampo);
-        // --- FIN DE LA MODIFICACIÓN ---
 
         setCamposFormulario(campos);
       } else {
@@ -117,17 +125,36 @@ export default function AcreditarCampanaPage() {
   }, [fetchPageData]);
 
   const filteredAsistentes = useMemo(() => {
-    // Mientras el modal esté abierto, NO aplicar el filtro de búsqueda
+    // Mientras el modal esté abierto, NO aplicar filtros
     if (isModalOpen) return asistentes;
 
-    if (!searchTerm) return asistentes;
-    return asistentes.filter(asistente =>
-      Object.values(asistente).some(value =>
-        String(value).toLowerCase().includes(searchTerm.toLowerCase())
-      )
-    );
-  }, [asistentes, searchTerm, isModalOpen]); // 👈 agrega isModalOpen
+    // --- INICIO DE LA MODIFICACIÓN ---
+    // 3. Actualizar lógica de filtrado
+    let filtrados = [...asistentes];
 
+    // 3.A. Aplicar filtro de estado
+    if (filtroEstado === 'acreditados') {
+      filtrados = filtrados.filter(a => a.estado_asistencia === EstadoAsistencia.Asistio);
+    } else if (filtroEstado === 'no_acreditados') {
+      filtrados = filtrados.filter(a => a.estado_asistencia !== EstadoAsistencia.Asistio);
+    }
+    // Si es 'todos', no se filtra por estado (se usa la lista 'filtrados' completa).
+
+    // 3.B. Aplicar filtro de búsqueda (sobre la lista ya filtrada por estado)
+    if (searchTerm) {
+      filtrados = filtrados.filter(asistente =>
+        Object.values(asistente).some(value =>
+          String(value).toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      );
+    }
+
+    return filtrados;
+    // --- FIN DE LA MODIFICACIÓN ---
+
+  }, [asistentes, searchTerm, isModalOpen, filtroEstado]); // 👈 4. AÑADIR filtroEstado a las dependencias
+
+  // ... (handleUpdateStatus no necesita cambios) ...
   const handleUpdateStatus = async (
     id_inscripcion: number,
     nuevo_estado: 'acreditado' | 'denegado' | 'pendiente'
@@ -173,6 +200,7 @@ export default function AcreditarCampanaPage() {
     }
   };
 
+  // ... (stats no necesita cambios) ...
   const stats = useMemo(() => {
     const list = Array.isArray(asistentes) ? asistentes : [];
     const total = list.length;
@@ -181,9 +209,11 @@ export default function AcreditarCampanaPage() {
     return { total, acreditados, pendientes };
   }, [asistentes]);
 
+
   return (
     <MainLayout>
       <div className="p-4 md:p-6 space-y-6">
+        {/* ... (Cabecera y Panel de Control no necesitan cambios) ... */}
         <div className="flex items-center justify-between">
           <Button variant="outline" size="sm" onClick={() => router.push('/eventos/gestion')}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Volver a Eventos
@@ -216,16 +246,16 @@ export default function AcreditarCampanaPage() {
 
             <div className="flex flex-col flex-1 gap-2">
               <Input
-  type="search"
-  name="tabla_busqueda"
-  autoComplete="off"
-  autoCorrect="off"
-  autoCapitalize="none"
-  placeholder="Buscar asistente (nombre, email, rut...)"
-  value={searchTerm}
-  onChange={(e) => setSearchTerm(e.target.value)}
-  className="bg-yellow-200 focus:bg-yellow-50 focus:ring-2 focus:ring-yellow-300 border-yellow-200"
-/>
+                type="search"
+                name="tabla_busqueda"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="none"
+                placeholder="Buscar asistente (nombre, email, rut...)"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="bg-yellow-200 focus:bg-yellow-50 focus:ring-2 focus:ring-yellow-300 border-yellow-200"
+              />
 
               <div className="flex gap-2">
                 {campanaInfo && !campanaInfo.obligatorio_pago && (
@@ -241,6 +271,7 @@ export default function AcreditarCampanaPage() {
           </CardContent>
         </Card>
 
+
         {loading ? (
           <div className="text-center py-10">Cargando asistentes...</div>
         ) : (
@@ -249,10 +280,16 @@ export default function AcreditarCampanaPage() {
             camposFormulario={camposFormulario}
             onUpdateStatus={handleUpdateStatus}
             updatingId={updatingId}
+            // --- INICIO DE LA MODIFICACIÓN ---
+            // 5. Pasar los nuevos props al container
+            filtroEstado={filtroEstado}
+            onFiltroChange={setFiltroEstado}
+            // --- FIN DE LA MODIFICACIÓN ---
           />
         )}
       </div>
 
+      {/* ... (RegistrarEnPuertaDialog no necesita cambios) ... */}
       <RegistrarEnPuertaDialog
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
