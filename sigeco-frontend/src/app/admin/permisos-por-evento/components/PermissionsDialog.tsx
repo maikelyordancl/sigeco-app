@@ -303,7 +303,7 @@ export function PermissionsDialog({ isOpen, setIsOpen, user }: Props) {
                                 key={evento.id_evento} 
                                 value={String(evento.id_evento)}
                               >
-                                {evento.nombre} (ID: {evento.id_evento})
+                               (ID: {evento.id_evento}) - {evento.nombre} 
                               </SelectItem>
                             ))}
                             {/* --- FIN: JSX CORREGIDO --- */}

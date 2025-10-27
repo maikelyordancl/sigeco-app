@@ -10,14 +10,25 @@ router.get('/', baseDatosController.getAllBasesDatos);
 router.post(
     '/importar',
     [
-        body('nombre_base').notEmpty().withMessage('El nombre de la base es obligatorio.').trim().escape(),
-        body('contactos').isArray({ min: 1 }).withMessage('Debe haber al menos un contacto para importar.'),
-        // Validación básica para el primer contacto del array como muestra
-        body('contactos.*.nombre').notEmpty().withMessage('El nombre del contacto es obligatorio.'),
-        body('contactos.*.email').isEmail().withMessage('El email del contacto no es válido.')
+        body('nombre_base')
+            .notEmpty()
+            .withMessage('El nombre de la base es obligatorio.')
+            .trim()
+            .escape(),
+
+        body('contactos')
+            .isArray({ min: 1 })
+            .withMessage('Debe haber al menos un contacto para importar.'),
+
+        // Solo validamos el email si se envía, no el nombre
+        body('contactos.*.email')
+            .optional({ checkFalsy: true })
+            .isEmail()
+            .withMessage('El email del contacto no es válido.')
     ],
     baseDatosController.importarContactos
 );
+
 
 // POST /api/basedatos/fusionar -> Fusionar bases existentes
 router.post(

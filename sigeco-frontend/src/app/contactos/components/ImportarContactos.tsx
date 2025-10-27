@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
-// --- ¡ESTOS SON LOS WRAPPERS IMPORTANTES! ---
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,21 +12,22 @@ import { apiFetch } from "@/lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Download } from 'lucide-react';
 
-// ... (Todas tus interfaces y funciones de lógica van aquí:
-// CampanaSimple, ContactoData, ImportarContactosProps, normalizeContactos, etc.)
+// --- Interfaces y Lógica de Normalización ---
+
 interface CampanaSimple {
   id_campana: number;
   nombre: string;
 }
+
 type ContactoData = Partial<Contacto> & { [key: string]: any };
+
 type ImportarContactosProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   refreshContactos: () => void;
 };
-// ... (resto de tu lógica)
+
 const normalizeContactos = (contactos: ContactoData[]): ContactoData[] => {
-  // ... tu código
   return contactos.map(contacto => {
     const normalizedContacto: ContactoData = {};
     Object.keys(contacto).forEach(key => {
@@ -52,8 +52,9 @@ const normalizeContactos = (contactos: ContactoData[]): ContactoData[] => {
 };
 
 
+// --- Componente Principal ---
+
 const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, refreshContactos }) => {
-  // ... (Todos tus hooks: useState, useEffect, etc. van aquí)
   const [file, setFile] = useState<File | null>(null);
   const [contactosPreview, setContactosPreview] = useState<ContactoData[]>([]);
   const [nombreBase, setNombreBase] = useState<string>("");
@@ -64,7 +65,6 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
   const [isLoadingCampanas, setIsLoadingCampanas] = useState(false);
   const [headers, setHeaders] = useState<string[]>([]);
 
-  // ... (Toda tu lógica: useEffect, handleFileChange, handleParseFile, handleUpload, handleDownloadTemplate)
   useEffect(() => {
     async function fetchCampanas() {
       if (open && campanas.length === 0) {
@@ -90,15 +90,14 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
   }, [open]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // ... tu código
     const selectedFile = e.target.files?.[0] || null;
     setFile(selectedFile);
     setContactosPreview([]);
     setHeaders([]);
     setError(null);
   };
+
   const handleParseFile = () => {
-    // ... tu código
     if (!file) return setError("Por favor, seleccione un archivo.");
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -129,55 +128,101 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
     };
     reader.readAsBinaryString(file);
   };
+
+  /**
+   * Formatea los errores recibidos de la API (ya sea un string o un array) 
+   * en un solo string legible con saltos de línea.
+   */
+  const formatApiError = (errorData: any): string => {
+    // Caso 1: El error es un array 'errors' (como en tu JSON)
+    if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
+      const mensajesError = errorData.errors.map((err: any, index: number) => 
+        // err.value parece contener los emails duplicados
+        `Error ${index + 1}: ${err.value || 'Error desconocido'}`
+      ).join('\n'); // Unir con saltos de línea
+      
+      return `Ocurrieron errores en la importación:\n${mensajesError}`;
+    }
+    
+    // Caso 2: El error es un string 'error' (el formato anterior)
+    if (errorData.error && typeof errorData.error === 'string') {
+      return errorData.error;
+    }
+
+    // Caso 3: Fallback genérico
+    return 'Ocurrió un error desconocido en el servidor.';
+  };
+
+  // --- FUNCIÓN ACTUALIZADA ---
   const handleUpload = async () => {
-    // ... tu código
     if (!contactosPreview.length) return setError("No hay contactos para importar.");
     setLoading(true);
     setError(null);
+
     try {
-        if (selectedCampana) {
-            const response = await apiFetch(`/campanas/${selectedCampana}/importar-inscripciones`, {
-                method: "POST",
-                body: JSON.stringify({
-                    contactos: contactosPreview 
-                }),
-            });
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Ocurrió un error en el servidor.');
-            }
-            const result = await response.json();
-            toast.success(result.message || "Importación a evento completada.");
-        } else {
-            if (!nombreBase.trim()) return setError("Debe ingresar un nombre para la base de datos.");
-            const response = await apiFetch(`/basedatos/importar`, {
-                method: "POST",
-                body: JSON.stringify({
-                    nombre_base: nombreBase.trim(),
-                    contactos: contactosPreview
-                }),
-            });
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Ocurrió un error en el servidor.');
-            }
-            toast.success("Contactos importados con éxito a la nueva base de datos.");
+      let response;
+      
+      if (selectedCampana) {
+        // --- Importar a Evento (Campaña) ---
+        response = await apiFetch(`/campanas/${selectedCampana}/importar-inscripciones`, {
+            method: "POST",
+            body: JSON.stringify({
+                contactos: contactosPreview 
+            }),
+        });
+
+      } else {
+        // --- Importar a nueva Base de Datos ---
+        if (!nombreBase.trim()) {
+            setError("Debe ingresar un nombre para la base de datos.");
+            setLoading(false);
+            return; // Salir temprano si falta el nombre
         }
-        refreshContactos(); 
-        setOpen(false);
-        setFile(null);
-        setContactosPreview([]);
-        setHeaders([]);
-        setNombreBase("");
-        setSelectedCampana("");
+        
+        response = await apiFetch(`/basedatos/importar`, {
+            method: "POST",
+            body: JSON.stringify({
+                nombre_base: nombreBase.trim(),
+                contactos: contactosPreview
+            }),
+        });
+      }
+
+      // --- Manejo de Respuesta Unificado ---
+      if (!response.ok) {
+        // Si la respuesta no es OK (ej: 400, 500)
+        const errorData = await response.json();
+        // Usamos la función helper para formatear el error
+        throw new Error(formatApiError(errorData)); 
+      }
+
+      // Si la respuesta es OK (ej: 200, 201)
+      if (selectedCampana) {
+        const result = await response.json();
+        toast.success(result.message || "Importación a evento completada.");
+      } else {
+        toast.success("Contactos importados con éxito a la nueva base de datos.");
+      }
+
+      // Limpieza y cierre del modal
+      refreshContactos(); 
+      setOpen(false);
+      setFile(null);
+      setContactosPreview([]);
+      setHeaders([]);
+      setNombreBase("");
+      setSelectedCampana("");
+
     } catch (error: any) {
-        setError(error.message || "Error al procesar la importación.");
+      // El 'catch' ahora recibe el error formateado desde el 'throw'
+      setError(error.message || "Error al procesar la importación.");
+    
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
+  
   const handleDownloadTemplate = () => {
-    // ... tu código
     if (selectedCampana) {
       apiFetch(`/campanas/${selectedCampana}/plantilla-importacion`)
         .then(response => {
@@ -198,6 +243,7 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
         .catch(err => toast.error(err.message));
       return;
     }
+
     const headers = ["nombre", "email", "telefono", "rut", "empresa", "actividad", "profesion", "pais", "comuna"];
     const exampleData = [{ nombre: "Juan Pérez", email: "juan.perez@ejemplo.com", telefono: "+56912345678", rut: "12.345.678-9", empresa: "Empresa Ejemplo S.A.", actividad: "Tecnología", profesion: "Ingeniero de Software", pais: "Chile", comuna: "Coronel" }];
     const worksheet = XLSX.utils.json_to_sheet(exampleData, { header: headers });
@@ -206,23 +252,17 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
     XLSX.writeFile(workbook, "plantilla_importacion_contactos.xlsx");
   };
 
-  // --- ¡AQUÍ ESTÁ LA ESTRUCTURA DEL LAYOUT CORREGIDA! ---
+  // --- Renderizado del Componente (Layout) ---
   return (
-    // 1. El <Dialog> envuelve todo
     <Dialog open={open} onOpenChange={setOpen}>
-      
-      {/* 2. El <DialogContent> tiene el ancho y alto máximo, y el flex-col */}
       <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
         
-        {/* 3. El Header es fijo */}
         <DialogHeader>
           <DialogTitle>Importar Contactos desde Excel</DialogTitle>
         </DialogHeader>
 
-        {/* 4. Este 'div' tiene el scroll (overflow-y-auto) */}
+        {/* Contenido con Scroll */}
         <div className="flex-1 overflow-y-auto space-y-4 py-4 px-6">
-          
-          {/* 5. TODO tu contenido original va aquí dentro */}
           
           <div className="space-y-2">
             <label className="text-sm font-medium">Asociar a un Evento (Opcional)</label>
@@ -256,6 +296,7 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
             </div>
           )}
           
+          {/* El contenedor de error ya estaba preparado para múltiples líneas */}
           {error && (
             <div className="text-red-500 mt-2 p-2 bg-red-50 rounded whitespace-pre-wrap"
               dangerouslySetInnerHTML={{ __html: error.replace(/\n/g, '<br />') }}>
@@ -289,7 +330,7 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
           )}
         </div>
         
-        {/* 6. El Footer es fijo y siempre visible */}
+        {/* Footer Fijo */}
         <DialogFooter className="border-t pt-4">
           <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
           <Button onClick={handleUpload} disabled={loading || contactosPreview.length === 0 || (!nombreBase.trim() && !selectedCampana)}>
