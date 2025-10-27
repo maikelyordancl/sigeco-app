@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
+// --- ¡ESTOS SON LOS WRAPPERS IMPORTANTES! ---
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,30 +13,21 @@ import { apiFetch } from "@/lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Download } from 'lucide-react';
 
+// ... (Todas tus interfaces y funciones de lógica van aquí:
+// CampanaSimple, ContactoData, ImportarContactosProps, normalizeContactos, etc.)
 interface CampanaSimple {
   id_campana: number;
   nombre: string;
 }
-
-// Hacemos que el objeto pueda tener cualquier clave, ya que las columnas son dinámicas
 type ContactoData = Partial<Contacto> & { [key: string]: any };
-
 type ImportarContactosProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   refreshContactos: () => void;
 };
-
-type ValidationError = {
-  type: string;
-  value: string;
-  msg: string;
-  path: string;
-  location: string;
-};
-
-// La normalización sigue siendo útil para limpiar los datos antes de enviarlos
+// ... (resto de tu lógica)
 const normalizeContactos = (contactos: ContactoData[]): ContactoData[] => {
+  // ... tu código
   return contactos.map(contacto => {
     const normalizedContacto: ContactoData = {};
     Object.keys(contacto).forEach(key => {
@@ -59,20 +51,20 @@ const normalizeContactos = (contactos: ContactoData[]): ContactoData[] => {
   });
 };
 
+
 const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, refreshContactos }) => {
+  // ... (Todos tus hooks: useState, useEffect, etc. van aquí)
   const [file, setFile] = useState<File | null>(null);
   const [contactosPreview, setContactosPreview] = useState<ContactoData[]>([]);
   const [nombreBase, setNombreBase] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  
   const [campanas, setCampanas] = useState<CampanaSimple[]>([]);
   const [selectedCampana, setSelectedCampana] = useState<string>('');
   const [isLoadingCampanas, setIsLoadingCampanas] = useState(false);
-
-  // --- NUEVO ESTADO PARA LAS CABECERAS ---
   const [headers, setHeaders] = useState<string[]>([]);
 
+  // ... (Toda tu lógica: useEffect, handleFileChange, handleParseFile, handleUpload, handleDownloadTemplate)
   useEffect(() => {
     async function fetchCampanas() {
       if (open && campanas.length === 0) {
@@ -98,48 +90,38 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
   }, [open]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // ... tu código
     const selectedFile = e.target.files?.[0] || null;
     setFile(selectedFile);
-    // Reseteamos la previsualización al cambiar de archivo
     setContactosPreview([]);
     setHeaders([]);
     setError(null);
   };
-
-  // --- FUNCIÓN MODIFICADA PARA LEER CABECERAS ---
   const handleParseFile = () => {
+    // ... tu código
     if (!file) return setError("Por favor, seleccione un archivo.");
-    
     const reader = new FileReader();
     reader.onload = (event) => {
       const data = event.target?.result;
       if (!data) return setError("No se pudo leer el archivo.");
-      
       try {
         const workbook = XLSX.read(data, { type: "binary", cellDates: true });
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
-        
-        // 1. Extraemos los datos como un arreglo de arreglos para obtener las cabeceras
         const jsonDataRaw: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
         if (jsonDataRaw.length < 1) {
             setError("El archivo está vacío.");
             return;
         }
-        const fileHeaders = jsonDataRaw[0].map(String); // La primera fila son las cabeceras
+        const fileHeaders = jsonDataRaw[0].map(String);
         setHeaders(fileHeaders);
-
-        // 2. Leemos los datos de nuevo, pero ahora como objetos JSON
         const jsonData: ContactoData[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
         if (!jsonData.length) {
             setError("El archivo no contiene filas de datos.");
             return;
         }
-        
-        // 3. Normalizamos y guardamos los datos para previsualizar
         setContactosPreview(normalizeContactos(jsonData));
         setError(null);
-
       } catch (err) {
         console.error(err);
         setError("Error al procesar el archivo. Asegúrese de que el formato sea correcto.");
@@ -147,37 +129,27 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
     };
     reader.readAsBinaryString(file);
   };
-
   const handleUpload = async () => {
+    // ... tu código
     if (!contactosPreview.length) return setError("No hay contactos para importar.");
-    
     setLoading(true);
     setError(null);
-
     try {
-        // --- LÓGICA CONDICIONAL ---
         if (selectedCampana) {
-            // --- CASO 1: Importar a un Evento Específico ---
             const response = await apiFetch(`/campanas/${selectedCampana}/importar-inscripciones`, {
                 method: "POST",
                 body: JSON.stringify({
-                    contactos: contactosPreview // El payload es el arreglo de objetos que ya tenemos
+                    contactos: contactosPreview 
                 }),
             });
-
             if (!response.ok) {
                 const errorData = await response.json();
-                // Si el error viene del backend con un mensaje específico, lo mostramos.
                 throw new Error(errorData.error || 'Ocurrió un error en el servidor.');
             }
-            
             const result = await response.json();
             toast.success(result.message || "Importación a evento completada.");
-
         } else {
-            // --- CASO 2: Importación Genérica (sin cambios) ---
             if (!nombreBase.trim()) return setError("Debe ingresar un nombre para la base de datos.");
-            
             const response = await apiFetch(`/basedatos/importar`, {
                 method: "POST",
                 body: JSON.stringify({
@@ -185,15 +157,12 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
                     contactos: contactosPreview
                 }),
             });
-
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Ocurrió un error en el servidor.');
             }
             toast.success("Contactos importados con éxito a la nueva base de datos.");
         }
-
-        // Si todo sale bien, cerramos y reseteamos el estado.
         refreshContactos(); 
         setOpen(false);
         setFile(null);
@@ -201,16 +170,14 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
         setHeaders([]);
         setNombreBase("");
         setSelectedCampana("");
-
     } catch (error: any) {
-        // Mostramos el error específico que viene del backend o uno genérico.
         setError(error.message || "Error al procesar la importación.");
     } finally {
         setLoading(false);
     }
   };
-
   const handleDownloadTemplate = () => {
+    // ... tu código
     if (selectedCampana) {
       apiFetch(`/campanas/${selectedCampana}/plantilla-importacion`)
         .then(response => {
@@ -239,13 +206,24 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
     XLSX.writeFile(workbook, "plantilla_importacion_contactos.xlsx");
   };
 
+  // --- ¡AQUÍ ESTÁ LA ESTRUCTURA DEL LAYOUT CORREGIDA! ---
   return (
+    // 1. El <Dialog> envuelve todo
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-6xl">
+      
+      {/* 2. El <DialogContent> tiene el ancho y alto máximo, y el flex-col */}
+      <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+        
+        {/* 3. El Header es fijo */}
         <DialogHeader>
           <DialogTitle>Importar Contactos desde Excel</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+
+        {/* 4. Este 'div' tiene el scroll (overflow-y-auto) */}
+        <div className="flex-1 overflow-y-auto space-y-4 py-4 px-6">
+          
+          {/* 5. TODO tu contenido original va aquí dentro */}
+          
           <div className="space-y-2">
             <label className="text-sm font-medium">Asociar a un Evento (Opcional)</label>
             <div className="flex items-center gap-2">
@@ -263,24 +241,27 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
               </Select>
             </div>
           </div>
+          
           <Input type="file" accept=".xlsx, .xls" onChange={handleFileChange} />
           <Button onClick={handleParseFile} className="w-full">Leer, Limpiar y Previsualizar</Button>
+          
           <button onClick={handleDownloadTemplate} className="text-blue-600 text-sm underline mt-2 block text-center w-full">
             {selectedCampana ? 'Descargar plantilla para el evento seleccionado' : 'Descargar planilla de ejemplo genérica'}
           </button>
+          
           {!selectedCampana && (
             <div className="mt-4">
               <label className="text-sm font-medium block mb-1">Nombre de la nueva base de datos:</label>
               <Input value={nombreBase} onChange={(e) => setNombreBase(e.target.value)} placeholder="Ej: Contactos Feria Gastronómica 2025"/>
             </div>
           )}
+          
           {error && (
             <div className="text-red-500 mt-2 p-2 bg-red-50 rounded whitespace-pre-wrap"
               dangerouslySetInnerHTML={{ __html: error.replace(/\n/g, '<br />') }}>
             </div>
           )}
 
-          {/* --- TABLA DE PREVISUALIZACIÓN DINÁMICA --- */}
           {contactosPreview.length > 0 && headers.length > 0 && (
             <div className="mt-4">
               <h3 className="font-semibold mb-2">Mostrando primeros 10 contactos (de un total de {contactosPreview.length})</h3>
@@ -307,12 +288,15 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
             </div>
           )}
         </div>
-        <DialogFooter>
+        
+        {/* 6. El Footer es fijo y siempre visible */}
+        <DialogFooter className="border-t pt-4">
           <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
           <Button onClick={handleUpload} disabled={loading || contactosPreview.length === 0 || (!nombreBase.trim() && !selectedCampana)}>
             {loading ? "Importando..." : "Confirmar e Importar"}
           </Button>
         </DialogFooter>
+        
       </DialogContent>
     </Dialog>
   );

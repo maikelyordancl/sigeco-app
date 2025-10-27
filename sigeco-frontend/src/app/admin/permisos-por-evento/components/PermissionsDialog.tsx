@@ -3,12 +3,28 @@
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+// Quitamos Input porque ya no se usa
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "react-hot-toast";
-// Corregido: Usar ruta relativa en lugar de alias
-import { getUserPermissionsByEvent, upsertUserPermission, deleteUserPermission } from "../../../../lib/api";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+// --- INICIO: IMPORT MODIFICADO ---
+// (Quitamos getEventos, pero AÑADIMOS apiFetch si no está ya)
+import { 
+    getUserPermissionsByEvent, 
+    upsertUserPermission, 
+    deleteUserPermission, 
+    apiFetch // <-- ¡IMPORTANTE! O la ruta correcta a tu apiFetch
+} from "../../../../lib/api";
+// --- FIN: IMPORT MODIFICADO ---
+
 import { Trash2 } from "lucide-react";
 
 interface User {
@@ -25,8 +41,8 @@ interface Permission {
   can_delete: boolean;
 }
 
-// Interface para el payload que espera la API
 interface PermissionPayload {
+  // ... (interfaz sin cambios)
   user_id: number;
   event_id: number;
   module: string;
@@ -37,6 +53,17 @@ interface PermissionPayload {
 }
 
 
+// --- INICIO: INTERFAZ EVENTO CORREGIDA ---
+// (Usando 'nombre' como en tu código de ejemplo)
+interface Evento {
+  id_evento: number;
+  nombre: string;
+  // (No necesitamos los otros campos como fecha_fin, estado, etc. 
+  // para este diálogo, así que la interfaz simple es suficiente)
+}
+// --- FIN: INTERFAZ EVENTO CORREGIDA ---
+
+
 interface Props {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
@@ -45,102 +72,122 @@ interface Props {
 
 export function PermissionsDialog({ isOpen, setIsOpen, user }: Props) {
   const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [eventos, setEventos] = useState<Evento[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // --- INICIO: useEffect REESCRITO USANDO TU LÓGICA ---
   useEffect(() => {
     if (!isOpen) return;
 
+    setLoading(true);
+
+    // 1. Función para cargar permisos (lógica de antes)
     const fetchPermissions = async () => {
-      setLoading(true);
       try {
         const res = await getUserPermissionsByEvent(user.id_usuario);
         const data = await res.json();
         if (data.success) {
-          // Asegurarse de que los permisos se lean como booleanos desde la API
           const formattedPermissions = data.data.map((p: any) => ({
             event_id: p.event_id,
             module: p.module,
-            can_read: !!p.can_read, // Convierte a booleano
-            can_create: !!p.can_create, // Convierte a booleano
-            can_update: !!p.can_update, // Convierte a booleano
-            can_delete: !!p.can_delete, // Convierte a booleano
+            can_read: !!p.can_read,
+            can_create: !!p.can_create,
+            can_update: !!p.can_update,
+            can_delete: !!p.can_delete,
           }));
           setPermissions(formattedPermissions);
         } else {
-            // Si la API devuelve success: false, mostrar el error
-            toast.error(data.error || "Error al cargar permisos.");
+          toast.error(data.error || "Error al cargar permisos del usuario.");
         }
       } catch (error) {
         console.error("Error fetching permissions:", error);
         toast.error("No se pudieron cargar los permisos del usuario.");
-      } finally {
-        setLoading(false);
       }
     };
 
-    fetchPermissions();
-  }, [user, isOpen]);
+    // 2. Función para cargar eventos (ADAPTADA DE TU CÓDIGO)
+    const fetchEventosAdaptada = async () => {
+      try {
+        // Usamos la llamada apiFetch que ya te funciona
+        const response = await apiFetch('/eventos');
 
-  // *** FUNCIÓN CORREGIDA ***
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            // No necesitamos el mapeo complejo de 'mapEstado' aquí,
+            // solo guardamos la data que tiene id_evento y nombre.
+            // (Asumimos que data.data es el array de Evento[])
+            setEventos(data.data);
+          } else {
+            // Adaptación: Usamos toast en lugar de setErrorGlobal
+            toast.error(data.error || "Error desconocido al obtener los eventos.");
+          }
+        } else {
+          toast.error("Error al obtener los eventos desde el servidor.");
+        }
+      } catch (error) {
+        toast.error("Error de red: No se pudo conectar al servidor de eventos.");
+        console.error("Error de red (eventos):", error);
+      }
+    };
+
+    // 3. Ejecutar ambas y apagar el loading cuando terminen
+    const loadAllData = async () => {
+      // Promise.all espera a que ambas terminen
+      await Promise.all([
+        fetchPermissions(),
+        fetchEventosAdaptada()
+      ]);
+      setLoading(false);
+    };
+
+    loadAllData();
+
+  }, [user, isOpen]);
+  // --- FIN: useEffect REESCRITO ---
+
+
+  // *** (El resto de funciones NO CAMBIAN) ***
+  // handlePermissionChange, handleSavePermission, 
+  // handleDeletePermission, handleAddPermission...
+  // ...
   const handlePermissionChange = (index: number, field: keyof Permission, value: any) => {
       const newPermissions = [...permissions];
-      // Crear una copia mutable del permiso específico
       const permissionToUpdate = { ...newPermissions[index] };
-
-      // Clave para acceder dinámicamente a las propiedades
       const key = field as keyof Permission;
 
       if (key === 'event_id') {
-          // Convertir el valor del input (string) a número, o 0 si no es válido
           permissionToUpdate[key] = parseInt(String(value), 10) || 0;
       } else if (key === 'module') {
-          // Asignar el valor del input (string) directamente
           permissionToUpdate[key] = String(value);
       } else if (['can_read', 'can_create', 'can_update', 'can_delete'].includes(key)) {
-          // El valor 'value' de onCheckedChange ya debería ser booleano (true/false)
-          // Asignarlo directamente, asegurando que sea booleano, si no, default a false
           permissionToUpdate[key] = typeof value === 'boolean' ? value : false;
       }
-
-      // Actualizar el permiso en la copia del array
       newPermissions[index] = permissionToUpdate;
-      // Actualizar el estado
       setPermissions(newPermissions);
   };
-  // *** FIN CORRECCIÓN ***
-
 
   const handleSavePermission = async (index: number) => {
-    // Obtener el permiso actual directamente del estado
     const currentPermission = permissions[index];
-
-    // Validación básica en el frontend
     if (!currentPermission.event_id || currentPermission.event_id <= 0 || !currentPermission.module) {
       toast.error("El ID de Evento (debe ser mayor a 0) y el Módulo son obligatorios.");
       return;
     }
-
-    // *** PASO CRÍTICO: Conversión de Booleanos a Números (0 o 1) ***
-    // Crear el objeto payload que se enviará a la API
-    const payload: PermissionPayload = { // Usar la interfaz específica para el payload
+    const payload: PermissionPayload = { 
       user_id: user.id_usuario,
       event_id: currentPermission.event_id,
       module: currentPermission.module,
-      can_read: currentPermission.can_read ? 1 : 0,     // true -> 1, false -> 0
-      can_create: currentPermission.can_create ? 1 : 0, // true -> 1, false -> 0
-      can_update: currentPermission.can_update ? 1 : 0, // true -> 1, false -> 0
-      can_delete: currentPermission.can_delete ? 1 : 0, // true -> 1, false -> 0
+      can_read: currentPermission.can_read ? 1 : 0,
+      can_create: currentPermission.can_create ? 1 : 0,
+      can_update: currentPermission.can_update ? 1 : 0,
+      can_delete: currentPermission.can_delete ? 1 : 0,
     };
-    // *** FIN DEL PASO CRÍTICO ***
-
-    console.log("Payload que se enviará a la API:", payload); // Verifica en la consola que aquí se vean 0s y 1s
+    
+    console.log("Payload que se enviará a la API:", payload); 
 
     try {
-      // Enviar el payload con números (0 o 1) a la API
       const response = await upsertUserPermission(payload);
-      // Verificar si la respuesta es OK antes de intentar parsear JSON
        if (!response.ok) {
-           // Intentar obtener el mensaje de error del cuerpo si existe
            let errorMsg = `Error HTTP ${response.status}: ${response.statusText}`;
            try {
                const errorBody = await response.json();
@@ -148,21 +195,17 @@ export function PermissionsDialog({ isOpen, setIsOpen, user }: Props) {
                errorMsg = `Error al guardar: ${errorMessages}`;
                console.error("Errores de validación del backend:", errorBody.errors);
            } catch (e) {
-               // Si no se puede parsear el cuerpo JSON, usar el status text
                console.error("No se pudo parsear la respuesta de error JSON:", e);
            }
            toast.error(errorMsg);
-           return; // Salir si la respuesta no fue exitosa
+           return; 
        }
 
       const result = await response.json();
 
       if (result.success) {
          toast.success('Permiso guardado.');
-         // Opcional: Recargar permisos si la API no devuelve el objeto actualizado
-         // fetchPermissions();
       } else {
-         // Este bloque podría no alcanzarse si manejamos !response.ok arriba, pero lo dejamos por si acaso
          const errorMessages = result.errors?.map((e: any) => `${e.path}: ${e.msg}`).join('; ') || result.error || 'Error desconocido del servidor.';
          toast.error(`Error al guardar: ${errorMessages}`);
          console.error("Errores de validación del backend:", result.errors);
@@ -179,16 +222,13 @@ export function PermissionsDialog({ isOpen, setIsOpen, user }: Props) {
   const handleDeletePermission = async (index: number) => {
     const { event_id, module } = permissions[index];
 
-    // Si la fila es nueva y no tiene event_id o module válidos, solo quitarla del estado
     if (!event_id || event_id <= 0 || !module) {
       handleRemovePermissionRow(index);
       return;
     }
 
-    // Si es un permiso existente, llamar a la API para eliminar
     try {
         const response = await deleteUserPermission(user.id_usuario, event_id, module);
-        // Verificar si la respuesta es OK
          if (!response.ok) {
              let errorMsg = `Error HTTP ${response.status}: ${response.statusText}`;
              try {
@@ -205,9 +245,8 @@ export function PermissionsDialog({ isOpen, setIsOpen, user }: Props) {
 
       if(result.success) {
         toast.success('Permiso eliminado.');
-        handleRemovePermissionRow(index); // Quitar la fila de la UI después de confirmar la eliminación
+        handleRemovePermissionRow(index); 
       } else {
-         // Podría no alcanzarse si manejamos !response.ok arriba
         toast.error(result.error || 'Error al eliminar el permiso desde la API.');
       }
     } catch (error: any) {
@@ -217,9 +256,9 @@ export function PermissionsDialog({ isOpen, setIsOpen, user }: Props) {
   };
 
   const handleAddPermission = () => {
-    // Añadir una nueva fila con valores por defecto (booleanos false e id 0)
     setPermissions([...permissions, { event_id: 0, module: '', can_read: false, can_create: false, can_update: false, can_delete: false }]);
   };
+
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -229,9 +268,10 @@ export function PermissionsDialog({ isOpen, setIsOpen, user }: Props) {
           <DialogDescription>Añade, edita o elimina permisos para eventos específicos.</DialogDescription>
         </DialogHeader>
         <div className="py-4 max-h-[60vh] overflow-y-auto">
-          {loading ? <p>Cargando permisos...</p> : (
+          {loading ? <p>Cargando permisos y eventos...</p> : (
             <>
               <Table>
+                {/* ... (TableHeader sin cambios) ... */}
                 <TableHeader>
                   <TableRow>
                     <TableHead>ID Evento</TableHead>
@@ -243,28 +283,49 @@ export function PermissionsDialog({ isOpen, setIsOpen, user }: Props) {
                     <TableHead className="w-40 text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
+                
                 <TableBody>
                   {permissions.map((p, index) => (
                     <TableRow key={index}>
                       <TableCell>
-                        <Input
-                          type="number"
-                          value={p.event_id <= 0 ? '' : p.event_id}
-                           // Pasar e.target.value directamente
-                          onChange={(e) => handlePermissionChange(index, 'event_id', e.target.value)}
-                          className="w-24"
-                          min="1"
-                        />
+                        <Select
+                          value={p.event_id ? String(p.event_id) : ""}
+                          onValueChange={(value) => handlePermissionChange(index, 'event_id', value)}
+                        >
+                          <SelectTrigger className="w-48">
+                            <SelectValue placeholder="Seleccione un evento" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">Seleccione un evento</SelectItem>
+                            {/* --- INICIO: JSX CORREGIDO --- */}
+                            {eventos.map(evento => (
+                              <SelectItem 
+                                key={evento.id_evento} 
+                                value={String(evento.id_evento)}
+                              >
+                                {evento.nombre} (ID: {evento.id_evento})
+                              </SelectItem>
+                            ))}
+                            {/* --- FIN: JSX CORREGIDO --- */}
+                          </SelectContent>
+                        </Select>
                       </TableCell>
                       <TableCell>
-                        <Input
-                          placeholder="ej: acreditacion"
+                        <Select
                           value={p.module}
-                           // Pasar e.target.value directamente
-                          onChange={(e) => handlePermissionChange(index, 'module', e.target.value)}
-                        />
+                          onValueChange={(value) => handlePermissionChange(index, 'module', value)}
+                        >
+                          {/* ... (Select de Módulo sin cambios) ... */}
+                          <SelectTrigger className="w-40">
+                            <SelectValue placeholder="Seleccione un módulo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="eventos">Eventos</SelectItem>
+                            <SelectItem value="acreditacion">Acreditacion</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </TableCell>
-                       {/* Pasar 'c' (CheckedState) directamente */}
+                      {/* ... (Checkboxes y Botones sin cambios) ... */}
                       <TableCell className="text-center"><Checkbox checked={p.can_read} onCheckedChange={(c) => handlePermissionChange(index, 'can_read', c)} /></TableCell>
                       <TableCell className="text-center"><Checkbox checked={p.can_create} onCheckedChange={(c) => handlePermissionChange(index, 'can_create', c)} /></TableCell>
                       <TableCell className="text-center"><Checkbox checked={p.can_update} onCheckedChange={(c) => handlePermissionChange(index, 'can_update', c)} /></TableCell>
@@ -288,4 +349,3 @@ export function PermissionsDialog({ isOpen, setIsOpen, user }: Props) {
     </Dialog>
   );
 }
-
