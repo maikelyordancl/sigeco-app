@@ -5,7 +5,7 @@ const fs = require('fs');
 
 // Carpeta donde server.js sirve estáticos: /uploads -> src/public/uploads
 // Guardamos dentro de esa raíz:
-const uploadDir = path.join(__dirname, '../public/uploads/landings');
+const uploadDir = path.join(__dirname, '../../public/uploads/landings');
 
 // Asegurar que exista
 if (!fs.existsSync(uploadDir)) {

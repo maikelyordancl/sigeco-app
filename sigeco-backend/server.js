@@ -32,7 +32,7 @@ app.use(cors(corsOptions));
 // -------------------------
 // SERVIR ARCHIVOS ESTÁTICOS
 // -------------------------
-app.use('/uploads', express.static(path.join(__dirname, 'src/public/uploads')));
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
 // -------------------------
 // IMPORTACIÓN DE RUTAS
