@@ -141,7 +141,7 @@ const ModernaLayout: React.FC<Props> = ({ data }) => {
 
         {/* Flyer / contenido Craft */}
         <Card className="mt-6 max-w-3xl mx-auto">
-          <CardContent className="p-3 sm:p-6">
+          <CardContent className="p-0">
             <Editor
               enabled={false}
               resolver={{

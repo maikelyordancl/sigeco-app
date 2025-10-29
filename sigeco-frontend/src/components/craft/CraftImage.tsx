@@ -50,7 +50,7 @@ export const CraftImage = ({ src, alt, width, height, textAlign, linkHref }: Cra
       onDoubleClick={() => editorActions.selectNode(id)}
       style={{ textAlign }}
       className={cn(
-        "p-1",
+       // "p-1",
         selected
           ? "border-dashed border-2 border-blue-500"
           : "cursor-move"

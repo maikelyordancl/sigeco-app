@@ -27,7 +27,9 @@ export const CraftSpacer = ({ height, showLine }: CraftSpacerProps) => {
       style={{ height: `${height}px` }}
       className={cn(
         "w-full flex items-center justify-center transition-all",
-        selected && enabled ? "bg-blue-100/50" : ""
+        selected && enabled ? "bg-blue-100/50" : "", // Estilo cuando está seleccionado
+        // ESTA LÍNEA ES NUEVA: Muestra un fondo y borde solo en el editor
+        enabled && !selected ? "bg-gray-100/50 border-y border-dashed border-gray-400" : "" 
       )}
     >
       {showLine && <div className="w-full h-px bg-gray-300"></div>}

@@ -10,7 +10,7 @@ type CraftContainerProps = {
   padding?: number;
 };
 
-export const CraftContainer = ({ children, className, padding = 8 }: CraftContainerProps) => {
+export const CraftContainer = ({ children, className, padding = 0 }: CraftContainerProps) => {
   const {
     connectors: { connect, drag },
   } = useNode();
@@ -18,8 +18,8 @@ export const CraftContainer = ({ children, className, padding = 8 }: CraftContai
   return (
     <div
       ref={(ref: HTMLDivElement | null) => { if (ref) connect(drag(ref)); }}
-      className={cn("p-4 m-2 flex-grow min-h-[50px]", className)}
-      style={{ padding: `${padding}px` }}
+      className={cn("p-0 flex-grow min-h-[50px]", className)}
+      style={{ padding:0}}
     >
       {React.Children.count(children) > 0 ? (
         children
