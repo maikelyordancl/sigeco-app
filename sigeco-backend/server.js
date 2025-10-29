@@ -1,12 +1,15 @@
+// sigeco-backend/server.js
 const express = require('express');
 const dotenv = require('dotenv');
 const path = require('path');
-const cors = require('cors'); 
+const cors = require('cors');
 
 dotenv.config();
 const app = express();
 
-// --- CONFIGURACIÓN DE CORS RECOMENDADA ---
+// -------------------------
+// CONFIGURACIÓN DE CORS
+// -------------------------
 const allowedOrigins = [
   'https://sigeco.mindshot.cl',
   'http://localhost:3000',
@@ -15,7 +18,7 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Origen no permitido por CORS'));
@@ -27,13 +30,13 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // -------------------------
-// Middlewares de parsing
+// SERVIR ARCHIVOS ESTÁTICOS
 // -------------------------
-// ⬇️ Aumenta los límites del body a 100 MB
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+app.use('/uploads', express.static(path.join(__dirname, 'src/public/uploads')));
 
-// --- Importación de Rutas ---
+// -------------------------
+// IMPORTACIÓN DE RUTAS
+// -------------------------
 const authRoutes = require('./src/routes/authRoutes');
 const eventoRoutes = require('./src/routes/eventoRoutes');
 const subeventoRoutes = require('./src/routes/subeventoRoutes');
@@ -48,7 +51,24 @@ const eventoArchivosRoutes = require('./src/routes/eventoArchivosRoutes');
 const permisosRoutes = require('./src/routes/permisosRoutes');
 const usuarioRoutes = require('./src/routes/usuarioRoutes');
 
-// --- Registro de Rutas en la Aplicación ---
+// -------------------------
+// RUTA DE UPLOADS (SE MONTA ANTES DE PARSERS)
+// -------------------------
+// ⚠️ Esto evita que express.json() intente parsear el FormData
+app.use('/api/upload', uploadRoutes);
+
+// -------------------------
+// MIDDLEWARES DE PARSING (solo JSON y x-www-form-urlencoded)
+// -------------------------
+app.use(express.json({
+  limit: '100mb',
+  type: ['application/json', 'application/*+json'],
+}));
+app.use(express.urlencoded({ extended: true, limit: '100mb' }));
+
+// -------------------------
+// RESTO DE RUTAS DE LA APLICACIÓN
+// -------------------------
 app.use('/api/auth', authRoutes);
 app.use('/api/eventos', eventoRoutes);
 app.use('/api/subeventos', subeventoRoutes);
@@ -58,15 +78,12 @@ app.use('/api/campanas', campanasRoutes);
 app.use('/api/tickets', ticketsRoutes);
 app.use('/api/acreditacion', acreditacionRoutes);
 app.use('/api/public', publicRoutes);
-
-// Si /api/upload recibe cuerpos muy grandes (JSON/base64 o multipart),
-// mantener el límite alto también aquí (por si montas parsers específicos).
-app.use('/api/upload', uploadRoutes);
-
 app.use('/api/eventos', eventoArchivosRoutes);
 app.use('/api/permisos', permisosRoutes);
 app.use('/api/usuarios', usuarioRoutes);
 
+// -------------------------
+// INICIO DEL SERVIDOR
+// -------------------------
 const PORT = process.env.PORT || 8000;
-
-app.listen(PORT, () => console.log(`Servidor corriendo en el puerto ${PORT}`));
+app.listen(PORT, () => console.log(`✅ Servidor corriendo en el puerto ${PORT}`));

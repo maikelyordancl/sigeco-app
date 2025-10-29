@@ -76,6 +76,44 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}): Pro
     return response;
 };
 
+// ---- NUEVO: fetch específico para multipart/form-data (FormData) ----
+export const apiFetchImage = async (
+  endpoint: string,
+  formData: FormData,
+  options: RequestInit = {}
+): Promise<Response> => {
+  const token = getAccessToken();
+  const url = `${process.env.NEXT_PUBLIC_API_URL}${endpoint}`;
+
+  // Construimos Headers seguros: NO seteamos Content-Type para que el navegador
+  // agregue el boundary automáticamente.
+  const h = new Headers(options.headers || {});
+  if (token && !h.has('Authorization')) {
+    h.set('Authorization', `Bearer ${token}`);
+  }
+  // Si alguien puso Content-Type por accidente, lo removemos.
+  if (h.has('Content-Type')) {
+    h.delete('Content-Type');
+  }
+
+  const config: RequestInit = {
+    // Por defecto POST si no viene otro método
+    method: options.method || 'POST',
+    headers: h,
+    body: formData,
+    // preserva resto de opciones (credentials, signal, etc.)
+    ...options,
+  };
+
+  // Muy importante: asegurar que no se sobreescriba body al hacer el spread:
+  config.body = formData;
+
+  // Usa el mismo interceptor de refresh que ya tienes
+  const response = await refreshTokenInterceptor(url, config);
+  return response;
+};
+
+
 // --- FUNCIONES PARA PERMISOS Y ROLES ---
 
 export const getRoles = () => apiFetch('/permisos/roles');

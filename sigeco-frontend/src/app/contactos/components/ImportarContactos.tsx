@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+// FIX: Revertido al import original, asumiendo que 'xlsx' está en node_modules
 import * as XLSX from "xlsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "react-hot-toast";
 import { Contacto } from "../types/contacto";
 import { Table, TableBody, TableHead, TableHeader, TableRow, TableCell } from "@/components/ui/table";
+// FIX: Revertido al alias original '@/' que usa el proyecto
 import { apiFetch } from "@/lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Download } from 'lucide-react';
@@ -136,10 +138,37 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
   const formatApiError = (errorData: any): string => {
     // Caso 1: El error es un array 'errors' (como en tu JSON)
     if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
-      const mensajesError = errorData.errors.map((err: any, index: number) => 
-        // err.value parece contener los emails duplicados
-        `Error ${index + 1}: ${err.value || 'Error desconocido'}`
-      ).join('\n'); // Unir con saltos de línea
+      
+      const mensajesError = errorData.errors.map((err: any, index: number) => {
+        // Asumimos que el 'index' del error corresponde a la fila de datos enviada.
+        // Los datos (jsonData) no incluyen la cabecera (Fila 1 del Excel).
+        // Por lo tanto, el error en el índice 0 corresponde a la Fila 2 del Excel.
+        
+        let errorMsg = `Fila ${index + 2} (Excel): `; // Fila 1 es cabecera, Fila 2 es index 0
+        
+        // 'path' suele ser el campo/columna (ej: 'email')
+        if (err.path) {
+          errorMsg += `[Campo: ${err.path}] `;
+        }
+
+        // 'msg' es el mensaje de validación (ej: 'Email inválido')
+        if (err.msg) {
+          errorMsg += `${err.msg} `;
+        }
+
+        // 'value' es el valor que causó el error
+        if (err.value) {
+          errorMsg += `(Valor: "${err.value}")`;
+        }
+
+        // Fallback si el error no tiene ninguno de esos campos
+        if (!err.path && !err.msg && !err.value) {
+          errorMsg += 'Error de validación desconocido.';
+        }
+        
+        return errorMsg.trim();
+
+      }).join('\n'); // Unir con saltos de línea
       
       return `Ocurrieron errores en la importación:\n${mensajesError}`;
     }
@@ -153,7 +182,7 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
     return 'Ocurrió un error desconocido en el servidor.';
   };
 
-  // --- FUNCIÓN ACTUALIZADA ---
+  // --- FUNCIÓN handleUpload (sin cambios en la lógica, solo usa el formatApiError actualizado) ---
   const handleUpload = async () => {
     if (!contactosPreview.length) return setError("No hay contactos para importar.");
     setLoading(true);
@@ -344,3 +373,4 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
 };
 
 export default ImportarContactos;
+
