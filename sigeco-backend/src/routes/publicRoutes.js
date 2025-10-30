@@ -1,5 +1,5 @@
 const express = require('express');
-const { param, body } = require('express-validator');
+const { param, body, query } = require('express-validator');
 const router = express.Router();
 const publicController = require('../controllers/publicController');
 const upload = require('../middleware/upload');
@@ -11,6 +11,16 @@ router.get(
         param('slug').notEmpty().withMessage('La URL amigable (slug) no puede estar vacía.')
     ],
     publicController.getDatosPublicosCampana
+);
+
+// Ruta para obtener datos de un contacto por email para auto-relleno
+router.get(
+    '/contacto-por-email',
+    [
+        query('email').isEmail().withMessage('Debe ser un email válido.'),
+        query('slug').notEmpty().withMessage('El slug de la campaña no puede estar vacío.')
+    ],
+    publicController.getContactoPorEmail
 );
 
 // POST /api/public/verificar-contacto (Existente)

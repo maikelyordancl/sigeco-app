@@ -38,7 +38,6 @@ exports.findAndCountAll = async ({ page = 1, limit = 15, search = '' }) => {
     };
 };
 
-
 // Modelo para crear un nuevo contacto 
 exports.create = async (contactoData) => {
     const { nombre, email, telefono, rut, empresa, actividad, profesion, pais, comuna, recibir_mail } = contactoData;
@@ -103,4 +102,31 @@ exports.findOrphaned = async () => {
     `;
     const [rows] = await pool.query(query);
     return rows;
+};
+
+/**
+ * Busca un contacto por email, pero solo si está asociado a una campaña
+ * específica a través de su slug (url_amigable).
+ */
+exports.findByEmailAndCampanaSlug = async (email, slug) => {
+    // --- INICIO DE LA CORRECCIÓN ---
+    // Consulta corregida para usar solo columnas existentes en la tabla `contactos`:
+    // Se eliminó `c.apellido` y se cambió `c.cargo` por `c.profesion`.
+    const query = `
+        SELECT c.id_contacto, c.nombre, c.email, c.telefono, c.rut, c.empresa, c.actividad, c.profesion, c.pais, c.comuna
+        FROM contactos c
+        JOIN inscripciones i ON c.id_contacto = i.id_contacto
+        JOIN campanas ca ON i.id_campana = ca.id_campana
+        WHERE c.email = ? AND ca.url_amigable = ?
+        LIMIT 1;
+    `;
+    // --- FIN DE LA CORRECCIÓN ---
+    
+    try {
+        const [rows] = await pool.query(query, [email, slug]);
+        return rows[0] || null; // Devuelve el contacto o null
+    } catch (error) {
+        console.error("Error en findByEmailAndCampanaSlug:", error);
+        throw error;
+    }
 };

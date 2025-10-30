@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+// --- NUEVO ---
+import { useSearchParams, usePathname } from 'next/navigation';
+// --- FIN NUEVO ---
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -428,13 +431,71 @@ const RegistrationForm: React.FC<{
   const isPago = !!campana.obligatorio_pago;
   const [step, setStep] = useState<'selection' | 'email_check' | 'form'>(isPago ? 'selection' : 'form');
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [email, setEmail] = useState('');
+
+  // --- INICIO MODIFICACIÓN ---
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const emailFromUrl = searchParams?.get('email');
+
+  // El estado 'email' ahora se inicializa con el parámetro de la URL si existe
+  const [email, setEmail] = useState(emailFromUrl || '');
   const [prefilled, setPrefilled] = useState<Record<string, any> | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Nuevo estado de carga para el auto-relleno
+  const [isLoadingPrefill, setIsLoadingPrefill] = useState(true);
+  // --- FIN MODIFICACIÓN ---
 
   useEffect(() => {
     if (!isPago) setStep('form');
   }, [isPago]);
+
+  // --- INICIO NUEVO useEffect ---
+  // Este hook se ejecuta al montar para buscar datos de pre-relleno desde la URL
+  useEffect(() => {
+    const email = emailFromUrl;
+    // Extraer slug del pathname (ej. /c/mi-slug)
+    const parts = pathname?.split('/').filter(Boolean);
+    const slug = parts && parts.length > 0 ? parts[parts.length - 1] : null;
+
+    // Si tenemos email y slug, llamamos al backend
+    if (email && slug) {
+      setIsLoadingPrefill(true);
+      (async () => {
+        try {
+          const resp = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/public/contacto-por-email?slug=${slug}&email=${email}`);
+          const json = await resp.json();
+
+          if (json.success && json.data) {
+            // Encontramos el contacto, lo ponemos en 'prefilled'
+            setPrefilled(json.data);
+
+            // Si no es de pago, mostramos un toast de bienvenida
+            if (!isPago) {
+              toast.success('¡Hola de nuevo! Hemos rellenado tus datos.');
+            }
+          } else {
+            // No se encontró, rellenar solo con el email de la URL
+            setPrefilled({ email });
+          }
+        } catch (err) {
+          console.error("Error fetching prefill data:", err);
+          // Si falla, rellenar solo con email
+          setPrefilled({ email });
+        } finally {
+          setIsLoadingPrefill(false);
+        }
+      })();
+    } else if (email) {
+      // Si solo hay email (sin slug), rellenar solo con email
+      setPrefilled({ email });
+      setIsLoadingPrefill(false);
+    } else {
+      // Sin email en la URL
+      setIsLoadingPrefill(false);
+    }
+  }, [emailFromUrl, pathname, isPago]); // Dependencias
+  // --- FIN NUEVO useEffect ---
 
   const handleSelect = (t: Ticket) => {
     setSelectedTicket(t);
@@ -527,6 +588,22 @@ const RegistrationForm: React.FC<{
     }
   };
 
+  // --- INICIO NUEVO ---
+  // Si no es de pago y estamos cargando los datos de pre-relleno, mostrar un loader.
+  if (isLoadingPrefill && !isPago) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center text-2xl font-bold">Cargando...</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p>Buscando tus datos...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+  // --- FIN NUEVO ---
+
   return (
     <Card>
       <CardHeader>
@@ -540,7 +617,7 @@ const RegistrationForm: React.FC<{
             <TicketSelector tickets={tickets || []} onSelect={handleSelect} />
           ) : step === 'email_check' ? (
             <EmailCheckStep
-              email={email}
+              email={email} // <-- Inicializado con la URL si venía ?email=
               setEmail={setEmail}
               onContinue={handleVerifyEmail}
               onBack={handleBack}
@@ -551,7 +628,7 @@ const RegistrationForm: React.FC<{
               campos={campos}
               onSubmit={handleSubmitInscripcion}
               isSubmitting={submitting}
-              defaultValues={prefilled || undefined}
+              defaultValues={prefilled || undefined} // <-- 'prefilled' se llena en el useEffect
             />
           )
         ) : (
@@ -559,7 +636,7 @@ const RegistrationForm: React.FC<{
             campos={campos}
             onSubmit={handleSubmitInscripcion}
             isSubmitting={submitting}
-            defaultValues={prefilled || undefined}
+            defaultValues={prefilled || undefined} // <-- 'prefilled' se llena en el useEffect
           />
         )}
       </CardContent>

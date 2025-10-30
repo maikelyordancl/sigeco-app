@@ -48,6 +48,40 @@ exports.getDatosPublicosCampana = async (req, res) => {
     }
 };
 
+// --- INICIO DE NUEVA FUNCIÓN ---
+/**
+ * Obtiene los datos de un contacto por email y slug de campaña.
+ * Se usa para auto-rellenar el formulario público si el email viene en la URL.
+ */
+exports.getContactoPorEmail = async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ success: false, errors: errors.array() });
+    }
+
+    // Los parámetros vienen de la validación en la ruta
+    const { email, slug } = req.query;
+
+    try {
+        // 1. Llamar al modelo para buscar al contacto
+        const contacto = await ContactoModel.findByEmailAndCampanaSlug(email, slug);
+
+        // 2. Devolver el resultado
+        if (!contacto) {
+            // No es un error, simplemente no se encontró
+            return res.json({ success: true, data: null });
+        }
+
+        // Devolver el contacto encontrado
+        res.json({ success: true, data: contacto });
+
+    } catch (error) {
+        console.error('Error en getContactoPorEmail:', error);
+        res.status(500).json({ success: false, message: 'Error interno del servidor.' });
+    }
+};
+// --- FIN DE NUEVA FUNCIÓN ---
+
 /**
  * Verifica si un contacto existe por su email.
  */
