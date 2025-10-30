@@ -265,30 +265,49 @@ exports.updateAsistenteCompleto = async (req, res) => {
 
 exports.updateEmailTemplate = async (req, res) => {
     try {
-        const { id_campana } = req.params;
-        // Ahora recibimos también emailSettings
-        const { emailSubject, emailBody, emailSettings } = req.body;
+        // ---- MODIFICACIÓN AQUÍ: Cambiado 'id_campana' por 'id' si usas req.params.id ----
+        // Si usas :id_campana en tu ruta, mantenlo como req.params.id_campana
+        const { id_campana } = req.params; // o const { id_campana } = req.params;
+        
+        // ---- MODIFICACIÓN AQUÍ: Añadir email_incluye_qr ----
+        const { emailSubject, emailBody, emailSettings, email_incluye_qr } = req.body;
 
-        if (typeof emailSubject === 'undefined' || typeof emailBody === 'undefined') {
-            return res.status(400).json({ message: 'El asunto y el cuerpo son requeridos.' });
+        // Quitamos la validación anterior, ya que ahora solo actualizaremos los campos que lleguen
+        // if (typeof emailSubject === 'undefined' || typeof emailBody === 'undefined') {
+        //     return res.status(400).json({ message: 'El asunto y el cuerpo son requeridos.' });
+        // }
+
+        // ---- MODIFICACIÓN AQUÍ: Crear objeto solo con los campos recibidos ----
+        const campanaData = {};
+        if (emailSubject !== undefined) {
+            campanaData.email_subject = emailSubject;
+        }
+        if (emailBody !== undefined) {
+            campanaData.email_body = emailBody;
+        }
+        if (emailSettings !== undefined) {
+            campanaData.email_settings = emailSettings; // Guardamos los ajustes de diseño como un string JSON o TEXT
+        }
+        if (email_incluye_qr !== undefined) {
+            campanaData.email_incluye_qr = Boolean(email_incluye_qr); // Aseguramos que sea booleano
         }
 
-        const campanaData = {
-            email_subject: emailSubject,
-            email_body: emailBody, // Este es solo el contenido
-            email_settings: emailSettings, // Guardamos los ajustes de diseño como un string JSON
-        };
+        // Si no llegó ningún dato para actualizar, podemos responder inmediatamente
+        if (Object.keys(campanaData).length === 0) {
+             return res.status(400).json({ success: false, message: 'No se proporcionaron datos para actualizar.' });
+        }
 
-        const result = await Campana.updateById(id_campana, campanaData);
+        // ---- MODIFICACIÓN AQUÍ: Usar el 'id' correcto ----
+        const result = await Campana.updateById(id_campana, campanaData); // o updateById(id_campana, campanaData);
 
         if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Campaña no encontrada.' });
+            return res.status(404).json({ success: false, error: 'Campaña no encontrada.' }); // Cambiado message por error
         }
 
-        res.status(200).json({ message: 'Plantilla de correo actualizada exitosamente.' });
+        res.status(200).json({ success: true, message: 'Plantilla de correo actualizada exitosamente.' }); // Añadido success: true
     } catch (error) {
         console.error('Error al actualizar la plantilla de correo:', error);
-        res.status(500).json({ message: 'Error interno del servidor al actualizar la plantilla.' });
+        res.status(500).json({ success: false, error: 'Error interno del servidor al actualizar la plantilla.' }); // Cambiado message por error
     }
 };
 

@@ -80,7 +80,7 @@ exports.getContactoPorEmail = async (req, res) => {
         res.status(500).json({ success: false, message: 'Error interno del servidor.' });
     }
 };
-// --- FIN DE NUEVA FUNCIÓN ---
+// --- FIN DE NUEVA FUNCIÓN --- 
 
 /**
  * Verifica si un contacto existe por su email.
@@ -275,7 +275,8 @@ exports.crearInscripcionPublica = async (req, res) => {
                     email, 
                     datosContacto.nombre, 
                     eventData,
-                    id_campana // Se pasa el ID de la campaña para usar la plantilla correcta
+                    id_campana,
+                    inscripcion.id_inscripcion
                 );
             }
             // --- FIN DE LA MODIFICACIÓN ---

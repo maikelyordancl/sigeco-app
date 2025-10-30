@@ -1,10 +1,15 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+
 import { Editor as TinyEditor } from "@tinymce/tinymce-react";
+
 import { Editor as CraftEditor, Frame, Element, useEditor } from "@craftjs/core";
+
 import { useRouter, useParams } from "next/navigation";
+
 import toast from "react-hot-toast";
+
 import { CraftContainer } from "@/components/craft/CraftContainer";
 import { CraftText } from "@/components/craft/CraftText";
 import { CraftImage } from "@/components/craft/CraftImage";
@@ -14,12 +19,16 @@ import { CraftSpacer } from "@/components/craft/CraftSpacer";
 import { CraftColumns } from "@/components/craft/CraftColumns";
 import { Toolbox } from "@/components/craft/Toolbox";
 import { SettingsPanel } from "@/components/craft/SettingsPanel";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+
 import { ArrowLeft, Save, Mail, LayoutTemplate, Palette, PlusCircle } from "lucide-react";
+
 import { apiFetch } from "@/lib/api";
 import { CampanaData } from "@/app/c/[slug]/types";
 
@@ -29,6 +38,10 @@ const availableVariables = [
   { name: "Nombre del Evento", value: "{{nombre_evento}}" },
   { name: "Fecha del Evento", value: "{{fecha_evento}}" },
   { name: "Lugar del Evento", value: "{{lugar_evento}}" },
+  { 
+    name: "QR de Acceso (con título)", 
+    value: "<p><strong>Tu QR de acceso:</strong></p><p>{{codigo_qr_html}}</p>" 
+  }
 ];
 
 interface EmailSettings {
@@ -138,8 +151,10 @@ const EditorPageContent = () => {
   const id_evento = params.id as string;
   const id_campana = params.id_campana as string;
   const { query } = useEditor();
+
   const [activeTab, setActiveTab] = useState("landing");
   const emailEditorRef = useRef<any>(null);
+
   const [data, setData] = useState<CampanaData | null>(null);
   const [landingJson, setLandingJson] = useState<string | null>(null);
   const [emailSubject, setEmailSubject] = useState("");
@@ -148,6 +163,9 @@ const EditorPageContent = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // === NUEVO ESTADO: Incluir QR en correo ===
+  const [incluirQR, setIncluirQR] = useState<boolean>(false);
 
   // Cambiar color (solo header)
   const handlePrimaryColorChange = (value: string) => {
@@ -216,6 +234,11 @@ const EditorPageContent = () => {
         } else {
           setEmailBody(getDefaultEmailHtml(eventName, { headerColor: resolvedColor }));
         }
+
+        // === NUEVO: cargar estado inicial incluirQR desde backend ===
+        const includeQRRaw = campanaData?.email_incluye_qr;
+        const includeQRBool = includeQRRaw === true || includeQRRaw === 1 || includeQRRaw === "1" || includeQRRaw === "true";
+        setIncluirQR(includeQRBool);
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -275,7 +298,9 @@ const EditorPageContent = () => {
         emailSubject: emailSubject,
         emailBody: bodyHtml,
         emailSettings: { headerColor: normalizeHex(emailSettings.headerColor) },
-      };
+        // === NUEVO: enviar flag de inclusión de QR ===
+        email_incluye_qr: incluirQR,
+      } as const;
 
       const resp = await apiFetch(`/campanas/${id_campana}/template`, {
         method: "PUT",
@@ -374,6 +399,25 @@ const EditorPageContent = () => {
                         onChange={(e) => handlePrimaryColorChange(e.target.value)}
                       />
                     </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* === NUEVO: Opciones adicionales (Switch QR) === */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Opciones Adicionales</CardTitle>
+                  <CardDescription>Configuraciones para el correo de confirmación.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="include-qr">Incluir código QR para acreditación</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Si está activo, el correo incluirá un QR único para validar la entrada/acreditación.
+                      </p>
+                    </div>
+                    <Switch id="include-qr" checked={incluirQR} onCheckedChange={setIncluirQR} />
                   </div>
                 </CardContent>
               </Card>

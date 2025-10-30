@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 // --- NUEVO ---
 import { useSearchParams, usePathname } from 'next/navigation';
 // --- FIN NUEVO ---
@@ -67,7 +67,6 @@ const formatRut = (rutInput: string) => {
   if (rut.length <= 1) return rut;
   const cuerpo = rut.slice(0, -1);
   const dv = rut.slice(-1);
-  // poner puntos cada 3 desde derecha
   let cuerpoRev = cuerpo.split('').reverse().join('');
   cuerpoRev = cuerpoRev.replace(/(\d{3})(?=\d)/g, '$1.');
   const cuerpoFmt = cuerpoRev.split('').reverse().join('');
@@ -446,55 +445,84 @@ const RegistrationForm: React.FC<{
   const [isLoadingPrefill, setIsLoadingPrefill] = useState(true);
   // --- FIN MODIFICACIÓN ---
 
+  // Memo estable del slug
+  const slug = useMemo(() => {
+    const parts = pathname?.split('/').filter(Boolean);
+    return parts && parts.length > 0 ? parts[parts.length - 1] : null;
+  }, [pathname]);
+
+  // Gates / snapshots para evitar duplicados y re-renders
+  const didPrefillRef = useRef(false);
+  const isPagoRef = useRef(isPago);
+  useEffect(() => {
+    isPagoRef.current = isPago;
+  }, [isPago]);
+
   useEffect(() => {
     if (!isPago) setStep('form');
   }, [isPago]);
 
-  // --- INICIO NUEVO useEffect ---
-  // Este hook se ejecuta al montar para buscar datos de pre-relleno desde la URL
+  // --- INICIO NUEVO useEffect (con fixes contra dobles montajes/dev) ---
   useEffect(() => {
+    // Evitar correr dos veces por StrictMode/re-mount
+    if (didPrefillRef.current) return;
+
     const email = emailFromUrl;
-    // Extraer slug del pathname (ej. /c/mi-slug)
-    const parts = pathname?.split('/').filter(Boolean);
-    const slug = parts && parts.length > 0 ? parts[parts.length - 1] : null;
 
-    // Si tenemos email y slug, llamamos al backend
-    if (email && slug) {
-      setIsLoadingPrefill(true);
-      (async () => {
-        try {
-          const resp = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/public/contacto-por-email?slug=${slug}&email=${email}`);
-          const json = await resp.json();
+    // Si no hay email → no pre-fill
+    if (!email) {
+      setIsLoadingPrefill(false);
+      return;
+    }
 
-          if (json.success && json.data) {
-            // Encontramos el contacto, lo ponemos en 'prefilled'
-            setPrefilled(json.data);
-
-            // Si no es de pago, mostramos un toast de bienvenida
-            if (!isPago) {
-              toast.success('¡Hola de nuevo! Hemos rellenado tus datos.');
-            }
-          } else {
-            // No se encontró, rellenar solo con el email de la URL
-            setPrefilled({ email });
-          }
-        } catch (err) {
-          console.error("Error fetching prefill data:", err);
-          // Si falla, rellenar solo con email
-          setPrefilled({ email });
-        } finally {
-          setIsLoadingPrefill(false);
-        }
-      })();
-    } else if (email) {
-      // Si solo hay email (sin slug), rellenar solo con email
+    // Si no hay slug, pero hay email → prefill mínimo con email
+    if (!slug) {
       setPrefilled({ email });
       setIsLoadingPrefill(false);
-    } else {
-      // Sin email en la URL
-      setIsLoadingPrefill(false);
+      didPrefillRef.current = true;
+      return;
     }
-  }, [emailFromUrl, pathname, isPago]); // Dependencias
+
+    const ac = new AbortController();
+    setIsLoadingPrefill(true);
+
+    (async () => {
+      try {
+        const resp = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/public/contacto-por-email?slug=${slug}&email=${email}`,
+          { signal: ac.signal, cache: 'no-store' }
+        );
+
+        if (ac.signal.aborted) return;
+
+        const json = await resp.json();
+
+        if (json.success && json.data) {
+          setPrefilled(json.data);
+          // Usa un ID estable para no duplicar el toast en dev
+          if (!isPagoRef.current) {
+            toast.success('¡Hola de nuevo! Hemos rellenado tus datos.', { id: 'prefill-welcome' });
+          }
+        } else {
+          setPrefilled({ email });
+        }
+
+        // Marcamos que ya hicimos prefill (idempotencia)
+        didPrefillRef.current = true;
+      } catch (err) {
+        if (!ac.signal.aborted) {
+          console.error('Error fetching prefill data:', err);
+          setPrefilled({ email });
+          didPrefillRef.current = true;
+        }
+      } finally {
+        if (!ac.signal.aborted) setIsLoadingPrefill(false);
+      }
+    })();
+
+    // Cleanup para abortar si hay re-mount en dev
+    return () => ac.abort();
+  }, [emailFromUrl, slug]); // <- ojo: no depende de isPago
   // --- FIN NUEVO useEffect ---
 
   const handleSelect = (t: Ticket) => {
@@ -588,8 +616,7 @@ const RegistrationForm: React.FC<{
     }
   };
 
-  // --- INICIO NUEVO ---
-  // Si no es de pago y estamos cargando los datos de pre-relleno, mostrar un loader.
+  // Loader cuando no es de pago y estamos prellenando
   if (isLoadingPrefill && !isPago) {
     return (
       <Card>
@@ -602,7 +629,6 @@ const RegistrationForm: React.FC<{
       </Card>
     );
   }
-  // --- FIN NUEVO ---
 
   return (
     <Card>
@@ -617,7 +643,7 @@ const RegistrationForm: React.FC<{
             <TicketSelector tickets={tickets || []} onSelect={handleSelect} />
           ) : step === 'email_check' ? (
             <EmailCheckStep
-              email={email} // <-- Inicializado con la URL si venía ?email=
+              email={email}
               setEmail={setEmail}
               onContinue={handleVerifyEmail}
               onBack={handleBack}
@@ -628,7 +654,7 @@ const RegistrationForm: React.FC<{
               campos={campos}
               onSubmit={handleSubmitInscripcion}
               isSubmitting={submitting}
-              defaultValues={prefilled || undefined} // <-- 'prefilled' se llena en el useEffect
+              defaultValues={prefilled || undefined}
             />
           )
         ) : (
@@ -636,7 +662,7 @@ const RegistrationForm: React.FC<{
             campos={campos}
             onSubmit={handleSubmitInscripcion}
             isSubmitting={submitting}
-            defaultValues={prefilled || undefined} // <-- 'prefilled' se llena en el useEffect
+            defaultValues={prefilled || undefined}
           />
         )}
       </CardContent>
@@ -645,3 +671,4 @@ const RegistrationForm: React.FC<{
 };
 
 export default RegistrationForm;
+  
