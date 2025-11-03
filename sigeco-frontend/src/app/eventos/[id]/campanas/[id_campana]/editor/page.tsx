@@ -1,13 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-
 import { Editor as TinyEditor } from "@tinymce/tinymce-react";
-
 import { Editor as CraftEditor, Frame, Element, useEditor } from "@craftjs/core";
-
 import { useRouter, useParams } from "next/navigation";
-
 import toast from "react-hot-toast";
 
 import { CraftContainer } from "@/components/craft/CraftContainer";
@@ -38,10 +34,10 @@ const availableVariables = [
   { name: "Nombre del Evento", value: "{{nombre_evento}}" },
   { name: "Fecha del Evento", value: "{{fecha_evento}}" },
   { name: "Lugar del Evento", value: "{{lugar_evento}}" },
-  { 
-    name: "QR de Acceso (con título)", 
-    value: "<p><strong>Tu QR de acceso:</strong></p><p>{{codigo_qr_html}}</p>" 
-  }
+  {
+    name: "QR de Acceso (con título)",
+    value: "<p><strong>Tu QR de acceso:</strong></p><p>{{codigo_qr_html}}</p>",
+  },
 ];
 
 interface EmailSettings {
@@ -63,7 +59,9 @@ const applyPrimaryColorToHtml = (html: string, hex: string) => {
     /(<div[^>]*id=["']email-header-preview["'][^>]*style=")([^"]*)(")/i,
     (_m, p1, style, p3) => {
       const cleaned = style.replace(/background(?:-color|-image)?\s*:\s*[^;"]*;?/gi, "").trim();
-      const newStyle = `background:${color};background-color:${color};background-image:none;${cleaned ? cleaned + ";" : ""}`;
+      const newStyle = `background:${color};background-color:${color};background-image:none;${
+        cleaned ? cleaned + ";" : ""
+      }`;
       return `${p1}${newStyle}${p3}`;
     }
   );
@@ -86,7 +84,9 @@ const applyPrimaryColorToHtml = (html: string, hex: string) => {
       /(<span[^>]*style=")([^"]*)(")/gi,
       (_m, p1, style, p3) => {
         const newStyle = style.replace(/background(?:-color|-image)?\s*:\s*[^;"]*;?/gi, "").trim();
-        const withBg = `background:${color};background-color:${color};background-image:none;${newStyle ? newStyle + ";" : ""}`;
+        const withBg = `background:${color};background-color:${color};background-image:none;${
+          newStyle ? newStyle + ";" : ""
+        }`;
         return `${p1}${withBg}${p3}`;
       }
     );
@@ -96,7 +96,9 @@ const applyPrimaryColorToHtml = (html: string, hex: string) => {
       /(<h[12][^>]*style=")([^"]*)(")/i,
       (_m, p1, style, p3) => {
         const cleaned = style.replace(/background(?:-color|-image)?\s*:\s*[^;"]*;?/gi, "").trim();
-        const newStyle = `background:${color};background-color:${color};background-image:none;${cleaned ? cleaned + ";" : ""}`;
+        const newStyle = `background:${color};background-color:${color};background-image:none;${
+          cleaned ? cleaned + ";" : ""
+        }`;
         return `${p1}${newStyle}${p3}`;
       }
     );
@@ -111,7 +113,9 @@ const applyPrimaryColorToHtml = (html: string, hex: string) => {
 const extractHeaderColor = (html: string): string | null => {
   if (!html) return null;
   const m =
-    html.match(/id=["']email-header-preview["'][^>]*style="[^"]*background(?:-color)?\s*:\s*(#[0-9a-fA-F]{3,6})/i) ||
+    html.match(
+      /id=["']email-header-preview["'][^>]*style="[^"]*background(?:-color)?\s*:\s*(#[0-9a-fA-F]{3,6})/i
+    ) ||
     html.match(/<h[12][^>]*style="[^"]*background(?:-color)?\s*:\s*(#[0-9a-fA-F]{3,6})/i) ||
     html.match(/<span[^>]*style="[^"]*background(?:-color)?\s*:\s*(#[0-9a-fA-F]{3,6})/i);
   return m ? normalizeHex(m[1]) : null;
@@ -164,10 +168,12 @@ const EditorPageContent = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // === NUEVO ESTADO: Incluir QR en correo ===
+  // Campo nuevo: Nombre remitente
+  const [emailSenderName, setEmailSenderName] = useState("");
+
+  // Switch incluir QR
   const [incluirQR, setIncluirQR] = useState<boolean>(false);
 
-  // Cambiar color (solo header)
   const handlePrimaryColorChange = (value: string) => {
     const color = normalizeHex(value);
     setEmailSettings((s) => ({ ...s, headerColor: color }));
@@ -204,7 +210,10 @@ const EditorPageContent = () => {
         const eventName = publicData.data?.campana?.evento_nombre || "el evento";
         setEmailSubject(campanaData.email_subject || `Confirmación de inscripción a ${eventName}`);
 
-        // 1) color desde settings (si es válido)
+        // Cargar nombre remitente
+        setEmailSenderName(campanaData.email_sender_name || "Eventos Pais");
+
+        // 1) color desde settings
         let colorFromSettings: string | null = null;
         if (campanaData.email_settings) {
           try {
@@ -212,7 +221,12 @@ const EditorPageContent = () => {
               typeof campanaData.email_settings === "string"
                 ? JSON.parse(campanaData.email_settings)
                 : campanaData.email_settings;
-            if (parsed && typeof parsed === "object" && parsed.headerColor && isHex(parsed.headerColor)) {
+            if (
+              parsed &&
+              typeof parsed === "object" &&
+              parsed.headerColor &&
+              isHex(parsed.headerColor)
+            ) {
               colorFromSettings = normalizeHex(parsed.headerColor);
             }
           } catch {
@@ -235,9 +249,13 @@ const EditorPageContent = () => {
           setEmailBody(getDefaultEmailHtml(eventName, { headerColor: resolvedColor }));
         }
 
-        // === NUEVO: cargar estado inicial incluirQR desde backend ===
+        // Cargar switch incluir QR
         const includeQRRaw = campanaData?.email_incluye_qr;
-        const includeQRBool = includeQRRaw === true || includeQRRaw === 1 || includeQRRaw === "1" || includeQRRaw === "true";
+        const includeQRBool =
+          includeQRRaw === true ||
+          includeQRRaw === 1 ||
+          includeQRRaw === "1" ||
+          includeQRRaw === "true";
         setIncluirQR(includeQRBool);
       } catch (err: any) {
         setError(err.message);
@@ -298,8 +316,8 @@ const EditorPageContent = () => {
         emailSubject: emailSubject,
         emailBody: bodyHtml,
         emailSettings: { headerColor: normalizeHex(emailSettings.headerColor) },
-        // === NUEVO: enviar flag de inclusión de QR ===
         email_incluye_qr: incluirQR,
+        email_sender_name: emailSenderName,
       } as const;
 
       const resp = await apiFetch(`/campanas/${id_campana}/template`, {
@@ -403,7 +421,6 @@ const EditorPageContent = () => {
                 </CardContent>
               </Card>
 
-              {/* === NUEVO: Opciones adicionales (Switch QR) === */}
               <Card>
                 <CardHeader>
                   <CardTitle>Opciones Adicionales</CardTitle>
@@ -448,9 +465,23 @@ const EditorPageContent = () => {
               <Card>
                 <CardHeader>
                   <CardTitle>Diseñador de Correo de Confirmación</CardTitle>
-                  <CardDescription>Esta plantilla se enviará a los asistentes al confirmar su inscripción.</CardDescription>
+                  <CardDescription>
+                    Esta plantilla se enviará a los asistentes al confirmar su inscripción.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  {/* Nombre remitente */}
+                  <div className="space-y-2">
+                    <Label htmlFor="email_sender_name">Nombre Remitente</Label>
+                    <Input
+                      id="email_sender_name"
+                      placeholder="Ej: Equipo de Eventos Pais"
+                      value={emailSenderName}
+                      onChange={(e) => setEmailSenderName(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Asunto */}
                   <div className="space-y-2">
                     <Label htmlFor="subject">Asunto del Correo</Label>
                     <Input
@@ -460,6 +491,8 @@ const EditorPageContent = () => {
                       onChange={(e) => setEmailSubject(e.target.value)}
                     />
                   </div>
+
+                  {/* Editor HTML */}
                   <div className="space-y-2">
                     <Label>Contenido del Correo</Label>
                     <TinyEditor
@@ -497,7 +530,8 @@ const EditorPageContent = () => {
                         ],
                         toolbar:
                           "undo redo | blocks | bold italic forecolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | link image media | code | removeformat | help",
-                        content_style: "body { font-family:Helvetica,Arial,sans-serif; font-size:14px }",
+                        content_style:
+                          "body { font-family:Helvetica,Arial,sans-serif; font-size:14px }",
                       }}
                     />
                   </div>

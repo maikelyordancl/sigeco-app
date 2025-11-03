@@ -412,11 +412,20 @@ const DynamicForm = ({
 
   return (
     <form onSubmit={handleSubmit((d) => onSubmit(d, reset))} className="space-y-4">
-      {(campos || []).map(renderCampo)}
-      <Button type="submit" className="w-full !mt-6" disabled={isSubmitting}>
-        {isSubmitting ? 'Procesando...' : 'Finalizar Inscripción'}
-      </Button>
-    </form>
+  {(campos || []).map(renderCampo)}
+  <Button
+    type="submit"
+    className="w-full !mt-6 transition-all" // Añadí transition-all para el hover
+    disabled={isSubmitting}
+    style={{ backgroundColor: '#d30aca' }} // Aquí aplicas el color
+    
+    // Esto simula el efecto hover oscureciendo el botón
+    onMouseEnter={(e) => (e.currentTarget.style.filter = 'brightness(90%)')}
+    onMouseLeave={(e) => (e.currentTarget.style.filter = 'brightness(100%)')}
+  >
+    {isSubmitting ? 'Procesando...' : 'Enviar Formulario'}
+  </Button>
+</form>
   );
 };
 

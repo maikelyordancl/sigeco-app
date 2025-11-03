@@ -74,8 +74,10 @@ exports.sendConfirmationEmail = async (toEmail, toName, eventData, id_campana, i
         const url = 'https://api.brevo.com/v3/smtp/email';
         const apiKey = process.env.BREVO_API_KEY;
 
+        const senderName = campana.email_sender_name || 'Eventos Pais'; 
+
         const data = {
-            sender: { name: 'Eventos Pais', email: 'noreply@eventospais.cl' },
+            sender: { name: senderName, email: 'noreply@eventospais.cl' }, //
             to: [{ email: toEmail, name: toName || '' }],
             subject: subject,
             htmlContent: finalHtml,

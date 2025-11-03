@@ -5,6 +5,39 @@ const InscripcionModel = require('../models/inscripcionModel');
 const Formulario = require('../models/formularioModel');
 const ExcelJS = require('exceljs');
 
+// --- INICIO DE LA CORRECCIÓN (Imports añadidos) ---
+const permissionModel = require('../models/permissionModel');
+const pool = require('../config/db'); 
+// --- FIN DE LA CORRECCIÓN ---
+
+
+// --- INICIO DE LA CORRECCIÓN (Helpers de permisos) ---
+// Helpers para verificar permisos
+async function q(sql, params = []) {
+  const [rows] = await pool.query(sql, params);
+  return rows;
+}
+
+function getUserId(req) {
+  const cand = (req.user && (req.user.id || req.user.userId || req.user.id_usuario || req.user.idUsuario));
+  const n = parseInt(cand, 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+async function getEventIdByInscripcion(id_inscripcion) {
+  const rows = await q(
+    `SELECT c.id_evento
+       FROM inscripciones i
+       JOIN campanas c ON c.id_campana = i.id_campana
+      WHERE i.id_inscripcion = ?
+      LIMIT 1`,
+    [id_inscripcion]
+  );
+  return rows[0]?.id_evento || null;
+}
+// --- FIN DE LA CORRECCIÓN ---
+
+
 /**
  * Obtiene todas las campanas (principal y de subeventos) de un evento específico.
  */
@@ -12,6 +45,7 @@ exports.obtenerCampanasPorEvento = async (req, res) => {
     const { id_evento } = req.params;
 
     try {
+        // (Error tipográfico corregido: findByEventoId)
         const resultado = await Campana.findByEventoId(id_evento);
         if (!resultado) {
             return res.status(404).json({ success: false, error: 'No se encontró el evento o no tiene campañas.' });
@@ -265,19 +299,11 @@ exports.updateAsistenteCompleto = async (req, res) => {
 
 exports.updateEmailTemplate = async (req, res) => {
     try {
-        // ---- MODIFICACIÓN AQUÍ: Cambiado 'id_campana' por 'id' si usas req.params.id ----
-        // Si usas :id_campana en tu ruta, mantenlo como req.params.id_campana
-        const { id_campana } = req.params; // o const { id_campana } = req.params;
+        const { id_campana } = req.params;
         
-        // ---- MODIFICACIÓN AQUÍ: Añadir email_incluye_qr ----
-        const { emailSubject, emailBody, emailSettings, email_incluye_qr } = req.body;
+        // (Había un error en tu copia, faltaba 'email_sender_name')
+        const { emailSubject, emailBody, emailSettings, email_incluye_qr, email_sender_name } = req.body;
 
-        // Quitamos la validación anterior, ya que ahora solo actualizaremos los campos que lleguen
-        // if (typeof emailSubject === 'undefined' || typeof emailBody === 'undefined') {
-        //     return res.status(400).json({ message: 'El asunto y el cuerpo son requeridos.' });
-        // }
-
-        // ---- MODIFICACIÓN AQUÍ: Crear objeto solo con los campos recibidos ----
         const campanaData = {};
         if (emailSubject !== undefined) {
             campanaData.email_subject = emailSubject;
@@ -286,28 +312,30 @@ exports.updateEmailTemplate = async (req, res) => {
             campanaData.email_body = emailBody;
         }
         if (emailSettings !== undefined) {
-            campanaData.email_settings = emailSettings; // Guardamos los ajustes de diseño como un string JSON o TEXT
+            campanaData.email_settings = emailSettings; 
         }
         if (email_incluye_qr !== undefined) {
-            campanaData.email_incluye_qr = Boolean(email_incluye_qr); // Aseguramos que sea booleano
+            campanaData.email_incluye_qr = Boolean(email_incluye_qr); 
+        }
+         if (email_sender_name !== undefined) {
+            campanaData.email_sender_name = email_sender_name;
         }
 
-        // Si no llegó ningún dato para actualizar, podemos responder inmediatamente
+
         if (Object.keys(campanaData).length === 0) {
              return res.status(400).json({ success: false, message: 'No se proporcionaron datos para actualizar.' });
         }
 
-        // ---- MODIFICACIÓN AQUÍ: Usar el 'id' correcto ----
-        const result = await Campana.updateById(id_campana, campanaData); // o updateById(id_campana, campanaData);
+        const result = await Campana.updateById(id_campana, campanaData); 
 
         if (result.affectedRows === 0) {
-            return res.status(404).json({ success: false, error: 'Campaña no encontrada.' }); // Cambiado message por error
+            return res.status(404).json({ success: false, error: 'Campaña no encontrada.' }); 
         }
 
-        res.status(200).json({ success: true, message: 'Plantilla de correo actualizada exitosamente.' }); // Añadido success: true
+        res.status(200).json({ success: true, message: 'Plantilla de correo actualizada exitosamente.' });
     } catch (error) {
         console.error('Error al actualizar la plantilla de correo:', error);
-        res.status(500).json({ success: false, error: 'Error interno del servidor al actualizar la plantilla.' }); // Cambiado message por error
+        res.status(500).json({ success: false, error: 'Error interno del servidor al actualizar la plantilla.' }); 
     }
 };
 
@@ -331,34 +359,26 @@ exports.generarPlantillaImportacion = async (req, res) => {
     try {
         const { id_campana } = req.params;
         
-        // 1. Obtenemos TODOS los campos configurados para el formulario de esta campaña.
-        // La función del modelo ya es correcta.
         const camposFormulario = await Formulario.getCamposByCampanaId(id_campana);
 
         if (camposFormulario.length === 0) {
             return res.status(404).json({ message: 'No se encontró configuración de formulario para este evento.' });
         }
 
-        // 2. Creamos el libro de trabajo de Excel.
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Plantilla de Importación');
 
-        // 3. (LÓGICA CORREGIDA) Mapeamos DIRECTAMENTE los campos del formulario a las columnas del Excel.
-        // Ya no hay cabeceras fijas, todo es dinámico.
         worksheet.columns = camposFormulario.map(campo => {
-            // Asignamos un ancho de columna predeterminado o específico si es necesario.
             const width = ['nombre', 'email', 'empresa', 'profesion'].includes(campo.nombre_interno) ? 30 : 20;
             return {
-                header: campo.etiqueta, // La etiqueta visible para el usuario.
-                key: campo.nombre_interno, // La clave interna que usaremos al importar.
+                header: campo.etiqueta, 
+                key: campo.nombre_interno, 
                 width: width
             };
         });
         
-        // Ponemos la primera fila (cabeceras) en negrita.
         worksheet.getRow(1).font = { bold: true };
 
-        // 4. Configuramos la respuesta HTTP para la descarga.
         res.setHeader(
             'Content-Type',
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -368,7 +388,6 @@ exports.generarPlantillaImportacion = async (req, res) => {
             'attachment; filename="plantilla_importacion_evento.xlsx"'
         );
 
-        // 5. Enviamos el archivo Excel generado.
         await workbook.xlsx.write(res);
         res.end();
 
@@ -388,7 +407,6 @@ exports.importarInscripcionesDesdeExcel = async (req, res) => {
     const { contactos } = req.body;
 
     try {
-        // Llamamos a una nueva función en el modelo de Inscripción que hará todo el trabajo.
         const resultado = await InscripcionModel.importarMasivamente(id_campana, contactos);
         res.status(201).json({ 
             success: true, 
@@ -397,18 +415,40 @@ exports.importarInscripcionesDesdeExcel = async (req, res) => {
         });
     } catch (error) {
         console.error("Error en el controlador al importar inscripciones:", error);
-        // Devuelve un error específico si lo hay, o uno genérico.
         res.status(500).json({ success: false, error: error.message || "Error interno del servidor al procesar el archivo." });
     }
 };
 
 /**
  * Elimina un asistente (inscripción) de una campaña.
+ * (VERSIÓN CORREGIDA CON VERIFICACIÓN DE PERMISOS)
  */
 exports.deleteAsistente = async (req, res) => {
   const { id_inscripcion } = req.params;
 
   try {
+    
+    // --- INICIO DE LA CORRECCIÓN: Verificación de permisos ---
+    const userId = getUserId(req);
+    
+    // Si no es Super Admin (definido en middleware authorize), verificar permisos
+    if (req.isSuperAdmin !== true) {
+        const eventId = await getEventIdByInscripcion(id_inscripcion);
+        
+        if (!eventId) {
+            return res.status(404).json({ success: false, message: 'Inscripción no encontrada.' });
+        }
+        
+        // Verificamos permiso de 'delete' en el módulo 'eventos'.
+        // Si prefieres que el módulo se llame 'campanas', cambia 'eventos' aquí.
+        const allowed = await permissionModel.isAllowedOnEvent(userId, eventId, 'eventos', 'delete');
+        
+        if (!allowed) {
+            return res.status(403).json({ success: false, message: 'No tiene permisos para eliminar asistentes en este evento.' });
+        }
+    }
+    // --- FIN DE LA CORRECCIÓN ---
+
     const success = await InscripcionModel.deleteById(id_inscripcion);
 
     if (!success) {

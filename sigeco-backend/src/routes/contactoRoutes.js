@@ -4,6 +4,17 @@ const { body, query, param } = require('express-validator');
 const contactoController = require('../controllers/contactoController');
 const { validarRut } = require('../utils/validationUtils');
 
+// --- INICIO DE LA CORRECCIÓN (¡ESTO ES LO QUE FALTABA!) ---
+// Importar los middlewares de autenticación y autorización
+const { verificarToken } = require('../controllers/authController'); // Asegúrate que la ruta sea correcta
+const authorize = require('../middleware/authorize'); // Asegúrate que la ruta sea correcta
+// --- FIN DE LA CORRECCIÓN ---
+
+
+// Proteger TODAS las rutas de este archivo
+router.use(verificarToken);
+
+
 // GET /api/contactos -> Obtener todos los contactos con paginación y búsqueda
 router.get(
     '/',
@@ -12,11 +23,17 @@ router.get(
         query('limit').optional().isInt({ min: 1 }).withMessage('El límite debe ser un número positivo.'),
         query('search').optional().trim().escape()
     ],
+    // Añadir autorización de lectura
+    authorize('contactos', 'read'), 
     contactoController.getAllContactos
 );
 
 // GET /api/contactos/sin-base -> Obtener contactos sin base de datos
-router.get('/sin-base', contactoController.getOrphanedContactos);
+router.get(
+    '/sin-base',
+    authorize('contactos', 'read'), // Proteger también
+    contactoController.getOrphanedContactos
+);
 
 // Reglas de validación reutilizables para el cuerpo de la petición
 const contactoValidationRules = [
@@ -40,25 +57,39 @@ const contactoValidationRules = [
 ];
 
 // POST /api/contactos -> Crear un nuevo contacto
-router.post('/', contactoValidationRules, contactoController.createContacto);
+router.post(
+    '/',
+    // Añadir autorización de creación
+    authorize('contactos', 'create'),
+    contactoValidationRules, 
+    contactoController.createContacto
+);
 
 // PUT /api/contactos/:id -> Actualizar un contacto por ID
 router.put(
     '/:id',
     [
         param('id').isInt({ min: 1 }).withMessage('El ID de contacto no es válido.'),
-        ...contactoValidationRules // Reutilizamos las mismas reglas de validación
+        ...contactoValidationRules 
     ],
+    // Añadir autorización de actualización
+    authorize('contactos', 'update'),
     contactoController.updateContacto
 );
 
 // DELETE /api/contactos/:id -> Eliminar un contacto por ID
-router.delete(
+router.delete( // Aquí estaba el 'outer'
     '/:id',
     [ param('id').isInt({ min: 1 }).withMessage('El ID de contacto no es válido.') ],
+    // Añadir autorización de eliminación
+    authorize('contactos', 'delete'),
     contactoController.deleteContacto
 );
 
-router.get('/email/:email', contactoController.getContactoByEmail);
+router.get(
+    '/email/:email',
+    authorize('contactos', 'read'), // Proteger también
+    contactoController.getContactoByEmail
+);
 
 module.exports = router;
