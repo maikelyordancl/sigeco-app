@@ -234,7 +234,7 @@ export function AcreditacionTable({
 
   const handleAcreditar = (asistente: Asistente) => {
     onUpdateStatus(asistente.id_inscripcion, "acreditado");
-    printBadge(asistente);
+    //printBadge(asistente);
   };
 
   const renderCellContent = (asistente: Asistente, campo: CampoFormulario) => {
