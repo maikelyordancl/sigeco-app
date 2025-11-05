@@ -31,46 +31,57 @@ export function QRScannerDialog({
   const scanSuccessRef = useRef(false);
 
   useEffect(() => {
+    // --- INICIO DE LA CORRECCIÓN ---
+    // Guardamos el timer para poder limpiarlo
+    let timer: NodeJS.Timeout | null = null;
+    // --- FIN DE LA CORRECCIÓN ---
+
     if (isOpen) {
-      // Si el diálogo se abre, inicializamos y encendemos la cámara
-      scanSuccessRef.current = false; // Reseteamos el flag
-      
-      const config = {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        supportedScanTypes: [], // Dejar vacío usa todos los tipos
-      };
+      // Esperamos 100ms para que el DOM del Dialog (que usa un Portal)
+      // se renderice completamente antes de buscar el elemento.
+      timer = setTimeout(() => {
+        scanSuccessRef.current = false; // Reseteamos el flag
+        
+        const config = {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          supportedScanTypes: [],
+        };
 
-      const onScanSuccess = (decodedText: string) => {
-        // Al escanear con éxito, evitamos que siga escaneando
-        if (!scanSuccessRef.current) {
-          scanSuccessRef.current = true;
-          onScan(decodedText);
-          onClose();
+        const onScanSuccess = (decodedText: string) => {
+          if (!scanSuccessRef.current) {
+            scanSuccessRef.current = true;
+            onScan(decodedText);
+            onClose();
+          }
+        };
+
+        // Asegurarnos de que no haya una instancia previa colgada
+        if (qrScannerRef.current) {
+          try {
+            qrScannerRef.current.stop();
+          } catch (e) { /* ignorar */ }
         }
-      };
 
-      // Creamos la instancia
-      const html5QrCode = new Html5Qrcode(qrReaderId);
-      qrScannerRef.current = html5QrCode;
+        // Creamos la instancia DENTRO del timeout
+        const html5QrCode = new Html5Qrcode(qrReaderId);
+        qrScannerRef.current = html5QrCode;
 
-      // Iniciamos la cámara
-      html5QrCode.start(
-          { facingMode: "environment" }, // Pedir cámara trasera
-          config,
-          onScanSuccess,
-          undefined // onScanFailure (lo ignoramos)
-        )
-        .catch((err) => {
-          console.error("Error al iniciar el escáner QR:", err);
-          // Si falla (ej: no hay cámara), cerramos el diálogo
-          onClose();
-        });
+        html5QrCode.start(
+            { facingMode: "environment" }, // Pedir cámara trasera
+            config,
+            onScanSuccess,
+            undefined // onScanFailure (lo ignoramos)
+          )
+          .catch((err) => {
+            console.error("Error al iniciar el escáner QR:", err);
+            onClose();
+          });
+      }, 100); // 100ms es un tiempo de espera seguro
 
     } else {
       // Si el diálogo se cierra (isOpen = false), nos aseguramos de apagar la cámara
       if (qrScannerRef.current) {
-        // Verificamos si el escáner está activo antes de detenerlo
         try {
           if (qrScannerRef.current.getState() === Html5QrcodeScannerState.SCANNING) {
             qrScannerRef.current.stop();
@@ -83,8 +94,15 @@ export function QRScannerDialog({
       }
     }
 
-    // Función de limpieza por si el componente se desmonta inesperadamente
+    // Función de limpieza
     return () => {
+      // --- INICIO DE LA CORRECCIÓN ---
+      // Si el componente se desmonta, limpiamos el timer
+      if (timer) {
+        clearTimeout(timer);
+      }
+      // --- FIN DE LA CORRECCIÓN ---
+
       if (qrScannerRef.current) {
         try {
           qrScannerRef.current.stop();
