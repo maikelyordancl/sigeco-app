@@ -343,7 +343,7 @@ export function AsistentesTable({
                 <span className="text-sm text-muted-foreground">Registros:</span>
                 <Select value={String(limit)} onValueChange={v => onLimitChange(parseInt(v, 10))}>
                     <SelectTrigger className="w-[120px] border-2 border-cyan-500 shadow-md"><SelectValue /></SelectTrigger>
-                    <SelectContent>{[25, 50, 100, 200, 300].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
+                    <SelectContent>{[25, 50, 100, 200, 300, 500, 1000].map(n => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}</SelectContent>
                 </Select>
             </div>
         </div>
