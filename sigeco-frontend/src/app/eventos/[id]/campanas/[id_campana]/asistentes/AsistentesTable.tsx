@@ -251,7 +251,7 @@ export function AsistentesTable({
     
     todasLasClaves.add('numero_fila');
     
-    const clavesFijas = ['id_inscripcion', 'id_contacto', 'actions', 'nombre', 'email', 'telefono', 'empresa', 'estado_asistencia', 'nota', 'numero_fila'];
+    const clavesFijas = ['id_contacto', 'actions', 'nombre', 'email', 'telefono', 'empresa', 'estado_asistencia', 'nota', 'numero_fila'];
     
     const colsDinamicas: ColumnDef<Asistente>[] = Array.from(todasLasClaves)
       .filter(key => !clavesFijas.includes(key) && key !== '#')
