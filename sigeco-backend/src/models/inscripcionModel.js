@@ -78,6 +78,8 @@ const Inscripcion = {
         }
     },
 
+    // sigeco-backend/src/models/inscripcionModel.js
+
     // --- INICIO DE LA MODIFICACIÓN ---
     findWithCustomFieldsByCampanaId: async (id_campana, limit = 100, offset = 0, searchTerm = null, estadoFiltro = null) => {
         
@@ -92,10 +94,30 @@ const Inscripcion = {
         if (searchTerm) {
             const searchWords = searchTerm.split(' ').filter(Boolean);
             if (searchWords.length > 0) {
+                
+                // Lógica de búsqueda modificada
                 const searchClauses = searchWords.map(word => {
+                    // Verificamos si la palabra de búsqueda son solo dígitos
+                    const isOnlyDigits = /^[0-9]+$/.test(word);
+                    
+                    const clauses = [
+                        'c.nombre LIKE ?',
+                        'c.email LIKE ?',
+                        'c.empresa LIKE ?',
+                        'c.rut LIKE ?'
+                    ];
+                    // Agregamos los parámetros para los LIKE
                     params.push(`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`);
-                    return `(c.nombre LIKE ? OR c.email LIKE ? OR c.empresa LIKE ? OR c.rut LIKE ?)`;
+
+                    // Si son solo dígitos, añadimos la búsqueda por ID de inscripción
+                    if (isOnlyDigits) {
+                        clauses.push('i.id_inscripcion = ?');
+                        params.push(word); // Pasamos el número exacto
+                    }
+                    
+                    return `(${clauses.join(' OR ')})`;
                 });
+                
                 whereConditions.push(`(${searchClauses.join(' AND ')})`);
             }
         }
@@ -170,6 +192,7 @@ const Inscripcion = {
             LIMIT ? OFFSET ?
         `;
 
+        // Los parámetros ya están en el orden correcto
         const finalParams = [...params, limit, offset];
         const [rows] = await pool.execute(dataQuery, finalParams);
         
