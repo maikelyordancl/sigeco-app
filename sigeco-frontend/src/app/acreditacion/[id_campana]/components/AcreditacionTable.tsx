@@ -273,6 +273,12 @@ export function AcreditacionTable({
           <tr className="bg-cyan-400 border-b border-cyan-500">
             <th className="px-4 py-3 text-left text-sm font-semibold text-black">#</th>
 
+            {/* --- INICIO DE LA MODIFICACIÓN --- */}
+            <th className="px-4 py-3 text-left text-sm font-semibold text-black">
+              ID Inscripción
+            </th>
+            {/* --- FIN DE LA MODIFICACIÓN --- */}
+
             {orderedVisibleColumns.map((campo) => (
               <th key={campo.id_campo} className="px-4 py-3 text-left text-sm font-semibold text-black">
                 {campo.etiqueta}
@@ -295,6 +301,12 @@ export function AcreditacionTable({
                 .trim()}
             >
               <td className="px-4 py-2 text-sm text-gray-700">{index + 1}</td>
+
+              {/* --- INICIO DE LA MODIFICACIÓN --- */}
+              <td className="px-4 py-2 text-sm text-gray-700">
+                {asistente.id_inscripcion}
+              </td>
+              {/* --- FIN DE LA MODIFICACIÓN --- */}
 
               {orderedVisibleColumns.map((campo) => (
                 <td key={campo.id_campo} className="px-4 py-2 text-sm text-gray-700">
