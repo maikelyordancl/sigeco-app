@@ -4,6 +4,7 @@ const router = express.Router();
 const campanasController = require('../controllers/campanasController');
 const formularioController = require('../controllers/formularioController'); // Importamos el nuevo controlador
 const { verificarToken } = require('../controllers/authController');
+const authorize = require('../middleware/authorize');
 
 // Proteger todas las rutas de campañas con autenticación JWT
 router.use(verificarToken);
@@ -189,9 +190,11 @@ router.put('/asistentes/:id_inscripcion/nota', campanasController.updateAsistent
 router.put('/asistentes/:id_inscripcion/respuestas', campanasController.updateAsistenteRespuestas);
 router.put('/asistentes/:id_inscripcion', campanasController.updateAsistenteCompleto);
 
+// Corrección
 router.delete(
     '/asistentes/:id_inscripcion',
     [param('id_inscripcion').isInt({ gt: 0 }).withMessage('El ID de la inscripción debe ser un número válido.')],
+    authorize('eventos', 'delete'), // <-- AÑADIR ESTA LÍNEA
     campanasController.deleteAsistente
 );
 
