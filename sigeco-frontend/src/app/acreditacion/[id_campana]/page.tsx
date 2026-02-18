@@ -301,7 +301,7 @@ export default function AcreditarCampanaPage() {
               </div>
             </div>
           ),
-          { duration: 4500 }
+          { duration: 1000 }
         );
       } else {
         toast.success('Estado actualizado', { id: toastId });
