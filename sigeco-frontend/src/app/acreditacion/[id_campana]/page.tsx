@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { toast } from 'react-hot-toast';
 import { ArrowLeft, PlusCircle } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
@@ -58,7 +57,7 @@ export default function AcreditarCampanaPage() {
 
   const [asistentes, setAsistentes] = useState<Asistente[]>([]);
   const [camposFormulario, setCamposFormulario] = useState<CampoFormulario[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, _setSearchTerm] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todos');
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -70,7 +69,7 @@ export default function AcreditarCampanaPage() {
   const [eventName, setEventName] = useState<string>('');
   // --- FIN DE LA MODIFICACIÓN ---
 
-  const { visibleColumns, toggleColumnVisibility } = useVisibleColumns(camposFormulario, id_campana);
+  const { visibleColumns: _visibleColumns, toggleColumnVisibility: _toggleColumnVisibility } = useVisibleColumns(camposFormulario, id_campana);
 
   // --- INICIO DE LA MODIFICACIÓN (Problema 2) ---
   // 2. Modificamos fetchPageData para que obtenga el id_evento y luego el nombre del evento
@@ -229,7 +228,85 @@ export default function AcreditarCampanaPage() {
         throw new Error(result.error || 'No se pudo actualizar el estado.');
       }
 
-      toast.success('Estado actualizado', { id: toastId });
+      // --- INICIO DE LA MODIFICACIÓN (Ventana de info al acreditar) ---
+      // Si se acreditó, mostramos una "ventana" (toast) más grande con más información.
+      if (nuevo_estado === 'acreditado') {
+        // Cerramos el toast de loading
+        toast.dismiss(toastId);
+
+        const asistente = originalAsistentes.find(a => a.id_inscripcion === id_inscripcion);
+        const nombre = (asistente as any)?.nombre || (asistente as any)?.Nombre || (asistente as any)?.NOMBRE || '';
+        const email = (asistente as any)?.email || (asistente as any)?.Email || (asistente as any)?.EMAIL || '';
+        const rut = (asistente as any)?.rut || (asistente as any)?.RUT || '';
+        const fechaHora = new Date().toLocaleString('es-CL');
+
+        toast.custom(
+          (t) => (
+            <div
+              className="pointer-events-auto w-full max-w-2xl rounded-2xl border border-green-200 bg-white shadow-2xl p-6"
+            >
+              <div className="flex items-start gap-5">
+                <div className="text-5xl leading-none">✅</div>
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-2xl font-extrabold text-green-700">ACREDITACIÓN CONFIRMADA</p>
+                  <p className="text-base text-gray-700 mt-1">
+                    {nombre ? (
+                      <>
+                        El usuario <span className="font-semibold">{nombre}</span> se ha acreditado correctamente.
+                      </>
+                    ) : (
+                      <>El asistente se ha acreditado correctamente.</>
+                    )}
+                  </p>
+
+                  <p className="text-sm text-gray-500 mt-2">Más información</p>
+
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-lg bg-green-50 p-3 ring-1 ring-inset ring-green-100">
+                      <p className="text-green-700">Estado</p>
+                      <p className="font-semibold text-green-900">Acreditado</p>
+                    </div>
+                    <div className="rounded-lg bg-gray-50 p-3">
+                      <p className="text-gray-500">Fecha/Hora</p>
+                      <p className="font-semibold text-gray-900">{fechaHora}</p>
+                    </div>
+                    <div className="rounded-lg bg-gray-50 p-2">
+                      <p className="text-gray-500">ID Inscripción</p>
+                      <p className="font-semibold text-gray-900">{id_inscripcion}</p>
+                    </div>
+                    {rut && (
+                      <div className="rounded-lg bg-gray-50 p-2">
+                        <p className="text-gray-500">RUT</p>
+                        <p className="font-semibold text-gray-900">{rut}</p>
+                      </div>
+                    )}
+                    {email && (
+                      <div className="rounded-lg bg-gray-50 p-2 sm:col-span-2">
+                        <p className="text-gray-500">Email</p>
+                        <p className="font-semibold text-gray-900 break-all">{email}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className="text-gray-400 hover:text-gray-700"
+                  aria-label="Cerrar"
+                  onClick={() => toast.dismiss(t.id)}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          ),
+          { duration: 4500 }
+        );
+      } else {
+        toast.success('Estado actualizado', { id: toastId });
+      }
+      // --- FIN DE LA MODIFICACIÓN ---
 
     } catch (error: any) {
       setAsistentes(originalAsistentes);
@@ -303,18 +380,6 @@ export default function AcreditarCampanaPage() {
             </div>
 
             <div className="flex flex-col flex-1 gap-2">
-              <Input
-                type="search"
-                name="tabla_busqueda"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="none"
-                placeholder="Buscar asistente (nombre, email, rut...)"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="bg-yellow-200 focus:bg-yellow-50 focus:ring-2 focus:ring-yellow-300 border-yellow-200"
-              />
-
               <div className="flex gap-2">
                 {campanaInfo && !campanaInfo.obligatorio_pago && (
                   <Button

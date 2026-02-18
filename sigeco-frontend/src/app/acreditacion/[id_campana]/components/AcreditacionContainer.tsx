@@ -10,7 +10,7 @@ import { ConfigureColumnsAcreditacion } from './ConfigureColumnsAcreditacion';
 import { useVisibleColumns } from './useVisibleColumns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Camera, Search } from 'lucide-react';
+import { Camera, Search, X } from 'lucide-react';
 import { QRScannerDialog } from './QRScannerDialog'; // El componente que creaste
 // --- FIN NUEVA MODIFICACIÓN ---
 
@@ -128,9 +128,22 @@ export default function AcreditacionContainer({
               placeholder="Buscar por nombre, email, rut o ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-10 pr-10"
             />
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+
+            {/* Botón rápido para limpiar búsqueda */}
+            {searchTerm.trim().length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                aria-label="Limpiar búsqueda"
+                title="Limpiar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            )}
           </div>
 
           <Button
