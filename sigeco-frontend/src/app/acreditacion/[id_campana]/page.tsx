@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { toast } from 'react-hot-toast';
+import { toast, type Toast } from 'react-hot-toast'; // ✅ FIX: tipado Toast
 import { ArrowLeft, PlusCircle } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
 
@@ -241,7 +241,7 @@ export default function AcreditarCampanaPage() {
         const fechaHora = new Date().toLocaleString('es-CL');
 
         toast.custom(
-          (t) => (
+          (t: Toast) => ( // ✅ FIX: tipado explícito
             <div
               className="pointer-events-auto w-full max-w-2xl rounded-2xl border border-green-200 bg-white shadow-2xl p-6"
             >
