@@ -86,8 +86,36 @@ export default function AcreditacionContainer({
       return false;
     });
   }, [asistentes, searchTerm]);
-  // --- FIN NUEVA MODIFICACIÓN ---
 
+  // Deja automáticamente en el buscador al asistente recién acreditado
+  const handleUpdateStatusWithSearch = (
+    id_inscripcion: number,
+    estado: "acreditado" | "denegado" | "pendiente"
+  ) => {
+    if (estado === "acreditado") {
+      const asistente = asistentes.find((a) => a.id_inscripcion === id_inscripcion);
+      if (asistente) {
+        const nombre = [
+          (asistente as any).nombre,
+          (asistente as any).apellido,
+          (asistente as any).apellido_paterno,
+          (asistente as any).apellido_materno,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+
+        const textoBusqueda =
+          ((asistente as any).email as string) ||
+          nombre ||
+          String(asistente.id_inscripcion);
+
+        setSearchTerm(textoBusqueda);
+      }
+    }
+
+    onUpdateStatus(id_inscripcion, estado);
+  };
 
   return (
     <div>
@@ -169,7 +197,6 @@ export default function AcreditacionContainer({
       </div>
       {/* --- FIN DE LA MODIFICACIÓN --- */}
 
-
       <div className="relative">
         <AcreditacionTable
           // --- NUEVA MODIFICACIÓN: Usar la lista filtrada ---
@@ -177,7 +204,7 @@ export default function AcreditacionContainer({
           // --- FIN NUEVA MODIFICACIÓN ---
           camposFormulario={camposFormulario}
           visibleColumns={visibleColumns}
-          onUpdateStatus={onUpdateStatus}
+          onUpdateStatus={handleUpdateStatusWithSearch}
           updatingId={updatingId}
         />
 
