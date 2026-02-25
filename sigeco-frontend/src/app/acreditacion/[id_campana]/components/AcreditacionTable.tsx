@@ -299,7 +299,7 @@ export function AcreditacionTable({
               className={[
                 updatingId === asistente.id_inscripcion ? "opacity-50" : "",
                 // ✅ CAMBIO: fila acreditada a amarillo (en vez de verde)
-                asistente.estado_asistencia === "Asistió" ? "bg-yellow-50" : "",
+                asistente.estado_asistencia === "Asistió" ? "bg-yellow-200" : "",
               ]
                 .join(" ")
                 .trim()}
