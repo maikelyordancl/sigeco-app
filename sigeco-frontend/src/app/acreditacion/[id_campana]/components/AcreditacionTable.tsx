@@ -243,7 +243,7 @@ export function AcreditacionTable({
     if (campo.nombre_interno === "estado_asistencia") {
       if (value === "Asistió") {
         return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-green-100 text-green-800 px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ring-green-200">
+          <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 text-yellow-900 px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ring-yellow-300">
             <BadgeCheck className="w-4 h-4" />
             Acreditado
           </span>
@@ -280,7 +280,10 @@ export function AcreditacionTable({
             {/* --- FIN DE LA MODIFICACIÓN --- */}
 
             {orderedVisibleColumns.map((campo) => (
-              <th key={campo.id_campo} className="px-4 py-3 text-left text-sm font-semibold text-black">
+              <th
+                key={campo.id_campo}
+                className="px-4 py-3 text-left text-sm font-semibold text-black"
+              >
                 {campo.etiqueta}
               </th>
             ))}
@@ -295,7 +298,8 @@ export function AcreditacionTable({
               key={asistente.id_inscripcion}
               className={[
                 updatingId === asistente.id_inscripcion ? "opacity-50" : "",
-                asistente.estado_asistencia === "Asistió" ? "bg-green-50" : "",
+                // ✅ CAMBIO: fila acreditada a amarillo (en vez de verde)
+                asistente.estado_asistencia === "Asistió" ? "bg-yellow-50" : "",
               ]
                 .join(" ")
                 .trim()}
@@ -319,7 +323,12 @@ export function AcreditacionTable({
                   <span className="text-gray-500 font-medium">Actualizando...</span>
                 ) : asistente.estado_asistencia !== "Asistió" ? (
                   <div className="flex gap-2">
-                    <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => handleAcreditar(asistente)}>
+                    {/* ✅ CAMBIO: botón Acreditar amarillo */}
+                    <Button
+                      size="sm"
+                      className="bg-yellow-500 hover:bg-yellow-600 text-black"
+                      onClick={() => handleAcreditar(asistente)}
+                    >
                       Acreditar
                     </Button>
                     <Button
@@ -333,7 +342,9 @@ export function AcreditacionTable({
                 ) : (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button size="sm" variant="outline">Revertir</Button>
+                      <Button size="sm" variant="outline">
+                        Revertir
+                      </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>

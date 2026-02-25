@@ -228,8 +228,9 @@ export default function AcreditarCampanaPage() {
         throw new Error(result.error || 'No se pudo actualizar el estado.');
       }
 
-      // --- INICIO DE LA MODIFICACIÓN (Ventana de info al acreditar) ---
-      // Si se acreditó, mostramos una "ventana" (toast) más grande con más información.
+      // --- INICIO DE LA MODIFICACIÓN (Ventana de info al acreditar - ESTILO AMARILLO) ---
+      // Si se acreditó, mostramos una "ventana" (toast) con título "ACREDITADO" amarillo
+      // y acentos amarillos (sin verde pastel).
       if (nuevo_estado === 'acreditado') {
         // Cerramos el toast de loading
         toast.dismiss(toastId);
@@ -241,63 +242,77 @@ export default function AcreditarCampanaPage() {
         const fechaHora = new Date().toLocaleString('es-CL');
 
         toast.custom(
-          (t: Toast) => ( // ✅ FIX: tipado explícito
-            <div
-              className="pointer-events-auto w-full max-w-2xl rounded-2xl border border-green-200 bg-white shadow-2xl p-6"
-            >
-              <div className="flex items-start gap-5">
-                <div className="text-5xl leading-none">✅</div>
-
-                <div className="flex-1 min-w-0">
-                  <p className="text-2xl font-extrabold text-green-700">ACREDITACIÓN CONFIRMADA</p>
-                  <p className="text-base text-gray-700 mt-1">
-                    {nombre ? (
-                      <>
-                        El usuario <span className="font-semibold">{nombre}</span> se ha acreditado correctamente.
-                      </>
-                    ) : (
-                      <>El asistente se ha acreditado correctamente.</>
-                    )}
+          (t: Toast) => (
+            <div className="pointer-events-auto w-full max-w-2xl">
+              <div className="rounded-2xl overflow-hidden border border-yellow-300 bg-white shadow-2xl">
+                {/* Header estilo propuesta: solo palabra ACREDITADO en amarillo */}
+                <div className="bg-gray-200 px-6 py-6 text-center">
+                  <p className="text-5xl font-extrabold tracking-wide text-yellow-400">
+                    ACREDITADO
                   </p>
-
-                  <p className="text-sm text-gray-500 mt-2">Más información</p>
-
-                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-lg bg-green-50 p-3 ring-1 ring-inset ring-green-100">
-                      <p className="text-green-700">Estado</p>
-                      <p className="font-semibold text-green-900">Acreditado</p>
-                    </div>
-                    <div className="rounded-lg bg-gray-50 p-3">
-                      <p className="text-gray-500">Fecha/Hora</p>
-                      <p className="font-semibold text-gray-900">{fechaHora}</p>
-                    </div>
-                    <div className="rounded-lg bg-gray-50 p-2">
-                      <p className="text-gray-500">ID Inscripción</p>
-                      <p className="font-semibold text-gray-900">{id_inscripcion}</p>
-                    </div>
-                    {rut && (
-                      <div className="rounded-lg bg-gray-50 p-2">
-                        <p className="text-gray-500">RUT</p>
-                        <p className="font-semibold text-gray-900">{rut}</p>
-                      </div>
-                    )}
-                    {email && (
-                      <div className="rounded-lg bg-gray-50 p-2 sm:col-span-2">
-                        <p className="text-gray-500">Email</p>
-                        <p className="font-semibold text-gray-900 break-all">{email}</p>
-                      </div>
-                    )}
-                  </div>
                 </div>
 
-                <button
-                  type="button"
-                  className="text-gray-400 hover:text-gray-700"
-                  aria-label="Cerrar"
-                  onClick={() => toast.dismiss(t.id)}
-                >
-                  ✕
-                </button>
+                {/* Línea separadora amarilla */}
+                <div className="h-3 bg-yellow-300" />
+
+                {/* Contenido (se mantiene, pero sin verdes) 
+                <div className="p-6">
+                  <div className="flex items-start gap-5">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-base text-gray-700">
+                        {nombre ? (
+                          <>
+                            El usuario <span className="font-semibold">{nombre}</span> se ha acreditado correctamente.
+                          </>
+                        ) : (
+                          <>El asistente se ha acreditado correctamente.</>
+                        )}
+                      </p>
+
+                      <p className="text-sm text-gray-500 mt-3">Más información</p>
+
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                        <div className="rounded-lg bg-yellow-50 p-3 ring-1 ring-inset ring-yellow-200">
+                          <p className="text-yellow-700">Estado</p>
+                          <p className="font-semibold text-yellow-900">Acreditado</p>
+                        </div>
+
+                        <div className="rounded-lg bg-yellow-50/60 p-3 ring-1 ring-inset ring-yellow-100">
+                          <p className="text-gray-600">Fecha/Hora</p>
+                          <p className="font-semibold text-gray-900">{fechaHora}</p>
+                        </div>
+
+                        <div className="rounded-lg bg-yellow-50/60 p-3 ring-1 ring-inset ring-yellow-100">
+                          <p className="text-gray-600">ID Inscripción</p>
+                          <p className="font-semibold text-gray-900">{id_inscripcion}</p>
+                        </div>
+
+                        {rut && (
+                          <div className="rounded-lg bg-yellow-50/60 p-3 ring-1 ring-inset ring-yellow-100">
+                            <p className="text-gray-600">RUT</p>
+                            <p className="font-semibold text-gray-900">{rut}</p>
+                          </div>
+                        )}
+
+                        {email && (
+                          <div className="rounded-lg bg-yellow-50/60 p-3 ring-1 ring-inset ring-yellow-100 sm:col-span-2">
+                            <p className="text-gray-600">Email</p>
+                            <p className="font-semibold text-gray-900 break-all">{email}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="text-gray-400 hover:text-gray-700"
+                      aria-label="Cerrar"
+                      onClick={() => toast.dismiss(t.id)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>*/}
               </div>
             </div>
           ),
