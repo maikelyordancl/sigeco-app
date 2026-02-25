@@ -134,7 +134,21 @@ export default function AcreditarCampanaPage() {
           es_obligatorio: false,
           orden: -999,
         };
+
+        // Campo de sistema: fecha en que se acreditó (si aplica)
+        const fechaAcreditacionCampo: CampoFormulario = {
+          id_campo: -2,
+          nombre_interno: 'fecha_acreditacion',
+          etiqueta: 'Fecha acreditación',
+          es_visible: true,
+          es_de_sistema: true,
+          tipo_campo: 'TEXTO_CORTO',
+          es_obligatorio: false,
+          orden: -998,
+        };
+
         campos.unshift(estadoAsistenciaCampo);
+        campos.unshift(fechaAcreditacionCampo);
         setCamposFormulario(campos);
       } else {
         throw new Error('No se pudo cargar la configuración del formulario.');

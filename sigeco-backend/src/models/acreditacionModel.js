@@ -3,6 +3,26 @@ const ContactoModel = require('./contactoModel');      // Ajusta la ruta según 
 const InscripcionModel = require('./inscripcionModel');
 const FormularioModel = require('./formularioModel');
 
+// --- Hora Chile (America/Santiago) ---
+// Guardamos en la BD un DATETIME "literal" con la hora local de Chile,
+// independiente de la timezone del servidor o del motor MySQL.
+const getChileDateTimeSQL = (date = new Date()) => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Santiago',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    }).formatToParts(date);
+
+    const map = Object.fromEntries(parts.map(p => [p.type, p.value]));
+    // en-CA => YYYY-MM-DD
+    return `${map.year}-${map.month}-${map.day} ${map.hour}:${map.minute}:${map.second}`;
+};
+
 
 /**
  * Obtiene todos los eventos activos que tienen al menos una sub-campaña activa y acreditable.
@@ -58,6 +78,7 @@ exports.findAcreditacionAsistentesPorCampana = async (id_campana) => {
         SELECT
             i.id_inscripcion,
             i.estado_asistencia,
+            i.fecha_acreditacion,
             c.nombre,
             c.rut,
             c.email,
@@ -77,12 +98,19 @@ exports.findAcreditacionAsistentesPorCampana = async (id_campana) => {
  * Actualiza el estado de asistencia de una inscripción.
  */
 exports.updateEstadoAsistencia = async (id_inscripcion, nuevo_estado) => {
+    const chileNow = getChileDateTimeSQL();
     const query = `
         UPDATE inscripciones
-        SET estado_asistencia = ?
+        SET
+          estado_asistencia = ?,
+          fecha_acreditacion = IF(
+            ? = 'Asistió',
+            COALESCE(fecha_acreditacion, ?),
+            NULL
+          )
         WHERE id_inscripcion = ?;
     `;
-    const [result] = await pool.query(query, [nuevo_estado, id_inscripcion]);
+    const [result] = await pool.query(query, [nuevo_estado, nuevo_estado, chileNow, id_inscripcion]);
     return result;
 };
 
@@ -94,6 +122,7 @@ exports.findAsistentesPorCampana = async (id_campana) => {
         SELECT
             i.id_inscripcion,
             i.estado_asistencia,
+            i.fecha_acreditacion,
             c.nombre,
             c.rut,
             c.email,
@@ -173,13 +202,29 @@ exports.registrarEnPuerta = async (
         // --- 2. Crear o actualizar inscripción ---
         let inscripcion = await InscripcionModel.findByCampanaAndContacto(id_campana, contacto.id_contacto);
 
+        // Si acredita ahora, guardar fecha completa (solo la primera vez) en hora Chile.
+        // Si NO acredita, dejamos NULL.
+        const chileNow = getChileDateTimeSQL();
+
+        // Armamos el payload de update evitando re-escribir una fecha ya existente
+        // (para no sufrir conversiones de timezone si el driver la parseó a Date).
+        const updateData = {
+            estado_asistencia,
+            registrado_puerta,
+            id_tipo_entrada: id_tipo_entrada || inscripcion?.id_tipo_entrada,
+            estado_pago: inscripcion?.estado_pago || 'No Aplica'
+        };
+
+        if (estado_asistencia === 'Asistió') {
+            if (!inscripcion?.fecha_acreditacion) {
+                updateData.fecha_acreditacion = chileNow;
+            }
+        } else {
+            updateData.fecha_acreditacion = null;
+        }
+
         if (inscripcion) {
-            await InscripcionModel.update(inscripcion.id_inscripcion, {
-                estado_asistencia,
-                registrado_puerta,
-                id_tipo_entrada: id_tipo_entrada || inscripcion.id_tipo_entrada,
-                estado_pago: inscripcion.estado_pago || 'No Aplica'
-            });
+            await InscripcionModel.update(inscripcion.id_inscripcion, updateData);
         } else {
             inscripcion = await InscripcionModel.create({
                 id_campana,
@@ -187,8 +232,13 @@ exports.registrarEnPuerta = async (
                 id_tipo_entrada,
                 estado_asistencia,
                 registrado_puerta,
-                estado_pago: 'No Aplica'
+                estado_pago: 'No Aplica',
+                // create() inserta solo algunas columnas; fecha_acreditacion se asegura abajo
             });
+
+            // OJO: el create() actual inserta solo algunas columnas.
+            // Aseguramos que queden guardadas las columnas extra (incluida fecha_acreditacion).
+            await InscripcionModel.update(inscripcion.id_inscripcion, updateData);
         }
 
         // --- 3. Guardar respuestas dinámicas ---
@@ -201,7 +251,11 @@ exports.registrarEnPuerta = async (
             id_inscripcion: inscripcion.id_inscripcion,
             id_contacto: contacto.id_contacto,
             estado_asistencia,
-            registrado_puerta
+            registrado_puerta,
+            fecha_acreditacion:
+              estado_asistencia === 'Asistió'
+                ? (inscripcion?.fecha_acreditacion || updateData.fecha_acreditacion || chileNow)
+                : null
         };
 
     } catch (error) {

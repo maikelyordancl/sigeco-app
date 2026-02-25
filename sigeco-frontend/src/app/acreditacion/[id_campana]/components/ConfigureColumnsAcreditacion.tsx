@@ -27,6 +27,7 @@ export function ConfigureColumnsAcreditacion({
     'profesion',
     'pais',
     'comuna', // <-- ¡Añadido aquí!
+    'fecha_acreditacion',
     'estado_asistencia'
   ];
 

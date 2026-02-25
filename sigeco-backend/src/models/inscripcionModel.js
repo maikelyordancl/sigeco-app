@@ -176,7 +176,7 @@ const Inscripcion = {
         const dataQuery = `
             SELECT 
                 ROW_NUMBER() OVER (ORDER BY i.fecha_inscripcion ASC) as '#',
-                i.id_inscripcion, i.estado_asistencia, i.estado_pago, i.nota,
+                i.id_inscripcion, i.estado_asistencia, i.fecha_acreditacion, i.estado_pago, i.nota,
                 c.id_contacto, c.nombre, c.email, c.telefono, c.rut, c.empresa, c.actividad, c.profesion, c.pais, c.comuna,
                 p.id_pago, p.monto, p.estado AS estado_transaccion,
                 te.nombre AS tipo_entrada

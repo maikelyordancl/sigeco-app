@@ -5,6 +5,11 @@ export interface Inscripcion {
   id_contacto: number;
   nombre: string;
   email: string;
+  /**
+   * Fecha/hora en la que se acreditó (ISO string).
+   * Puede venir null si aún no se acredita.
+   */
+  fecha_acreditacion?: string | null;
   telefono?: string;
   rut?: string;
   empresa?: string;

@@ -237,8 +237,26 @@ export function AcreditacionTable({
     //printBadge(asistente);
   };
 
+  const formatFechaAcreditacion = (value: any) => {
+    if (!value) return "-";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "-";
+    // Formato legible, usando la zona/local del navegador
+    return d.toLocaleString("es-CL", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   const renderCellContent = (asistente: Asistente, campo: CampoFormulario) => {
     const value = (asistente as any)[campo.nombre_interno];
+
+    if (campo.nombre_interno === "fecha_acreditacion") {
+      return formatFechaAcreditacion(value);
+    }
 
     if (campo.nombre_interno === "estado_asistencia") {
       if (value === "Asistió") {
