@@ -82,6 +82,21 @@ const ESTADO_STYLES: Record<string, EstadoStyle> = {
 };
 const getEstadoStyle = (estado?: string): EstadoStyle => estado ? (ESTADO_STYLES[estado] ?? ESTILO_DEFAULT) : ESTILO_DEFAULT;
 
+const formatFechaAcreditacion = (value: any) => {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "-";
+  // Mismo formato que en Acreditación (ej: 25-02-2026, 07:04 p. m.)
+  return d.toLocaleString("es-CL", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+};
+
 export function AsistentesTable({
   data, onEdit, id_campana, camposFormulario, onEstadoChange,
   limit, onLimitChange, page, totalPages, totalInscripciones, onPageChange,
@@ -260,6 +275,11 @@ export function AsistentesTable({
         header: campoEtiquetaMap.get(key) || key.replace(/_/g, ' ').replace(/(?:^|\s)\S/g, a => a.toUpperCase()),
         cell: ({ row }) => {
           let valor = row.original[key];
+
+          // Formateo especial para fecha de acreditación
+          if (key === 'fecha_acreditacion') {
+            return <span>{formatFechaAcreditacion(valor)}</span>;
+          }
           if (typeof valor === "string" && valor.trim().startsWith("[") && valor.trim().endsWith("]")) {
             try {
               const arr = JSON.parse(valor);
