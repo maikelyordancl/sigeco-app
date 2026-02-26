@@ -2,14 +2,38 @@ const pool = require('../config/db');
 
 const Inscripcion = {
     create: async (inscripcionData) => {
-        const { id_campana, id_contacto, estado_asistencia, estado_pago } = inscripcionData;
-        const query = `
-            INSERT INTO inscripciones (id_campana, id_contacto, estado_asistencia, estado_pago)
-            VALUES (?, ?, ?, ?)
-        `;
-        const [result] = await pool.query(query, [id_campana, id_contacto, estado_asistencia, estado_pago]);
-        return { id_inscripcion: result.insertId, ...inscripcionData };
-    },
+    const {
+        id_campana,
+        id_contacto,
+        id_tipo_entrada = null,
+        estado_asistencia,
+        estado_pago
+    } = inscripcionData;
+
+    const query = `
+        INSERT INTO inscripciones (
+            id_campana,
+            id_contacto,
+            id_tipo_entrada,
+            estado_asistencia,
+            estado_pago
+        )
+        VALUES (?, ?, ?, ?, ?)
+    `;
+
+    const [result] = await pool.query(query, [
+        id_campana,
+        id_contacto,
+        id_tipo_entrada,
+        estado_asistencia,
+        estado_pago
+    ]);
+
+    return {
+        id_inscripcion: result.insertId,
+        ...inscripcionData
+    };
+},
 
     findByCampanaAndContacto: async (id_campana, id_contacto) => {
         const query = 'SELECT * FROM inscripciones WHERE id_campana = ? AND id_contacto = ?';
@@ -40,7 +64,7 @@ const Inscripcion = {
             }
 
             const { obligatorio_registro } = campanaRules[0];
-            const estadoAsistencia = obligatorio_registro ? 'Registrado' : 'Invitado';
+            const estadoAsistencia = 'Invitado';
 
             const placeholder = idsBasesOrigen.map(() => '?').join(',');
             const [contactos] = await connection.query(
@@ -396,7 +420,7 @@ const Inscripcion = {
 
                 const [resultInscripcion] = await connection.query(
                     'INSERT IGNORE INTO inscripciones (id_campana, id_contacto, estado_asistencia) VALUES (?, ?, ?)',
-                    [id_campana, id_contacto, 'Registrado']
+                    [id_campana, id_contacto, 'Invitado']
                 );
                 
                 let id_inscripcion;

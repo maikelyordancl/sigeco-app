@@ -142,9 +142,14 @@ exports.crearInscripcionPublica = async (req, res) => {
     }
 
     try {
+        const campana = await CampanaModel.findById(id_campana);
+        if (!campana) {
+            return res.status(404).json({ success: false, message: 'Campaña no válida.' });
+        }
+
         const campanaRules = await CampanaModel.findRulesById(id_campana);
         if (!campanaRules) {
-            return res.status(404).json({ success: false, message: 'Campaña no válida.' });
+            return res.status(404).json({ success: false, message: 'No se pudieron obtener las reglas de la campaña.' });
         }
 
         const ticket = campanaRules.obligatorio_pago ? await PagoModel.findTicketById(id_tipo_entrada) : null;
@@ -167,24 +172,31 @@ exports.crearInscripcionPublica = async (req, res) => {
                 if (file) {
                     value = `/uploads/inscripciones/${file.filename}`;
                 } else if (campo.es_obligatorio) {
-                    return res.status(400).json({ success: false, message: `El archivo para "${campo.etiqueta}" es obligatorio.` });
+                    return res.status(400).json({
+                        success: false,
+                        message: `El archivo para "${campo.etiqueta}" es obligatorio.`
+                    });
                 }
             }
-            
+
             if (campo.tipo_campo === 'CASILLAS' && typeof value === 'string') {
                 try {
                     const parsed = JSON.parse(value);
-                    if (Array.isArray(parsed)) { value = parsed; } 
-                    else if (parsed == null) { value = []; } 
-                    else { value = [String(parsed)]; }
+                    if (Array.isArray(parsed)) value = parsed;
+                    else if (parsed == null) value = [];
+                    else value = [String(parsed)];
                 } catch (e) {
                     console.warn(`Valor CASILLAS no es JSON válido para "${key}", usando fallback. Valor recibido:`, value);
                     value = value ? [String(value)] : [];
                 }
             }
-            
+
             const isArray = Array.isArray(value);
-            const isEmpty = value === undefined || value === null || (typeof value === 'string' && value.trim() === '') || (isArray && value.length === 0);
+            const isEmpty =
+                value === undefined ||
+                value === null ||
+                (typeof value === 'string' && value.trim() === '') ||
+                (isArray && value.length === 0);
 
             if (isEmpty) continue;
 
@@ -198,32 +210,74 @@ exports.crearInscripcionPublica = async (req, res) => {
             }
         }
 
+        // Buscar primero si el contacto ya existe
         let contacto = await ContactoModel.findByEmail(email);
 
+        // Buscar si ya tiene inscripción previa en esta campaña (ej: Invitado importado)
+        let inscripcionExistente = contacto
+            ? await InscripcionModel.findByCampanaAndContacto(id_campana, contacto.id_contacto)
+            : null;
+
+        // Blindaje backend:
+        // Si la campaña NO permite inscripción pública, solo puede avanzar
+        // quien ya tenga una inscripción previa en la campaña.
+        if (campana.inscripcion_libre === 0 && !inscripcionExistente) {
+            return res.status(403).json({
+                success: false,
+                message: 'Este es un evento por invitación y tu correo no se encuentra en la lista de asistentes.'
+            });
+        }
+
+        // Ahora sí, crear o actualizar contacto
         if (contacto) {
             await ContactoModel.updateById(contacto.id_contacto, datosContacto);
         } else {
-            const nuevoContacto = await ContactoModel.create({ ...datosContacto, email, recibir_mail: true });
+            const nuevoContacto = await ContactoModel.create({
+                ...datosContacto,
+                email,
+                recibir_mail: true
+            });
             contacto = { id_contacto: nuevoContacto.id_contacto };
         }
 
         let inscripcion = await InscripcionModel.findByCampanaAndContacto(id_campana, contacto.id_contacto);
+        const estadoPagoObjetivo = campanaRules.obligatorio_pago ? 'Pendiente' : 'No Aplica';
 
         if (inscripcion) {
             if (inscripcion.estado_pago === 'Pagado') {
-                return res.status(409).json({ success: false, message: 'Ya tienes una entrada válida para este evento.' });
+                return res.status(409).json({
+                    success: false,
+                    message: 'Ya tienes una entrada válida para este evento.'
+                });
             }
-            if (inscripcion.estado_pago === 'Fallido' || inscripcion.estado_pago === 'Pendiente') {
-                await InscripcionModel.update(inscripcion.id_inscripcion, { id_tipo_entrada: id_tipo_entrada || null });
+
+            // Al completar el formulario, queda registrado siempre.
+            // Si requiere pago, queda registrado + pago pendiente.
+            await InscripcionModel.update(inscripcion.id_inscripcion, {
+                id_tipo_entrada: id_tipo_entrada || null,
+                estado_asistencia: 'Registrado',
+                estado_pago: estadoPagoObjetivo
+            });
+
+            // Si estaba intentando pagar antes, anulamos pagos anteriores para dejar uno nuevo limpio.
+            if (campanaRules.obligatorio_pago) {
                 await PagoModel.anularPagosAnteriores(inscripcion.id_inscripcion);
             }
+
+            // Refrescamos el objeto local
+            inscripcion = {
+                ...inscripcion,
+                id_tipo_entrada: id_tipo_entrada || null,
+                estado_asistencia: 'Registrado',
+                estado_pago: estadoPagoObjetivo
+            };
         } else {
             inscripcion = await InscripcionModel.create({
                 id_campana,
                 id_contacto: contacto.id_contacto,
                 id_tipo_entrada: id_tipo_entrada || null,
                 estado_asistencia: 'Registrado',
-                estado_pago: campanaRules.obligatorio_pago ? 'Pendiente' : 'No Aplica',
+                estado_pago: estadoPagoObjetivo,
             });
         }
 
@@ -231,6 +285,7 @@ exports.crearInscripcionPublica = async (req, res) => {
             await FormularioModel.saveRespuestas(inscripcion.id_inscripcion, respuestasPersonalizadas);
         }
 
+        // Si requiere pago, ya quedó Registrado/Pendiente y ahora se deriva a Flow.
         if (campanaRules.obligatorio_pago) {
             const ordenCompra = `sigeco-insc-${inscripcion.id_inscripcion}-${Date.now()}`;
             const nuevoPago = await PagoModel.create({
@@ -246,17 +301,21 @@ exports.crearInscripcionPublica = async (req, res) => {
                     subject: `Entrada: ${ticket.nombre}`,
                     email: email,
                 });
+
                 await PagoModel.updateById(nuevoPago.id_pago, { token_flow: flowResponse.token });
-                return res.status(200).json({ success: true, redirectUrl: flowResponse.redirectUrl });
+
+                return res.status(200).json({
+                    success: true,
+                    redirectUrl: flowResponse.redirectUrl
+                });
             } catch (flowError) {
                 console.error('Error al crear orden de pago en Flow:', flowError);
-                let errorMsg = flowError.message || 'No se pudo crear la orden de pago.';
+                const errorMsg = flowError.message || 'No se pudo crear la orden de pago.';
                 return res.status(500).json({ success: false, message: errorMsg });
             }
         }
 
-        await InscripcionModel.update(inscripcion.id_inscripcion, { estado_asistencia: 'Registrado' });
-
+        // Flujo gratuito: ya quedó Registrado y se puede enviar confirmación
         const campanaData = await CampanaModel.findPublicDataById(id_campana);
         if (campanaData && campanaData.campana) {
             const { evento_nombre, fecha_inicio, fecha_fin, lugar } = campanaData.campana;
@@ -267,22 +326,19 @@ exports.crearInscripcionPublica = async (req, res) => {
                 event_location: lugar
             };
 
-            // --- INICIO DE LA MODIFICACIÓN ---
-            // Se elimina la condición de pago aquí, ya que el correo de pago se envía al confirmar el pago.
-            // Esta sección ahora solo se ejecuta para inscripciones gratuitas.
-            if (!campanaRules.obligatorio_pago) {
-                await emailService.sendConfirmationEmail(
-                    email, 
-                    datosContacto.nombre, 
-                    eventData,
-                    id_campana,
-                    inscripcion.id_inscripcion
-                );
-            }
-            // --- FIN DE LA MODIFICACIÓN ---
+            await emailService.sendConfirmationEmail(
+                email,
+                datosContacto.nombre,
+                eventData,
+                id_campana,
+                inscripcion.id_inscripcion
+            );
         }
 
-        return res.status(200).json({ success: true, message: 'Inscripción confirmada correctamente.' });
+        return res.status(200).json({
+            success: true,
+            message: 'Inscripción confirmada correctamente.'
+        });
 
     } catch (error) {
         console.error('Error al procesar inscripción:', error);
@@ -302,9 +358,19 @@ exports.getPagoByToken = async (req, res) => {
 
         if (pago && pago.estado !== nuestroEstado) {
             await PagoModel.updateById(pago.id_pago, { estado: nuestroEstado });
-            await InscripcionModel.update(pago.id_inscripcion, { estado_pago: nuestroEstado });
 
-            // --- INICIO DE LA ADICIÓN ---
+            // Actualizamos siempre el estado de pago en la inscripción.
+            // Si el pago fue exitoso, además la dejamos como Confirmado.
+            const dataInscripcion = {
+                estado_pago: nuestroEstado
+            };
+
+            if (nuestroEstado === 'Pagado') {
+                dataInscripcion.estado_asistencia = 'Confirmado';
+            }
+
+            await InscripcionModel.update(pago.id_inscripcion, dataInscripcion);
+
             // Si el pago fue exitoso, se envía el correo de confirmación.
             if (nuestroEstado === 'Pagado') {
                 const inscripcion = await InscripcionModel.findById(pago.id_inscripcion);
@@ -318,6 +384,7 @@ exports.getPagoByToken = async (req, res) => {
                         event_start_date: fecha_inicio,
                         event_location: lugar
                     };
+
                     await emailService.sendConfirmationEmail(
                         contacto.email,
                         contacto.nombre,
@@ -326,67 +393,75 @@ exports.getPagoByToken = async (req, res) => {
                     );
                 }
             }
-            // --- FIN DE LA ADICIÓN ---
         }
 
         const pagoDetails = await PagoModel.findByTokenWithDetails(token);
         if (!pagoDetails) {
             return res.status(404).json({ success: false, message: 'Pago no encontrado.' });
         }
+
         res.json({ success: true, data: pagoDetails });
     } catch (error) {
         console.error('Error al obtener detalles del pago:', error);
         res.status(500).json({ success: false, message: 'Error interno del servidor.' });
     }
 };
-
 /**
  * Webhook de Flow para confirmar pagos
  */
 exports.confirmarPagoFlow = async (req, res) => {
     try {
         const { token } = req.body;
+
         if (!token) {
             return res.status(400).send("Token no proporcionado");
         }
+
         const flowStatusResult = await FlowService.obtenerEstadoDelPago(token);
         const nuestroEstado = mapFlowStatus(flowStatusResult.status);
         const pago = await PagoModel.findByToken(token);
-        
-        if (pago && pago.estado !== 'Pagado') { // Asegurarse de no enviar correos duplicados
-            await PagoModel.updateById(pago.id_pago, { estado: nuestroEstado });
-            await InscripcionModel.update(pago.id_inscripcion, { estado_pago: nuestroEstado });
 
-            // --- INICIO DE LA ADICIÓN ---
-            // Si el pago fue exitoso, se envía el correo de confirmación.
+        if (pago && pago.estado !== 'Pagado') {
+            await PagoModel.updateById(pago.id_pago, { estado: nuestroEstado });
+
+            const dataInscripcion = { estado_pago: nuestroEstado };
+
+            // Cuando el pago se confirma, la inscripción pasa a Confirmado.
+            if (nuestroEstado === 'Pagado') {
+                dataInscripcion.estado_asistencia = 'Confirmado';
+            }
+
+            await InscripcionModel.update(pago.id_inscripcion, dataInscripcion);
+
             if (nuestroEstado === 'Pagado') {
                 const inscripcion = await InscripcionModel.findById(pago.id_inscripcion);
                 const contacto = await ContactoModel.findById(inscripcion.id_contacto);
                 const campanaData = await CampanaModel.findPublicDataById(inscripcion.id_campana);
-    
+
                 if (contacto && campanaData && campanaData.campana) {
                     const { evento_nombre, fecha_inicio, lugar } = campanaData.campana;
+
                     const eventData = {
                         event_name: evento_nombre,
                         event_start_date: fecha_inicio,
                         event_location: lugar
                     };
+
                     await emailService.sendConfirmationEmail(
                         contacto.email,
                         contacto.nombre,
                         eventData,
-                        inscripcion.id_campana // Se pasa el ID para la plantilla
+                        inscripcion.id_campana
                     );
                 }
             }
-            // --- FIN DE LA ADICIÓN ---
 
             console.log(`Webhook: Pago ${pago.id_pago} actualizado a estado: ${nuestroEstado}`);
         }
+
         res.status(200).send("Confirmación recibida");
     } catch (error) {
         console.error("Error en webhook de Flow:", error);
         res.status(500).send("Error interno");
     }
 };
-
