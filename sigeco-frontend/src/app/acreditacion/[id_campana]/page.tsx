@@ -35,21 +35,6 @@ type CampanaInfo = {
 
 type FiltroEstado = 'todos' | 'acreditados' | 'no_acreditados';
 
-// --- INICIO DE LA MODIFICACIÓN (Problema 1) ---
-/**
- * Normaliza un string: quita acentos y convierte a minúsculas.
- * Ej: "ROCÍO" -> "rocio"
- */
-const normalizeStr = (str: string | null | undefined): string => {
-  if (!str) return "";
-  return str
-    .toString()
-    .normalize("NFD") // Separa los caracteres base de los diacríticos (acentos)
-    .replace(/[\u0300-\u036f]/g, "") // Elimina los diacríticos
-    .toLowerCase(); // Convierte a minúsculas
-};
-// --- FIN DE LA MODIFICACIÓN ---
-
 export default function AcreditarCampanaPage() {
   const router = useRouter();
   const params = useParams();
@@ -57,7 +42,7 @@ export default function AcreditarCampanaPage() {
 
   const [asistentes, setAsistentes] = useState<Asistente[]>([]);
   const [camposFormulario, setCamposFormulario] = useState<CampoFormulario[]>([]);
-  const [searchTerm, _setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todos');
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -189,23 +174,8 @@ export default function AcreditarCampanaPage() {
       filtrados = filtrados.filter(a => a.estado_asistencia !== EstadoAsistencia.Asistio);
     }
 
-    // Filtro de búsqueda
-    if (searchTerm) {
-      // --- INICIO DE LA MODIFICACIÓN (Problema 1) ---
-      // 1. Normalizamos el término de búsqueda UNA sola vez
-      const normalizedSearchTerm = normalizeStr(searchTerm);
-      
-      filtrados = filtrados.filter(asistente =>
-        // 2. Iteramos sobre los valores y normalizamos CADA valor para comparar
-        Object.values(asistente).some(value =>
-          normalizeStr(value).includes(normalizedSearchTerm)
-        )
-      );
-      // --- FIN DE LA MODIFICACIÓN ---
-    }
-
     return filtrados;
-  }, [asistentes, searchTerm, isModalOpen, filtroEstado]);
+  }, [asistentes, isModalOpen, filtroEstado]);
 
   const handleUpdateStatus = async (
     id_inscripcion: number,
@@ -433,6 +403,8 @@ export default function AcreditarCampanaPage() {
             updatingId={updatingId}
             filtroEstado={filtroEstado}
             onFiltroChange={setFiltroEstado}
+            externalSearchTerm={searchTerm}
+            onSearchTermChange={setSearchTerm}
           />
         )}
       </div>
@@ -458,8 +430,17 @@ export default function AcreditarCampanaPage() {
             }
 
             toast.success('Asistente registrado con éxito!', { id: toastId });
+
+            const emailRegistrado =
+              payload?.contacto?.email ||
+              payload?.inscripcion?.email ||
+              payload?.email ||
+              '';
+
+            setFiltroEstado('todos');
+            setSearchTerm(emailRegistrado);
             setIsModalOpen(false);
-            fetchPageData(); // Refresca la lista de asistentes
+            await fetchPageData(); // Refresca la lista de asistentes
 
           } catch (error: any) {
             toast.error(error.message);

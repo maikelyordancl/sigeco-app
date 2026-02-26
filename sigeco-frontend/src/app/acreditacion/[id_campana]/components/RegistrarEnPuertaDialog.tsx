@@ -50,10 +50,15 @@ export type FormDataShape = {
   [key: string]: string | string[] | FileList | null | undefined | boolean;
 };
 
+const HIDDEN_FIELDS_IN_REGISTRO_EN_PUERTA = new Set([
+  "fecha_acreditacion",
+  "estado_asistencia",
+]);
+
 const generarSchemaValidacion = (campos: CampoFormulario[]) => {
   const shape: { [key: string]: yup.AnySchema } = {};
   campos.forEach((campo) => {
-    if (!campo.es_visible) return;
+    if (!campo.es_visible || HIDDEN_FIELDS_IN_REGISTRO_EN_PUERTA.has(campo.nombre_interno)) return;
 
     let validator: yup.AnySchema;
     switch (campo.tipo_campo) {
@@ -208,7 +213,10 @@ const RegistrarEnPuertaDialog = ({
 
         if (standardContactFields.has(key)) {
           datosContacto[key] = value;
-        } else if (key !== "acreditar_ahora" && key !== "estado_asistencia") {  // 👈 añade este filtro
+        } else if (
+          key !== "acreditar_ahora" &&
+          !HIDDEN_FIELDS_IN_REGISTRO_EN_PUERTA.has(key)
+        ) {
           const campoConfig = formConfig.find((c) => c.nombre_interno === key);
           if (campoConfig && value) {
             respuestas.push({
@@ -288,7 +296,9 @@ const RegistrarEnPuertaDialog = ({
   };
 
   const renderCampo = (campo: CampoFormulario) => {
-    if (!campo.es_visible) return null;
+    if (!campo.es_visible || HIDDEN_FIELDS_IN_REGISTRO_EN_PUERTA.has(campo.nombre_interno)) {
+      return null;
+    }
     const fieldName = campo.nombre_interno;
     const error = errors[fieldName];
     const etiqueta = fieldName === "nombre" ? "Nombre Completo" : campo.etiqueta;

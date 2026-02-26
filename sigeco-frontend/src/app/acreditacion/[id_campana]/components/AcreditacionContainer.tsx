@@ -2,7 +2,7 @@
 "use client";
 
 // --- NUEVA MODIFICACIÓN: Importar React hooks, Input y los iconos ---
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { Asistente, CampoFormulario, TipoCampo } from '../types';
 import { AcreditacionTable } from './AcreditacionTable';
@@ -25,6 +25,8 @@ interface AcreditacionContainerProps {
   // 3. Añadir los nuevos props a la interfaz
   filtroEstado: FiltroEstado;
   onFiltroChange: (filtro: FiltroEstado) => void;
+  externalSearchTerm?: string;
+  onSearchTermChange?: (value: string) => void;
 }
 
 export default function AcreditacionContainer({
@@ -35,6 +37,8 @@ export default function AcreditacionContainer({
   // 4. Recibir los nuevos props
   filtroEstado,
   onFiltroChange,
+  externalSearchTerm,
+  onSearchTermChange,
 }: AcreditacionContainerProps) {
   const params = useParams();
   const id_campana = String(params.id_campana || '');
@@ -45,8 +49,14 @@ export default function AcreditacionContainer({
   const customFieldsExist = camposFormulario.some(c => !c.es_de_sistema);
 
   // --- NUEVA MODIFICACIÓN: Estados para el buscador y el escáner ---
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(externalSearchTerm ?? "");
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof externalSearchTerm === 'string' && externalSearchTerm !== searchTerm) {
+      setSearchTerm(externalSearchTerm);
+    }
+  }, [externalSearchTerm, searchTerm]);
   // --- FIN NUEVA MODIFICACIÓN ---
 
   // --- NUEVA MODIFICACIÓN: Lógica del escáner ---
@@ -54,10 +64,15 @@ export default function AcreditacionContainer({
     // 1. Cerramos el diálogo
     setIsScannerOpen(false);
     // 2. Ponemos el ID en el buscador
-    setSearchTerm(scannedId);
+    handleSearchTermChange(scannedId);
     // Nota: El filtrado se hará automáticamente por el 'useMemo' de abajo
   };
   // --- FIN NUEVA MODIFICACIÓN ---
+
+  const handleSearchTermChange = (value: string) => {
+    setSearchTerm(value);
+    onSearchTermChange?.(value);
+  };
 
   // --- NUEVA MODIFICACIÓN: Lógica de filtrado ---
   // Filtramos los asistentes localmente basados en el buscador
@@ -110,7 +125,7 @@ export default function AcreditacionContainer({
           nombre ||
           String(asistente.id_inscripcion);
 
-        setSearchTerm(textoBusqueda);
+        handleSearchTermChange(textoBusqueda);
       }
     }
 
@@ -155,7 +170,7 @@ export default function AcreditacionContainer({
             <Input
               placeholder="Buscar por nombre, email, rut o ID..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => handleSearchTermChange(e.target.value)}
               className="pl-10 pr-10"
             />
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -164,7 +179,7 @@ export default function AcreditacionContainer({
             {searchTerm.trim().length > 0 && (
               <button
                 type="button"
-                onClick={() => setSearchTerm("")}
+                onClick={() => handleSearchTermChange("")}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
                 aria-label="Limpiar búsqueda"
                 title="Limpiar"

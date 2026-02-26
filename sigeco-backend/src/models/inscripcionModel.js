@@ -82,127 +82,155 @@ const Inscripcion = {
 
     // --- INICIO DE LA MODIFICACIÓN ---
     findWithCustomFieldsByCampanaId: async (id_campana, limit = 100, offset = 0, searchTerm = null, estadoFiltro = null) => {
-        
-        const whereConditions = ['i.id_campana = ?'];
-        const params = [id_campana];
+    // Obtenemos la configuración de la campaña/subevento para aplicar
+    // el filtro correcto de asistentes visibles en Acreditación.
+    const [campanaRulesRows] = await pool.execute(`
+        SELECT
+            COALESCE(s.obligatorio_registro, 0) AS obligatorio_registro,
+            COALESCE(s.obligatorio_pago, 0) AS obligatorio_pago
+        FROM campanas c
+        LEFT JOIN subeventos s ON c.id_subevento = s.id_subevento
+        WHERE c.id_campana = ?
+        LIMIT 1
+    `, [id_campana]);
 
-        if (estadoFiltro) {
-            whereConditions.push('i.estado_asistencia = ?');
-            params.push(estadoFiltro);
+    if (campanaRulesRows.length === 0) {
+        throw new Error('Campaña no encontrada.');
+    }
+
+    const obligatorioRegistro = Number(campanaRulesRows[0].obligatorio_registro) === 1;
+    const obligatorioPago = Number(campanaRulesRows[0].obligatorio_pago) === 1;
+
+    // Regla de negocio para Acreditación:
+    // - Si requiere registro o pago: solo pueden acreditarse Registrado y Confirmado,
+    //   pero también mostramos Asistió para mantener visibles los ya acreditados.
+    // - Si no requiere ni registro ni pago: mostramos Invitado, Registrado, Confirmado
+    //   y también Asistió.
+    // - Cancelado queda fuera por defecto.
+    const estadosPermitidos = (obligatorioRegistro || obligatorioPago)
+        ? ['Registrado', 'Confirmado', 'Asistió','Cancelado']
+        : ['Invitado', 'Registrado', 'Confirmado', 'Asistió','Cancelado'];
+
+    const whereConditions = ['i.id_campana = ?'];
+    const params = [id_campana];
+
+    // Filtro base por estados permitidos según configuración de campaña.
+    whereConditions.push(`i.estado_asistencia IN (${estadosPermitidos.map(() => '?').join(', ')})`);
+    params.push(...estadosPermitidos);
+
+    // Si el frontend manda un filtro por estado, se respeta
+    // siempre que siga dentro del universo permitido por campaña.
+    if (estadoFiltro) {
+        whereConditions.push('i.estado_asistencia = ?');
+        params.push(estadoFiltro);
+    }
+
+    if (searchTerm) {
+        const searchWords = searchTerm.split(' ').filter(Boolean);
+        if (searchWords.length > 0) {
+            const searchClauses = searchWords.map(word => {
+                const isOnlyDigits = /^[0-9]+$/.test(word);
+
+                const clauses = [
+                    'c.nombre LIKE ?',
+                    'c.email LIKE ?',
+                    'c.empresa LIKE ?',
+                    'c.rut LIKE ?'
+                ];
+
+                params.push(`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`);
+
+                if (isOnlyDigits) {
+                    clauses.push('i.id_inscripcion = ?');
+                    params.push(word);
+                }
+
+                return `(${clauses.join(' OR ')})`;
+            });
+
+            whereConditions.push(`(${searchClauses.join(' AND ')})`);
         }
+    }
 
-        if (searchTerm) {
-            const searchWords = searchTerm.split(' ').filter(Boolean);
-            if (searchWords.length > 0) {
-                
-                // Lógica de búsqueda modificada
-                const searchClauses = searchWords.map(word => {
-                    // Verificamos si la palabra de búsqueda son solo dígitos
-                    const isOnlyDigits = /^[0-9]+$/.test(word);
-                    
-                    const clauses = [
-                        'c.nombre LIKE ?',
-                        'c.email LIKE ?',
-                        'c.empresa LIKE ?',
-                        'c.rut LIKE ?'
-                    ];
-                    // Agregamos los parámetros para los LIKE
-                    params.push(`%${word}%`, `%${word}%`, `%${word}%`, `%${word}%`);
+    const whereClause = whereConditions.length > 1
+        ? `WHERE ${whereConditions.join(' AND ')}`
+        : `WHERE ${whereConditions[0]}`;
 
-                    // Si son solo dígitos, añadimos la búsqueda por ID de inscripción
-                    if (isOnlyDigits) {
-                        clauses.push('i.id_inscripcion = ?');
-                        params.push(word); // Pasamos el número exacto
-                    }
-                    
-                    return `(${clauses.join(' OR ')})`;
-                });
-                
-                whereConditions.push(`(${searchClauses.join(' AND ')})`);
-            }
-        }
-        
-        const whereClause = whereConditions.length > 1 ? `WHERE ${whereConditions.join(' AND ')}` : `WHERE ${whereConditions[0]}`;
+    const countQuery = `
+        SELECT 
+            COUNT(*) AS total,
+            SUM(CASE WHEN estado_asistencia = 'Invitado' THEN 1 ELSE 0 END) AS "Invitado",
+            SUM(CASE WHEN estado_asistencia = 'Abrio Email' THEN 1 ELSE 0 END) AS "Abrio Email",
+            SUM(CASE WHEN estado_asistencia = 'Registrado' THEN 1 ELSE 0 END) AS "Registrado",
+            SUM(CASE WHEN estado_asistencia = 'Confirmado' THEN 1 ELSE 0 END) AS "Confirmado",
+            SUM(CASE WHEN estado_asistencia = 'Por Confirmar' THEN 1 ELSE 0 END) AS "Por Confirmar",
+            SUM(CASE WHEN estado_asistencia = 'Asistió' THEN 1 ELSE 0 END) AS "Asistió",
+            SUM(CASE WHEN estado_asistencia = 'No Asiste' THEN 1 ELSE 0 END) AS "No Asiste",
+            SUM(CASE WHEN estado_asistencia = 'Cancelado' THEN 1 ELSE 0 END) AS "Cancelado"
+        FROM inscripciones i
+        JOIN contactos c ON i.id_contacto = c.id_contacto
+        ${whereClause} 
+    `;
 
-        // 1. Consulta para obtener los conteos por estado y el total de inscripciones (AHORA CON FILTROS)
-        const countQuery = `
-            SELECT 
-                COUNT(*) AS total,
-                SUM(CASE WHEN estado_asistencia = 'Invitado' THEN 1 ELSE 0 END) AS "Invitado",
-                SUM(CASE WHEN estado_asistencia = 'Abrio Email' THEN 1 ELSE 0 END) AS "Abrio Email",
-                SUM(CASE WHEN estado_asistencia = 'Registrado' THEN 1 ELSE 0 END) AS "Registrado",
-                SUM(CASE WHEN estado_asistencia = 'Confirmado' THEN 1 ELSE 0 END) AS "Confirmado",
-                SUM(CASE WHEN estado_asistencia = 'Por Confirmar' THEN 1 ELSE 0 END) AS "Por Confirmar",
-                SUM(CASE WHEN estado_asistencia = 'Asistió' THEN 1 ELSE 0 END) AS "Asistió",
-                SUM(CASE WHEN estado_asistencia = 'No Asiste' THEN 1 ELSE 0 END) AS "No Asiste",
-                SUM(CASE WHEN estado_asistencia = 'Cancelado' THEN 1 ELSE 0 END) AS "Cancelado"
-            FROM inscripciones i
-            JOIN contactos c ON i.id_contacto = c.id_contacto
-            ${whereClause} 
-        `;
-        
-        const [countRows] = await pool.execute(countQuery, params);
-        const counts = countRows[0];
-        const totalInscripciones = counts.total || 0;
-        
-        const statusCounts = {
-            "Invitado": parseInt(counts["Invitado"] || 0),
-            "Abrio Email": parseInt(counts["Abrio Email"] || 0),
-            "Registrado": parseInt(counts["Registrado"] || 0),
-            "Confirmado": parseInt(counts["Confirmado"] || 0),
-            "Por Confirmar": parseInt(counts["Por Confirmar"] || 0),
-            "Asistió": parseInt(counts["Asistió"] || 0),
-            "No Asiste": parseInt(counts["No Asiste"] || 0),
-            "Cancelado": parseInt(counts["Cancelado"] || 0)
-        };
-        
-        // 2. Obtener los campos personalizados (esto no cambia)
-        const [campos] = await pool.execute(
-            `SELECT fc.id_campo, fc.nombre_interno, fc.etiqueta 
-             FROM campana_formulario_config cfc
-             JOIN formulario_campos fc ON cfc.id_campo = fc.id_campo
-             WHERE cfc.id_campana = ? AND fc.es_de_sistema = 0`,
-            [id_campana]
-        );
+    const [countRows] = await pool.execute(countQuery, params);
+    const counts = countRows[0];
+    const totalInscripciones = counts.total || 0;
 
-        let customFieldsSelect = '';
-        if (campos.length > 0) {
-            customFieldsSelect = campos.map(campo =>
-                `MAX(CASE WHEN ir.id_campo = ${campo.id_campo} THEN ir.valor END) AS \`${campo.nombre_interno}\``
-            ).join(', ');
-        }
-        
-        // 3. Consulta principal para obtener los datos paginados (AHORA CON FILTROS)
-        const dataQuery = `
-            SELECT 
-                ROW_NUMBER() OVER (ORDER BY i.fecha_inscripcion ASC) as '#',
-                i.id_inscripcion, i.estado_asistencia, i.fecha_acreditacion, i.estado_pago, i.nota,
-                c.id_contacto, c.nombre, c.email, c.telefono, c.rut, c.empresa, c.actividad, c.profesion, c.pais, c.comuna,
-                p.id_pago, p.monto, p.estado AS estado_transaccion,
-                te.nombre AS tipo_entrada
-                ${customFieldsSelect ? `, ${customFieldsSelect}` : ''}
-            FROM inscripciones i
-            JOIN contactos c ON i.id_contacto = c.id_contacto
-            LEFT JOIN inscripcion_respuestas ir ON i.id_inscripcion = ir.id_inscripcion
-            LEFT JOIN pagos p ON i.id_inscripcion = p.id_inscripcion
-            LEFT JOIN tipos_de_entrada te ON i.id_tipo_entrada = te.id_tipo_entrada
-            ${whereClause}
-            GROUP BY i.id_inscripcion
-            ORDER BY i.fecha_inscripcion ASC
-            LIMIT ? OFFSET ?
-        `;
+    const statusCounts = {
+        "Invitado": parseInt(counts["Invitado"] || 0),
+        "Abrio Email": parseInt(counts["Abrio Email"] || 0),
+        "Registrado": parseInt(counts["Registrado"] || 0),
+        "Confirmado": parseInt(counts["Confirmado"] || 0),
+        "Por Confirmar": parseInt(counts["Por Confirmar"] || 0),
+        "Asistió": parseInt(counts["Asistió"] || 0),
+        "No Asiste": parseInt(counts["No Asiste"] || 0),
+        "Cancelado": parseInt(counts["Cancelado"] || 0)
+    };
 
-        // Los parámetros ya están en el orden correcto
-        const finalParams = [...params, limit, offset];
-        const [rows] = await pool.execute(dataQuery, finalParams);
-        
-        return {
-            asistentes: rows,
-            totalInscripciones,
-            totalPages: Math.ceil(totalInscripciones / limit),
-            statusCounts
-        };
-    },
+    const [campos] = await pool.execute(
+        `SELECT fc.id_campo, fc.nombre_interno, fc.etiqueta 
+         FROM campana_formulario_config cfc
+         JOIN formulario_campos fc ON cfc.id_campo = fc.id_campo
+         WHERE cfc.id_campana = ? AND fc.es_de_sistema = 0`,
+        [id_campana]
+    );
+
+    let customFieldsSelect = '';
+    if (campos.length > 0) {
+        customFieldsSelect = campos.map(campo =>
+            `MAX(CASE WHEN ir.id_campo = ${campo.id_campo} THEN ir.valor END) AS \`${campo.nombre_interno}\``
+        ).join(', ');
+    }
+
+    const dataQuery = `
+        SELECT 
+            ROW_NUMBER() OVER (ORDER BY i.fecha_inscripcion ASC) as '#',
+            i.id_inscripcion, i.estado_asistencia, i.fecha_acreditacion, i.estado_pago, i.nota,
+            c.id_contacto, c.nombre, c.email, c.telefono, c.rut, c.empresa, c.actividad, c.profesion, c.pais, c.comuna,
+            p.id_pago, p.monto, p.estado AS estado_transaccion,
+            te.nombre AS tipo_entrada
+            ${customFieldsSelect ? `, ${customFieldsSelect}` : ''}
+        FROM inscripciones i
+        JOIN contactos c ON i.id_contacto = c.id_contacto
+        LEFT JOIN inscripcion_respuestas ir ON i.id_inscripcion = ir.id_inscripcion
+        LEFT JOIN pagos p ON i.id_inscripcion = p.id_inscripcion
+        LEFT JOIN tipos_de_entrada te ON i.id_tipo_entrada = te.id_tipo_entrada
+        ${whereClause}
+        GROUP BY i.id_inscripcion
+        ORDER BY i.fecha_inscripcion ASC
+        LIMIT ? OFFSET ?
+    `;
+
+    const finalParams = [...params, limit, offset];
+    const [rows] = await pool.execute(dataQuery, finalParams);
+
+    return {
+        asistentes: rows,
+        totalInscripciones,
+        totalPages: Math.ceil(totalInscripciones / limit),
+        statusCounts
+    };
+},
     // --- FIN DE LA MODIFICACIÓN ---
 
     updateStatus: async (id_inscripcion, estado_asistencia) => {
