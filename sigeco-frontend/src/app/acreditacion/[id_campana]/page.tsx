@@ -380,14 +380,13 @@ export default function AcreditarCampanaPage() {
 
             <div className="flex flex-col flex-1 gap-2">
               <div className="flex gap-2">
-                {campanaInfo && !campanaInfo.obligatorio_pago && (
-                  <Button
-                    onClick={() => setIsModalOpen(true)}
-                    className="bg-blue-600 hover:bg-blue-700 w-full"
-                  >
-                    <PlusCircle className="mr-2 h-4 w-4" /> Registrar en Puerta
-                  </Button>
-                )}
+                <Button
+  onClick={() => setIsModalOpen(true)}
+  className="bg-blue-600 hover:bg-blue-700 w-full"
+  disabled={!campanaInfo}
+>
+  <PlusCircle className="mr-2 h-4 w-4" /> Registrar en Puerta
+</Button>
               </div>
             </div>
           </CardContent>
