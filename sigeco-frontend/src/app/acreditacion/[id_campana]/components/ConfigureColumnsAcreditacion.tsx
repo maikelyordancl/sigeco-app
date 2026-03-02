@@ -7,7 +7,7 @@ import {
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Settings2 } from "lucide-react";
@@ -22,7 +22,7 @@ interface ConfigureColumnsProps {
 export function ConfigureColumnsAcreditacion({
   camposFormulario,
   visibleColumns,
-  toggleColumnVisibility
+  toggleColumnVisibility,
 }: ConfigureColumnsProps) {
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
@@ -34,7 +34,7 @@ export function ConfigureColumnsAcreditacion({
     });
   }, [open]);
 
-  const unhideableColumns = ["nombre", "email"];
+  const unhideableColumns = ["nombre", "email", "nivel", "estado_acreditacion"];
 
   const configurableSystemFields = [
     "rut",
@@ -44,7 +44,8 @@ export function ConfigureColumnsAcreditacion({
     "pais",
     "comuna",
     "fecha_acreditacion",
-    "estado_asistencia"
+    "fecha_creacion_contacto",
+    "estado_pago",
   ];
 
   return (
@@ -62,13 +63,10 @@ export function ConfigureColumnsAcreditacion({
         side="bottom"
         sideOffset={8}
         collisionPadding={16 as unknown as number}
-        // ✅ clave: usar la altura disponible real del popper (se ajusta a zoom/viewport)
         style={{
-          maxHeight:
-            "min(calc(100vh - 2rem), var(--radix-popper-available-height))"
+          maxHeight: "min(calc(100vh - 2rem), var(--radix-popper-available-height))",
         }}
         className="w-80 overflow-y-auto overflow-x-hidden p-0"
-        // ✅ asegura que el scroll quede dentro del menú
         onWheelCapture={(e) => e.stopPropagation()}
         onTouchMoveCapture={(e) => e.stopPropagation()}
       >
@@ -91,9 +89,7 @@ export function ConfigureColumnsAcreditacion({
               <DropdownMenuCheckboxItem
                 key={campo.id_campo}
                 checked={visibleColumns.includes(campo.nombre_interno)}
-                onCheckedChange={() =>
-                  toggleColumnVisibility(campo.nombre_interno)
-                }
+                onCheckedChange={() => toggleColumnVisibility(campo.nombre_interno)}
                 disabled={unhideableColumns.includes(campo.nombre_interno)}
               >
                 {campo.etiqueta}

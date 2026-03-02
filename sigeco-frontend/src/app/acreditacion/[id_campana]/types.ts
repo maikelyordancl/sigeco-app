@@ -5,15 +5,39 @@ export interface Inscripcion {
   id_contacto: number;
   nombre: string;
   email: string;
+
+  /**
+   * Nivel real del inscrito (ej: Invitado, Registrado, Confirmado).
+   * Lo normalizamos en frontend para no depender de cómo venga el backend.
+   */
+  nivel?: string | null;
+
+  /**
+   * Estado de acreditación real para la UI:
+   * Pendiente | Acreditado | Denegado
+   */
+  estado_acreditacion?: "Pendiente" | "Acreditado" | "Denegado" | string | null;
+
   /**
    * Fecha/hora en la que se acreditó (ISO string).
-   * Puede venir null si aún no se acredita.
    */
   fecha_acreditacion?: string | null;
+
+  /**
+   * Fecha/hora de creación del contacto (ISO string).
+   */
+  fecha_creacion_contacto?: string | null;
+
   telefono?: string;
   rut?: string;
   empresa?: string;
-  estado_asistencia:
+
+  /**
+   * Campo legacy del backend, hoy mezclado en algunos casos.
+   * Puede traer nivel real (Confirmado, Registrado, etc.)
+   * o estados usados para acreditación (Asistió, Cancelado).
+   */
+  estado_asistencia?:
     | "Invitado"
     | "Registrado"
     | "Confirmado"
@@ -21,8 +45,21 @@ export interface Inscripcion {
     | "No Asiste"
     | "Cancelado"
     | "Por Confirmar"
-    | "Abrio Email";
+    | "Abrio Email"
+    | string
+    | null;
+
+  /**
+   * Estado del pago cuando el evento/campaña lo usa.
+   */
+  estado_pago?: string | null;
+  estado_transaccion?: string | null;
+  id_pago?: number | null;
+  monto?: number | null;
+  tipo_entrada?: string | null;
+
   nota?: string;
+
   [key: string]: any; // Para campos dinámicos
 }
 
@@ -38,7 +75,6 @@ export interface CampoFormulario {
     | "CASILLAS"
     | "ARCHIVO";
 
-  // Aceptamos el formato de array que viene de la base de datos.
   opciones?: string[] | { id_opcion: number; etiqueta_opcion: string }[];
 
   es_de_sistema: boolean;

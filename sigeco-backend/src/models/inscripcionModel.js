@@ -230,7 +230,7 @@ const Inscripcion = {
         SELECT 
             ROW_NUMBER() OVER (ORDER BY i.fecha_inscripcion ASC) as '#',
             i.id_inscripcion, i.estado_asistencia, i.fecha_acreditacion, i.estado_pago, i.nota,
-            c.id_contacto, c.nombre, c.email, c.telefono, c.rut, c.empresa, c.actividad, c.profesion, c.pais, c.comuna,
+            c.id_contacto, c.nombre, c.email, c.telefono, c.rut, c.empresa, c.actividad, c.profesion, c.pais, c.comuna, c.fecha_creado AS fecha_creacion_contacto,
             p.id_pago, p.monto, p.estado AS estado_transaccion,
             te.nombre AS tipo_entrada
             ${customFieldsSelect ? `, ${customFieldsSelect}` : ''}
@@ -268,7 +268,7 @@ const Inscripcion = {
     updateNota: async (id_inscripcion, nota) => {
         const [result] = await pool.execute(
             'UPDATE inscripciones SET nota = ? WHERE id_inscripcion = ?',
-            [nota, id_inscripcion]
+            [id_inscripcion, nota]
         );
         return result.affectedRows > 0;
     },
@@ -477,4 +477,4 @@ const Inscripcion = {
 
 };
 
-module.exports = Inscripcion;
+module.exports = Inscripcion;   

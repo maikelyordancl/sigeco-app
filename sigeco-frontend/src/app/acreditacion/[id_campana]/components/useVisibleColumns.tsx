@@ -1,40 +1,49 @@
 "use client";
-import { useState, useEffect } from 'react';
-import { CampoFormulario } from '../types';
 
-export const useVisibleColumns = (camposFormulario: CampoFormulario[], idCampana: string) => {
+import { useState, useEffect } from "react";
+import { CampoFormulario } from "../types";
+
+export const useVisibleColumns = (
+  camposFormulario: CampoFormulario[],
+  idCampana: string
+) => {
   const storageKey = `visibleColumns_${idCampana}`;
 
-  // Columnas que NUNCA se pueden ocultar
-  const unhideableColumns = ['nombre', 'email'];
+  // NUNCA se pueden ocultar
+  const unhideableColumns = ["nombre", "email", "nivel", "estado_acreditacion"];
 
-  // Columnas visibles por defecto al cargar la página por primera vez.
-  // Ahora solo son 'nombre' y 'email'.
-  const defaultVisibleColumns = ['nombre', 'email'];
+  // Visibles por defecto
+  const defaultVisibleColumns = [
+    "nombre",
+    "email",
+    "nivel",
+    "estado_acreditacion",
+    "estado_pago",
+    "fecha_creacion_contacto",
+  ];
 
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
-    // Intentamos leer desde localStorage directamente en la inicialización.
     try {
       const item = window.localStorage.getItem(storageKey);
+
       if (item) {
         const storedColumns: string[] = JSON.parse(item);
-        // Nos aseguramos de que las columnas no ocultables siempre estén presentes.
-        unhideableColumns.forEach(col => {
-            if (!storedColumns.includes(col)) {
-                storedColumns.push(col)
-            }
+
+        unhideableColumns.forEach((col) => {
+          if (!storedColumns.includes(col)) {
+            storedColumns.push(col);
+          }
         });
+
         return storedColumns;
       }
     } catch (error) {
       console.log("Error reading from localStorage during init", error);
     }
-    
-    // Si no hay nada en localStorage, usamos los valores por defecto.
+
     return [...defaultVisibleColumns];
   });
 
-  // Guardar en localStorage cada vez que las columnas visibles cambien.
   useEffect(() => {
     try {
       window.localStorage.setItem(storageKey, JSON.stringify(visibleColumns));
@@ -44,21 +53,18 @@ export const useVisibleColumns = (camposFormulario: CampoFormulario[], idCampana
   }, [visibleColumns, storageKey]);
 
   const toggleColumnVisibility = (nombre_interno: string) => {
-    // Prevenir que las columnas no ocultables sean removidas.
     if (unhideableColumns.includes(nombre_interno)) {
       return;
     }
 
-    setVisibleColumns(prev => {
+    setVisibleColumns((prev) => {
       const isVisible = prev.includes(nombre_interno);
+
       if (isVisible) {
-        // Si la columna está visible, la quitamos.
-        return prev.filter(col => col !== nombre_interno);
-      } else {
-        // Si no está visible, la añadimos al final del array.
-        // Esto la colocará después de 'email' y antes de 'Acción'.
-        return [...prev, nombre_interno];
+        return prev.filter((col) => col !== nombre_interno);
       }
+
+      return [...prev, nombre_interno];
     });
   };
 
