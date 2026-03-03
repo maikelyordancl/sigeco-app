@@ -183,6 +183,7 @@ const GestionCampanasPage = () => {
             )}
             {campana.obligatorio_registro && !campana.obligatorio_pago && (
               <>
+                <p>Invitados: <span className="font-bold">{campana.invitados || 0}</span></p>
                 <p>Registrados: <span className="font-bold">{campana.registrados || 0}</span></p>
                 <p>Confirmados: <span className="font-bold">{campana.confirmados || 0}</span></p>
                 <p>Asistieron: <span className="font-bold">{campana.asistieron || 0}</span></p>
@@ -190,6 +191,7 @@ const GestionCampanasPage = () => {
             )}
             {campana.obligatorio_registro && campana.obligatorio_pago && (
               <>
+                <p>Invitados: <span className="font-bold">{campana.invitados || 0}</span></p>
                 <p>Registrados: <span className="font-bold">{campana.registrados || 0}</span></p>
                 <p>Confirmados: <span className="font-bold">{campana.confirmados || 0}</span></p>
                 <p>Pagados: <span className="font-bold text-green-600">{campana.pagados || 0}</span></p>

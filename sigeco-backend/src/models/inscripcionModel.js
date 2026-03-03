@@ -132,8 +132,8 @@ const Inscripcion = {
     //   y también Asistió.
     // - Cancelado queda fuera por defecto.
     const estadosPermitidos = (obligatorioRegistro || obligatorioPago)
-        ? ['Registrado', 'Confirmado', 'Asistió','Cancelado']
-        : ['Invitado', 'Registrado', 'Confirmado', 'Asistió','Cancelado'];
+    ? ['Invitado', 'Registrado', 'Confirmado', 'Asistió', 'Cancelado']
+    : ['Invitado', 'Registrado', 'Confirmado', 'Asistió', 'Cancelado'];
 
     const whereConditions = ['i.id_campana = ?'];
     const params = [id_campana];
