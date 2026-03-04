@@ -105,12 +105,56 @@ function isPagadoValue(value: any): boolean {
   ].includes(normalized);
 }
 
+function normalizeMoneyNumber(value: any): number {
+  if (value === null || typeof value === "undefined" || value === "") return 0;
+
+  const parsed =
+    typeof value === "number"
+      ? value
+      : Number(String(value).replace(/\./g, "").replace(",", "."));
+
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatCurrencyCLP(value: any): string {
+  const num = normalizeMoneyNumber(value);
+
+  return new Intl.NumberFormat("es-CL", {
+    style: "currency",
+    currency: "CLP",
+    maximumFractionDigits: 0,
+  }).format(num);
+}
+
+function deriveMontoPagadoActual(asistente: any): number {
+  const fromBackend =
+    asistente?.monto_pagado_actual ??
+    asistente?.monto_pagado_manual ??
+    null;
+
+  if (fromBackend !== null && typeof fromBackend !== "undefined" && fromBackend !== "") {
+    return normalizeMoneyNumber(fromBackend);
+  }
+
+  const montoPagoLegacy = asistente?.monto ?? 0;
+
+  if (isPagadoValue(asistente?.estado_pago) || isPagadoValue(asistente?.estado_transaccion)) {
+    return normalizeMoneyNumber(montoPagoLegacy);
+  }
+
+  return 0;
+}
+
 function normalizeAsistente(raw: any): Asistente {
+  const montoPagadoActual = deriveMontoPagadoActual(raw);
+
   return {
     ...raw,
     nivel: deriveNivel(raw),
     estado_acreditacion: deriveEstadoAcreditacion(raw),
     fecha_creacion_contacto: deriveFechaCreacionContacto(raw),
+    monto_pagado_actual: montoPagadoActual,
+    monto_pagado_actual_formateado: formatCurrencyCLP(montoPagadoActual),
   };
 }
 
@@ -234,6 +278,17 @@ export default function AcreditarCampanaPage() {
           tipo_campo: "TEXTO_CORTO",
           es_obligatorio: false,
           orden: -996,
+        });
+
+        systemFields.push({
+          id_campo: -6,
+          nombre_interno: "monto_pagado_actual",
+          etiqueta: "Monto pagado",
+          es_visible: true,
+          es_de_sistema: true,
+          tipo_campo: "TEXTO_CORTO",
+          es_obligatorio: false,
+          orden: -995,
         });
       }
 
@@ -389,8 +444,12 @@ export default function AcreditarCampanaPage() {
     const acreditados = list.filter((a) => a.estado_acreditacion === "Acreditado").length;
     const pendientes = total - acreditados;
     const pagados = list.filter((a) => isPagadoValue((a as any).estado_pago)).length;
+    const totalRecaudado = list.reduce(
+      (acc, a) => acc + normalizeMoneyNumber((a as any).monto_pagado_actual),
+      0
+    );
 
-    return { total, acreditados, pendientes, pagados };
+    return { total, acreditados, pendientes, pagados, totalRecaudado };
   }, [asistentes]);
 
   return (
@@ -428,7 +487,14 @@ export default function AcreditarCampanaPage() {
           </CardHeader>
 
           <CardContent className="flex flex-col lg:flex-row gap-4">
-            <div className="grid grid-cols-4 gap-4 flex-1">
+            <div
+              className="grid gap-4 flex-1"
+              style={{
+                gridTemplateColumns: campanaInfo?.obligatorio_pago
+                  ? "repeat(5, minmax(0, 1fr))"
+                  : "repeat(3, minmax(0, 1fr))",
+              }}
+            >
               <div className="p-4 border rounded-lg text-center">
                 <p className="text-sm text-gray-500">Total</p>
                 <p className="text-2xl font-bold">{stats.total}</p>
@@ -445,10 +511,19 @@ export default function AcreditarCampanaPage() {
               </div>
 
               {campanaInfo?.obligatorio_pago && (
-                <div className="p-4 border rounded-lg text-center">
-                  <p className="text-sm text-gray-500">Pagados</p>
-                  <p className="text-2xl font-bold text-emerald-600">{stats.pagados}</p>
-                </div>
+                <>
+                  <div className="p-4 border rounded-lg text-center">
+                    <p className="text-sm text-gray-500">Pagados</p>
+                    <p className="text-2xl font-bold text-emerald-600">{stats.pagados}</p>
+                  </div>
+
+                  <div className="p-4 border rounded-lg text-center">
+                    <p className="text-sm text-gray-500">Total recaudado</p>
+                    <p className="text-2xl font-bold text-blue-600">
+                      {formatCurrencyCLP(stats.totalRecaudado)}
+                    </p>
+                  </div>
+                </>
               )}
             </div>
 
@@ -493,6 +568,7 @@ export default function AcreditarCampanaPage() {
               "fecha_acreditacion",
               "fecha_creacion_contacto",
               "estado_pago",
+              "monto_pagado_actual",
             ].includes(c.nombre_interno)
         )}
         isSubmitting={false}

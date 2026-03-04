@@ -7,14 +7,25 @@ const FlowService = require('../services/flowService');
 const FormularioModel = require('../models/formularioModel'); // Para campos personalizados
 const emailService = require('../services/emailService'); // Importar el nuevo servicio de correo
 
-// Mapea el estado numérico de Flow a nuestro estado de texto
-const mapFlowStatus = (flowStatus) => {
+// Mapea el estado numérico de Flow al estado de la tabla pagos
+const mapFlowPagoStatus = (flowStatus) => {
     switch (flowStatus) {
         case 1: return 'Pendiente';
         case 2: return 'Pagado';
         case 3: return 'Fallido';
         case 4: return 'Anulado';
         default: return 'Fallido';
+    }
+};
+
+// Mapea el estado numérico de Flow al estado compatible con inscripciones.estado_pago
+const mapFlowInscripcionStatus = (flowStatus) => {
+    switch (flowStatus) {
+        case 1: return 'Pendiente';
+        case 2: return 'Pagado';
+        case 3: return 'Rechazado';
+        case 4: return 'Rechazado';
+        default: return 'Rechazado';
     }
 };
 
@@ -353,26 +364,27 @@ exports.getPagoByToken = async (req, res) => {
     try {
         const { token } = req.params;
         const flowStatusResult = await FlowService.obtenerEstadoDelPago(token);
-        const nuestroEstado = mapFlowStatus(flowStatusResult.status);
+        const estadoPagoFlow = mapFlowPagoStatus(flowStatusResult.status);
+        const estadoPagoInscripcion = mapFlowInscripcionStatus(flowStatusResult.status);
         const pago = await PagoModel.findByToken(token);
 
-        if (pago && pago.estado !== nuestroEstado) {
-            await PagoModel.updateById(pago.id_pago, { estado: nuestroEstado });
+        if (pago && pago.estado !== estadoPagoFlow) {
+            await PagoModel.updateById(pago.id_pago, { estado: estadoPagoFlow });
 
             // Actualizamos siempre el estado de pago en la inscripción.
             // Si el pago fue exitoso, además la dejamos como Confirmado.
             const dataInscripcion = {
-                estado_pago: nuestroEstado
+                estado_pago: estadoPagoInscripcion
             };
 
-            if (nuestroEstado === 'Pagado') {
+            if (estadoPagoInscripcion === 'Pagado') {
                 dataInscripcion.estado_asistencia = 'Confirmado';
             }
 
             await InscripcionModel.update(pago.id_inscripcion, dataInscripcion);
 
             // Si el pago fue exitoso, se envía el correo de confirmación.
-            if (nuestroEstado === 'Pagado') {
+            if (estadoPagoInscripcion === 'Pagado') {
                 const inscripcion = await InscripcionModel.findById(pago.id_inscripcion);
                 const contacto = await ContactoModel.findById(inscripcion.id_contacto);
                 const campanaData = await CampanaModel.findPublicDataById(inscripcion.id_campana);
@@ -389,7 +401,8 @@ exports.getPagoByToken = async (req, res) => {
                         contacto.email,
                         contacto.nombre,
                         eventData,
-                        inscripcion.id_campana // Se pasa el ID para la plantilla
+                        inscripcion.id_campana, // Se pasa el ID para la plantilla
+                        inscripcion.id_inscripcion
                     );
                 }
             }
@@ -418,22 +431,23 @@ exports.confirmarPagoFlow = async (req, res) => {
         }
 
         const flowStatusResult = await FlowService.obtenerEstadoDelPago(token);
-        const nuestroEstado = mapFlowStatus(flowStatusResult.status);
+        const estadoPagoFlow = mapFlowPagoStatus(flowStatusResult.status);
+        const estadoPagoInscripcion = mapFlowInscripcionStatus(flowStatusResult.status);
         const pago = await PagoModel.findByToken(token);
 
-        if (pago && pago.estado !== 'Pagado') {
-            await PagoModel.updateById(pago.id_pago, { estado: nuestroEstado });
+        if (pago && pago.estado !== estadoPagoFlow) {
+            await PagoModel.updateById(pago.id_pago, { estado: estadoPagoFlow });
 
-            const dataInscripcion = { estado_pago: nuestroEstado };
+            const dataInscripcion = { estado_pago: estadoPagoInscripcion };
 
             // Cuando el pago se confirma, la inscripción pasa a Confirmado.
-            if (nuestroEstado === 'Pagado') {
+            if (estadoPagoInscripcion === 'Pagado') {
                 dataInscripcion.estado_asistencia = 'Confirmado';
             }
 
             await InscripcionModel.update(pago.id_inscripcion, dataInscripcion);
 
-            if (nuestroEstado === 'Pagado') {
+            if (estadoPagoInscripcion === 'Pagado') {
                 const inscripcion = await InscripcionModel.findById(pago.id_inscripcion);
                 const contacto = await ContactoModel.findById(inscripcion.id_contacto);
                 const campanaData = await CampanaModel.findPublicDataById(inscripcion.id_campana);
@@ -451,12 +465,13 @@ exports.confirmarPagoFlow = async (req, res) => {
                         contacto.email,
                         contacto.nombre,
                         eventData,
-                        inscripcion.id_campana
+                        inscripcion.id_campana,
+                        inscripcion.id_inscripcion
                     );
                 }
             }
 
-            console.log(`Webhook: Pago ${pago.id_pago} actualizado a estado: ${nuestroEstado}`);
+            console.log(`Webhook: Pago ${pago.id_pago} actualizado a estado: ${estadoPagoFlow}`);
         }
 
         res.status(200).send("Confirmación recibida");

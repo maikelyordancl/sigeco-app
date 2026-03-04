@@ -322,6 +322,7 @@ export function PermissionsDialog({ isOpen, setIsOpen, user }: Props) {
                           <SelectContent>
                             <SelectItem value="eventos">Eventos</SelectItem>
                             <SelectItem value="acreditacion">Acreditacion</SelectItem>
+                            <SelectItem value="tesoreria">Tesorería</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>

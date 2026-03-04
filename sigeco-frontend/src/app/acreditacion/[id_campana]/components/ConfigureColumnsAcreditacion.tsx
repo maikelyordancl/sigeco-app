@@ -37,16 +37,17 @@ export function ConfigureColumnsAcreditacion({
   const unhideableColumns = ["nombre", "email", "nivel", "estado_acreditacion"];
 
   const configurableSystemFields = [
-    "rut",
-    "empresa",
-    "actividad",
-    "profesion",
-    "pais",
-    "comuna",
-    "fecha_acreditacion",
-    "fecha_creacion_contacto",
-    "estado_pago",
-  ];
+  "rut",
+  "empresa",
+  "actividad",
+  "profesion",
+  "pais",
+  "comuna",
+  "fecha_acreditacion",
+  "fecha_creacion_contacto",
+  "estado_pago",
+  "monto_pagado_actual",
+];
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>

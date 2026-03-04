@@ -41,6 +41,12 @@ const Inscripcion = {
         return rows[0] || null;
     },
 
+    findById: async (id_inscripcion) => {
+        const query = 'SELECT * FROM inscripciones WHERE id_inscripcion = ? LIMIT 1';
+        const [rows] = await pool.query(query, [id_inscripcion]);
+        return rows[0] || null;
+    },
+
     update: async (id_inscripcion, dataToUpdate) => {
         const query = 'UPDATE inscripciones SET ? WHERE id_inscripcion = ?';
         const [result] = await pool.query(query, [dataToUpdate, id_inscripcion]);
@@ -227,23 +233,69 @@ const Inscripcion = {
     }
 
     const dataQuery = `
-        SELECT 
-            ROW_NUMBER() OVER (ORDER BY i.fecha_inscripcion ASC) as '#',
-            i.id_inscripcion, i.estado_asistencia, i.fecha_acreditacion, i.estado_pago, i.nota,
-            c.id_contacto, c.nombre, c.email, c.telefono, c.rut, c.empresa, c.actividad, c.profesion, c.pais, c.comuna, c.fecha_creado AS fecha_creacion_contacto,
-            p.id_pago, p.monto, p.estado AS estado_transaccion,
-            te.nombre AS tipo_entrada
-            ${customFieldsSelect ? `, ${customFieldsSelect}` : ''}
-        FROM inscripciones i
-        JOIN contactos c ON i.id_contacto = c.id_contacto
-        LEFT JOIN inscripcion_respuestas ir ON i.id_inscripcion = ir.id_inscripcion
-        LEFT JOIN pagos p ON i.id_inscripcion = p.id_inscripcion
-        LEFT JOIN tipos_de_entrada te ON i.id_tipo_entrada = te.id_tipo_entrada
-        ${whereClause}
-        GROUP BY i.id_inscripcion
-        ORDER BY i.fecha_inscripcion ASC
-        LIMIT ? OFFSET ?
-    `;
+    SELECT 
+        ROW_NUMBER() OVER (ORDER BY i.fecha_inscripcion ASC) as '#',
+        i.id_inscripcion,
+        i.estado_asistencia,
+        i.fecha_acreditacion,
+        i.estado_pago,
+        i.nota,
+        i.monto_pagado_manual,
+        c.id_contacto,
+        c.nombre,
+        c.email,
+        c.telefono,
+        c.rut,
+        c.empresa,
+        c.actividad,
+        c.profesion,
+        c.pais,
+        c.comuna,
+        c.fecha_creado AS fecha_creacion_contacto,
+
+        -- Mantengo compatibilidad con campos existentes
+        MAX(p.id_pago) AS id_pago,
+        MAX(CASE WHEN p.estado = 'Pagado' THEN p.monto ELSE NULL END) AS monto,
+        MAX(p.estado) AS estado_transaccion,
+
+        te.nombre AS tipo_entrada,
+
+        -- NUEVO: monto visible real
+        COALESCE(
+          i.monto_pagado_manual,
+          SUM(CASE WHEN p.estado = 'Pagado' THEN p.monto ELSE 0 END),
+          0
+        ) AS monto_pagado_actual
+
+        ${customFieldsSelect ? `, ${customFieldsSelect}` : ''}
+    FROM inscripciones i
+    JOIN contactos c ON i.id_contacto = c.id_contacto
+    LEFT JOIN inscripcion_respuestas ir ON i.id_inscripcion = ir.id_inscripcion
+    LEFT JOIN pagos p ON i.id_inscripcion = p.id_inscripcion
+    LEFT JOIN tipos_de_entrada te ON i.id_tipo_entrada = te.id_tipo_entrada
+    ${whereClause}
+    GROUP BY
+        i.id_inscripcion,
+        i.estado_asistencia,
+        i.fecha_acreditacion,
+        i.estado_pago,
+        i.nota,
+        i.monto_pagado_manual,
+        c.id_contacto,
+        c.nombre,
+        c.email,
+        c.telefono,
+        c.rut,
+        c.empresa,
+        c.actividad,
+        c.profesion,
+        c.pais,
+        c.comuna,
+        c.fecha_creado,
+        te.nombre
+    ORDER BY i.fecha_inscripcion ASC
+    LIMIT ? OFFSET ?
+`;
 
     const finalParams = [...params, limit, offset];
     const [rows] = await pool.execute(dataQuery, finalParams);
@@ -268,13 +320,13 @@ const Inscripcion = {
     updateNota: async (id_inscripcion, nota) => {
         const [result] = await pool.execute(
             'UPDATE inscripciones SET nota = ? WHERE id_inscripcion = ?',
-            [id_inscripcion, nota]
+            [nota, id_inscripcion]
         );
         return result.affectedRows > 0;
     },
     
     updateOrInsertRespuestas: async (id_inscripcion, asistenteData) => {
-        const connection = await db.getConnection();
+        const connection = await pool.getConnection();
         try {
             await connection.beginTransaction();
 

@@ -19,6 +19,7 @@ export const useVisibleColumns = (
     "nivel",
     "estado_acreditacion",
     "estado_pago",
+    "monto_pagado_actual",
     "fecha_creacion_contacto",
   ];
 

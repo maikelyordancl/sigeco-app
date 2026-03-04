@@ -257,6 +257,21 @@ export function AcreditacionTable({
     });
   };
 
+  const formatCurrencyCLP = (value: any) => {
+    const numeric =
+      typeof value === "number"
+        ? value
+        : Number(String(value ?? "0").replace(/\./g, "").replace(",", "."));
+
+    const amount = Number.isFinite(numeric) ? numeric : 0;
+
+    return new Intl.NumberFormat("es-CL", {
+      style: "currency",
+      currency: "CLP",
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
   const resolveFechaCreacionContacto = (asistente: Asistente) => {
     const raw: any = asistente;
     return (
@@ -366,6 +381,10 @@ export function AcreditacionTable({
 
     if (campo.nombre_interno === "estado_pago") {
       return renderEstadoPagoBadge((asistente as any).estado_pago);
+    }
+
+    if (campo.nombre_interno === "monto_pagado_actual") {
+      return formatCurrencyCLP((asistente as any).monto_pagado_actual);
     }
 
     const value = (asistente as any)[campo.nombre_interno];

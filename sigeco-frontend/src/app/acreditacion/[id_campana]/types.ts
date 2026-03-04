@@ -55,7 +55,28 @@ export interface Inscripcion {
   estado_pago?: string | null;
   estado_transaccion?: string | null;
   id_pago?: number | null;
+
+  /**
+   * Campo legacy / backend actual.
+   * En algunos casos puede venir como monto asociado a pago.
+   */
   monto?: number | null;
+
+  /**
+   * Monto pagado real normalizado para lógica interna / stats.
+   */
+  monto_pagado_actual?: number | null;
+
+  /**
+   * Monto pagado ya formateado para mostrar en tabla sin tocar renderers.
+   */
+  monto_pagado_actual_formateado?: string | null;
+
+  /**
+   * Monto manual definido por tesorería.
+   */
+  monto_pagado_manual?: number | null;
+
   tipo_entrada?: string | null;
 
   nota?: string;
