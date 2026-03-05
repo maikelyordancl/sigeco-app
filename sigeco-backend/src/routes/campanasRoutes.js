@@ -85,6 +85,51 @@ router.get(
   tesoreriaController.getAsistentesTesoreria
 );
 
+router.get(
+  '/tesoreria/inscripciones/:id_inscripcion/historial-pagos',
+  [
+    param('id_inscripcion')
+      .isInt({ gt: 0 })
+      .withMessage('El ID de la inscripción debe ser válido.'),
+  ],
+  tesoreriaController.getHistorialPagos
+);
+
+router.post(
+  '/tesoreria/inscripciones/:id_inscripcion/abonos',
+  [
+    param('id_inscripcion')
+      .isInt({ gt: 0 })
+      .withMessage('El ID de la inscripción debe ser válido.'),
+    body('monto')
+      .isFloat({ gt: 0 })
+      .withMessage('El monto debe ser mayor a 0.'),
+    body('medio_pago')
+      .isIn(['Efectivo', 'Transferencia', 'Cortesia', 'Otro'])
+      .withMessage('Medio de pago inválido.'),
+    body('observacion')
+      .optional({ nullable: true })
+      .isString()
+      .isLength({ max: 500 })
+      .withMessage('La observación no puede superar 500 caracteres.'),
+  ],
+  tesoreriaController.registrarAbono
+);
+
+router.post(
+  '/tesoreria/inscripciones/:id_inscripcion/generar-link-flow',
+  [
+    param('id_inscripcion')
+      .isInt({ gt: 0 })
+      .withMessage('El ID de la inscripción debe ser válido.'),
+    body('monto')
+      .optional({ nullable: true })
+      .isFloat({ gt: 0 })
+      .withMessage('El monto debe ser mayor a 0.'),
+  ],
+  tesoreriaController.generarLinkPagoFlow
+);
+
 router.put(
   '/tesoreria/inscripciones/:id_inscripcion/estado-pago',
   [

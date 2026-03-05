@@ -61,35 +61,74 @@ exports.findAsistentesPorCampana = async (id_campana) => {
       c.empresa,
       c.rut,
       te.nombre AS tipo_entrada,
-      COALESCE(MAX(p.monto), te.precio, 0) AS monto_ref,
+      COALESCE(te.precio, 0) AS monto_total,
+      COALESCE(te.precio, 0) AS monto_ref,
       COALESCE(
+        mp.total_pagado_movimientos,
         i.monto_pagado_manual,
-        SUM(CASE WHEN p.estado = 'Pagado' THEN p.monto ELSE 0 END),
+        pp.total_pagado_pasarela,
         0
       ) AS monto_pagado_actual,
-      MAX(p.estado) AS estado_transaccion
+      GREATEST(
+        COALESCE(te.precio, 0) - COALESCE(
+          mp.total_pagado_movimientos,
+          i.monto_pagado_manual,
+          pp.total_pagado_pasarela,
+          0
+        ),
+        0
+      ) AS saldo_pendiente,
+      (
+        SELECT mp2.medio_pago
+        FROM inscripcion_movimientos_pago mp2
+        WHERE mp2.id_inscripcion = i.id_inscripcion
+        ORDER BY COALESCE(mp2.fecha_pago, mp2.fecha_creado) DESC, mp2.id_movimiento DESC
+        LIMIT 1
+      ) AS ultimo_medio_pago,
+      COALESCE(
+        (
+          SELECT mp3.estado
+          FROM inscripcion_movimientos_pago mp3
+          WHERE mp3.id_inscripcion = i.id_inscripcion
+          ORDER BY COALESCE(mp3.fecha_pago, mp3.fecha_creado) DESC, mp3.id_movimiento DESC
+          LIMIT 1
+        ),
+        (
+          SELECT CASE
+            WHEN p2.estado = 'Fallido' THEN 'Rechazado'
+            ELSE p2.estado
+          END
+          FROM pagos p2
+          WHERE p2.id_inscripcion = i.id_inscripcion
+          ORDER BY p2.fecha_actualizado DESC, p2.id_pago DESC
+          LIMIT 1
+        )
+      ) AS estado_transaccion
     FROM inscripciones i
-    JOIN contactos c ON c.id_contacto = i.id_contacto
-    LEFT JOIN tipos_de_entrada te ON te.id_tipo_entrada = i.id_tipo_entrada
-    LEFT JOIN pagos p ON p.id_inscripcion = i.id_inscripcion
+    JOIN contactos c
+      ON c.id_contacto = i.id_contacto
+    LEFT JOIN tipos_de_entrada te
+      ON te.id_tipo_entrada = i.id_tipo_entrada
+    LEFT JOIN (
+      SELECT
+        id_inscripcion,
+        SUM(CASE WHEN estado = 'Pagado' THEN monto ELSE 0 END) AS total_pagado_movimientos
+      FROM inscripcion_movimientos_pago
+      GROUP BY id_inscripcion
+    ) mp ON mp.id_inscripcion = i.id_inscripcion
+    LEFT JOIN (
+      SELECT
+        id_inscripcion,
+        SUM(CASE WHEN estado = 'Pagado' THEN monto ELSE 0 END) AS total_pagado_pasarela
+      FROM pagos
+      GROUP BY id_inscripcion
+    ) pp ON pp.id_inscripcion = i.id_inscripcion
     WHERE i.id_campana = ?
-    GROUP BY
-      i.id_inscripcion,
-      i.estado_pago,
-      i.fecha_inscripcion,
-      i.nota,
-      i.monto_pagado_manual,
-      c.nombre,
-      c.email,
-      c.empresa,
-      c.rut,
-      te.nombre,
-      te.precio
     ORDER BY
       CASE i.estado_pago
         WHEN 'Pendiente' THEN 0
-        WHEN 'Rechazado' THEN 1
-        WHEN 'Pagado' THEN 2
+        WHEN 'Pagado' THEN 1
+        WHEN 'Rechazado' THEN 2
         WHEN 'Reembolsado' THEN 3
         ELSE 4
       END,

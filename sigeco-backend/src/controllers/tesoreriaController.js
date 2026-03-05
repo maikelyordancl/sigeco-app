@@ -2,6 +2,9 @@ const { validationResult } = require('express-validator');
 const pool = require('../config/db');
 const permissionModel = require('../models/permissionModel');
 const TesoreriaModel = require('../models/tesoreriaModel');
+const PagoModel = require('../models/pagoModel');
+const FlowService = require('../services/flowService');
+const InscripcionPagoModel = require('../models/inscripcionPagoModel');
 
 const ESTADOS_PAGO_VALIDOS = [
   'No Aplica',
@@ -9,6 +12,13 @@ const ESTADOS_PAGO_VALIDOS = [
   'Pagado',
   'Rechazado',
   'Reembolsado',
+];
+
+const MEDIOS_PAGO_MANUALES_VALIDOS = [
+  'Efectivo',
+  'Transferencia',
+  'Cortesia',
+  'Otro',
 ];
 
 function getUserId(req) {
@@ -63,10 +73,99 @@ async function getMontoPagadoManualActual(id_inscripcion) {
   return rows[0].monto_pagado_manual;
 }
 
+async function getInscripcionCobroContext(id_inscripcion) {
+  const [rows] = await pool.query(
+    `SELECT
+      i.id_inscripcion,
+      i.id_campana,
+      c.nombre AS contacto_nombre,
+      c.email,
+      COALESCE(te.nombre, 'Abono') AS ticket_nombre
+    FROM inscripciones i
+    JOIN contactos c ON c.id_contacto = i.id_contacto
+    LEFT JOIN tipos_de_entrada te ON te.id_tipo_entrada = i.id_tipo_entrada
+    WHERE i.id_inscripcion = ?
+    LIMIT 1`,
+    [id_inscripcion]
+  );
+
+  return rows[0] || null;
+}
+
 async function isSuperAdmin(userId) {
   if (!userId) return false;
   if (userId === 1) return true;
   return permissionModel.isSuperAdmin(userId);
+}
+
+async function ensureTesoreriaPermissionByCampana(userId, id_campana, action = 'read') {
+  if (!userId) {
+    return { ok: false, status: 401, error: 'No autorizado.' };
+  }
+
+  const eventId = await getEventIdByCampana(id_campana);
+
+  if (!eventId) {
+    return { ok: false, status: 404, error: 'Campaña no encontrada.' };
+  }
+
+  if (await isSuperAdmin(userId)) {
+    return { ok: true, eventId };
+  }
+
+  const allowed = await permissionModel.isAllowedOnEvent(
+    userId,
+    eventId,
+    'tesoreria',
+    action
+  );
+
+  if (!allowed) {
+    return {
+      ok: false,
+      status: 403,
+      error: action === 'update'
+        ? 'Sin acceso para actualizar pagos en este evento.'
+        : 'Sin acceso a este evento.',
+    };
+  }
+
+  return { ok: true, eventId };
+}
+
+async function ensureTesoreriaPermissionByInscripcion(userId, id_inscripcion, action = 'read') {
+  if (!userId) {
+    return { ok: false, status: 401, error: 'No autorizado.' };
+  }
+
+  const eventId = await getEventIdByInscripcion(id_inscripcion);
+
+  if (!eventId) {
+    return { ok: false, status: 404, error: 'Inscripción no encontrada.' };
+  }
+
+  if (await isSuperAdmin(userId)) {
+    return { ok: true, eventId };
+  }
+
+  const allowed = await permissionModel.isAllowedOnEvent(
+    userId,
+    eventId,
+    'tesoreria',
+    action
+  );
+
+  if (!allowed) {
+    return {
+      ok: false,
+      status: 403,
+      error: action === 'update'
+        ? 'Sin acceso para actualizar pagos en este evento.'
+        : 'Sin acceso a este evento.',
+    };
+  }
+
+  return { ok: true, eventId };
 }
 
 exports.getCampanasParaTesoreria = async (req, res) => {
@@ -108,27 +207,10 @@ exports.getAsistentesTesoreria = async (req, res) => {
     const userId = getUserId(req);
     const { id_campana } = req.params;
 
-    if (!userId) {
-      return res.status(401).json({ success: false, error: 'No autorizado.' });
-    }
+    const permission = await ensureTesoreriaPermissionByCampana(userId, id_campana, 'read');
 
-    const eventId = await getEventIdByCampana(id_campana);
-
-    if (!eventId) {
-      return res.status(404).json({ success: false, error: 'Campaña no encontrada.' });
-    }
-
-    if (!(await isSuperAdmin(userId))) {
-      const allowed = await permissionModel.isAllowedOnEvent(
-        userId,
-        eventId,
-        'tesoreria',
-        'read'
-      );
-
-      if (!allowed) {
-        return res.status(403).json({ success: false, error: 'Sin acceso a este evento.' });
-      }
+    if (!permission.ok) {
+      return res.status(permission.status).json({ success: false, error: permission.error });
     }
 
     const asistentes = await TesoreriaModel.findAsistentesPorCampana(id_campana);
@@ -136,6 +218,220 @@ exports.getAsistentesTesoreria = async (req, res) => {
     return res.json({ success: true, data: asistentes });
   } catch (error) {
     console.error('Error al obtener asistentes de tesorería:', error);
+    res.status(500).json({ success: false, error: 'Error del servidor.' });
+  }
+};
+
+exports.getHistorialPagos = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
+  try {
+    const userId = getUserId(req);
+    const { id_inscripcion } = req.params;
+
+    const permission = await ensureTesoreriaPermissionByInscripcion(userId, id_inscripcion, 'read');
+
+    if (!permission.ok) {
+      return res.status(permission.status).json({ success: false, error: permission.error });
+    }
+
+    const historial = await InscripcionPagoModel.getHistorialByInscripcion(id_inscripcion);
+
+    return res.json({ success: true, data: historial });
+  } catch (error) {
+    console.error('Error al obtener historial de pagos:', error);
+    res.status(500).json({ success: false, error: 'Error del servidor.' });
+  }
+};
+
+exports.registrarAbono = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
+  try {
+    const userId = getUserId(req);
+    const { id_inscripcion } = req.params;
+    const { monto, medio_pago, observacion = null } = req.body;
+
+    const permission = await ensureTesoreriaPermissionByInscripcion(userId, id_inscripcion, 'update');
+
+    if (!permission.ok) {
+      return res.status(permission.status).json({ success: false, error: permission.error });
+    }
+
+    if (!MEDIOS_PAGO_MANUALES_VALIDOS.includes(medio_pago)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Medio de pago manual inválido.',
+      });
+    }
+
+    const montoNumerico = Number(monto);
+
+    if (!Number.isFinite(montoNumerico) || montoNumerico <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'El monto debe ser mayor a 0.',
+      });
+    }
+
+    const resumen = await InscripcionPagoModel.getCobroResumen(id_inscripcion);
+
+    if (!resumen) {
+      return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
+    }
+
+    if (resumen.saldoPendiente <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'La inscripción ya está completamente pagada.',
+      });
+    }
+
+    if (montoNumerico > resumen.saldoPendiente) {
+      return res.status(400).json({
+        success: false,
+        error: `El abono no puede superar el saldo pendiente (${resumen.saldoPendiente}).`,
+      });
+    }
+
+    const result = await InscripcionPagoModel.registrarAbonoManual({
+      id_inscripcion,
+      monto: montoNumerico,
+      medio_pago,
+      observacion,
+      creado_por: userId,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Abono registrado correctamente.',
+      data: result,
+    });
+  } catch (error) {
+    console.error('Error al registrar abono manual:', error);
+    res.status(500).json({ success: false, error: 'Error del servidor.' });
+  }
+};
+
+exports.generarLinkPagoFlow = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
+  try {
+    const userId = getUserId(req);
+    const { id_inscripcion } = req.params;
+    const { monto } = req.body;
+
+    const permission = await ensureTesoreriaPermissionByInscripcion(userId, id_inscripcion, 'update');
+
+    if (!permission.ok) {
+      return res.status(permission.status).json({ success: false, error: permission.error });
+    }
+
+    const resumen = await InscripcionPagoModel.getCobroResumen(id_inscripcion);
+
+    if (!resumen) {
+      return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
+    }
+
+    if (resumen.saldoPendiente <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'La inscripción ya está completamente pagada.',
+      });
+    }
+
+    const montoEnviado =
+      monto === null || monto === '' || typeof monto === 'undefined'
+        ? null
+        : Number(monto);
+
+    if (
+      montoEnviado !== null &&
+      (!Number.isFinite(montoEnviado) || montoEnviado <= 0)
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: 'El monto para Flow debe ser mayor a 0.',
+      });
+    }
+
+    const montoFinal = montoEnviado === null ? resumen.saldoPendiente : montoEnviado;
+
+    if (montoFinal > resumen.saldoPendiente) {
+      return res.status(400).json({
+        success: false,
+        error: `El link no puede superar el saldo pendiente (${resumen.saldoPendiente}).`,
+      });
+    }
+
+    const contexto = await getInscripcionCobroContext(id_inscripcion);
+
+    if (!contexto) {
+      return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
+    }
+
+    const ordenCompra = `sigeco-abono-${id_inscripcion}-${Date.now()}`;
+
+    const nuevoPago = await PagoModel.create({
+      id_inscripcion,
+      monto: montoFinal,
+      orden_compra: ordenCompra,
+    });
+
+    await InscripcionPagoModel.upsertMovimientoFlowDesdePago({
+      id_pago: nuevoPago.id_pago,
+      id_inscripcion,
+      monto: montoFinal,
+      estado: 'Pendiente',
+      observacion: 'Link generado desde Tesorería',
+    });
+
+    try {
+      const flowResponse = await FlowService.crearOrdenDePago({
+        orden_compra: ordenCompra,
+        monto: montoFinal,
+        subject: `Abono: ${contexto.ticket_nombre}`,
+        email: contexto.email,
+      });
+
+      await PagoModel.updateById(nuevoPago.id_pago, {
+        token_flow: flowResponse.token,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Link de pago generado correctamente.',
+        data: {
+          redirectUrl: flowResponse.redirectUrl,
+          monto: montoFinal,
+        },
+      });
+    } catch (flowError) {
+      const errorMsg = flowError.message || 'No se pudo crear la orden de pago.';
+
+      await PagoModel.updateById(nuevoPago.id_pago, {
+        estado: 'Fallido',
+        detalle_error: errorMsg,
+      });
+
+      await InscripcionPagoModel.syncEstadoFromPago(nuevoPago.id_pago, 'Fallido');
+
+      return res.status(500).json({
+        success: false,
+        error: errorMsg,
+      });
+    }
+  } catch (error) {
+    console.error('Error al generar link Flow desde Tesorería:', error);
     res.status(500).json({ success: false, error: 'Error del servidor.' });
   }
 };
@@ -151,8 +447,10 @@ exports.updateEstadoPago = async (req, res) => {
     const { id_inscripcion } = req.params;
     const { estado_pago } = req.body;
 
-    if (!userId) {
-      return res.status(401).json({ success: false, error: 'No autorizado.' });
+    const permission = await ensureTesoreriaPermissionByInscripcion(userId, id_inscripcion, 'update');
+
+    if (!permission.ok) {
+      return res.status(permission.status).json({ success: false, error: permission.error });
     }
 
     if (!ESTADOS_PAGO_VALIDOS.includes(estado_pago)) {
@@ -160,28 +458,6 @@ exports.updateEstadoPago = async (req, res) => {
         success: false,
         error: 'Estado de pago inválido.',
       });
-    }
-
-    const eventId = await getEventIdByInscripcion(id_inscripcion);
-
-    if (!eventId) {
-      return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
-    }
-
-    if (!(await isSuperAdmin(userId))) {
-      const allowed = await permissionModel.isAllowedOnEvent(
-        userId,
-        eventId,
-        'tesoreria',
-        'update'
-      );
-
-      if (!allowed) {
-        return res.status(403).json({
-          success: false,
-          error: 'Sin acceso para actualizar pagos en este evento.',
-        });
-      }
     }
 
     const montoFueEnviado = Object.prototype.hasOwnProperty.call(req.body, 'monto_pagado');
