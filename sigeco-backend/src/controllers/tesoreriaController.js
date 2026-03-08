@@ -286,18 +286,22 @@ exports.registrarAbono = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
     }
 
-    if (resumen.saldoPendiente <= 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'La inscripción ya está completamente pagada.',
-      });
-    }
+    const tieneCobroObjetivo = Number(resumen.montoObjetivo || 0) > 0;
 
-    if (montoNumerico > resumen.saldoPendiente) {
-      return res.status(400).json({
-        success: false,
-        error: `El abono no puede superar el saldo pendiente (${resumen.saldoPendiente}).`,
-      });
+    if (tieneCobroObjetivo) {
+      if (resumen.saldoPendiente <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'La inscripción ya está completamente pagada.',
+        });
+      }
+
+      if (montoNumerico > resumen.saldoPendiente) {
+        return res.status(400).json({
+          success: false,
+          error: `El abono no puede superar el saldo pendiente (${resumen.saldoPendiente}).`,
+        });
+      }
     }
 
     const result = await InscripcionPagoModel.registrarAbonoManual({
@@ -328,7 +332,7 @@ exports.generarLinkPagoFlow = async (req, res) => {
   try {
     const userId = getUserId(req);
     const { id_inscripcion } = req.params;
-    const { monto } = req.body;
+    const { monto, observacion = null } = req.body;
 
     const permission = await ensureTesoreriaPermissionByInscripcion(userId, id_inscripcion, 'update');
 
@@ -340,13 +344,6 @@ exports.generarLinkPagoFlow = async (req, res) => {
 
     if (!resumen) {
       return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
-    }
-
-    if (resumen.saldoPendiente <= 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'La inscripción ya está completamente pagada.',
-      });
     }
 
     const montoEnviado =
@@ -364,13 +361,34 @@ exports.generarLinkPagoFlow = async (req, res) => {
       });
     }
 
-    const montoFinal = montoEnviado === null ? resumen.saldoPendiente : montoEnviado;
+    const tieneCobroObjetivo = Number(resumen.montoObjetivo || 0) > 0;
+    let montoFinal;
 
-    if (montoFinal > resumen.saldoPendiente) {
-      return res.status(400).json({
-        success: false,
-        error: `El link no puede superar el saldo pendiente (${resumen.saldoPendiente}).`,
-      });
+    if (!tieneCobroObjetivo) {
+      if (montoEnviado === null) {
+        return res.status(400).json({
+          success: false,
+          error: 'Esta inscripción no tiene ticket asignado. Para generar un link Flow debes ingresar un monto manual.',
+        });
+      }
+
+      montoFinal = montoEnviado;
+    } else {
+      if (resumen.saldoPendiente <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'La inscripción ya está completamente pagada.',
+        });
+      }
+
+      montoFinal = montoEnviado === null ? resumen.saldoPendiente : montoEnviado;
+
+      if (montoFinal > resumen.saldoPendiente) {
+        return res.status(400).json({
+          success: false,
+          error: `El link no puede superar el saldo pendiente (${resumen.saldoPendiente}).`,
+        });
+      }
     }
 
     const contexto = await getInscripcionCobroContext(id_inscripcion);
@@ -378,6 +396,11 @@ exports.generarLinkPagoFlow = async (req, res) => {
     if (!contexto) {
       return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
     }
+
+    const observacionNormalizada =
+      typeof observacion === 'string' && observacion.trim().length > 0
+        ? observacion.trim()
+        : null;
 
     const ordenCompra = `sigeco-abono-${id_inscripcion}-${Date.now()}`;
 
@@ -392,7 +415,7 @@ exports.generarLinkPagoFlow = async (req, res) => {
       id_inscripcion,
       monto: montoFinal,
       estado: 'Pendiente',
-      observacion: 'Link generado desde Tesorería',
+      observacion: observacionNormalizada || 'Link generado desde Tesorería',
     });
 
     try {

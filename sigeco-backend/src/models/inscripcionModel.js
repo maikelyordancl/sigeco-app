@@ -53,13 +53,15 @@ const Inscripcion = {
         return result;
     },
 
-    convocarDesdeBase: async (id_campana, idsBasesOrigen) => {
+    convocarDesdeBase: async (id_campana, idsBasesOrigen, id_tipo_entrada = null) => {
         const connection = await pool.getConnection();
         await connection.beginTransaction();
 
         try {
             const [campanaRules] = await connection.query(`
-                SELECT s.obligatorio_registro 
+                SELECT 
+                    COALESCE(s.obligatorio_registro, 0) AS obligatorio_registro,
+                    COALESCE(s.obligatorio_pago, 0) AS obligatorio_pago
                 FROM campanas c
                 JOIN subeventos s ON c.id_subevento = s.id_subevento
                 WHERE c.id_campana = ?
@@ -69,8 +71,29 @@ const Inscripcion = {
                 throw new Error('Campaña no encontrada o no está asociada a un sub-evento.');
             }
 
-            const { obligatorio_registro } = campanaRules[0];
+            const { obligatorio_registro, obligatorio_pago } = campanaRules[0];
+            const requierePago = Number(obligatorio_pago) === 1;
             const estadoAsistencia = 'Invitado';
+            const estadoPago = requierePago ? 'Pendiente' : 'No Aplica';
+            const ticketId = id_tipo_entrada ? Number(id_tipo_entrada) : null;
+
+            if (requierePago && (!Number.isInteger(ticketId) || ticketId <= 0)) {
+                throw new Error('Debes seleccionar un tipo de entrada para convocar en una campaña de pago.');
+            }
+
+            if (requierePago) {
+                const [ticketRows] = await connection.query(
+                    `SELECT id_tipo_entrada
+                     FROM tipos_de_entrada
+                     WHERE id_tipo_entrada = ? AND id_campana = ?
+                     LIMIT 1`,
+                    [ticketId, id_campana]
+                );
+
+                if (ticketRows.length === 0) {
+                    throw new Error('El tipo de entrada seleccionado no pertenece a esta campaña.');
+                }
+            }
 
             const placeholder = idsBasesOrigen.map(() => '?').join(',');
             const [contactos] = await connection.query(
@@ -83,9 +106,21 @@ const Inscripcion = {
                 return { success: true, message: 'No se encontraron nuevos contactos para convocar.', count: 0 };
             }
 
-            const values = contactos.map(c => [id_campana, c.id_contacto, estadoAsistencia, 'No Aplica']);
+            const values = contactos.map(c => [
+                id_campana,
+                c.id_contacto,
+                requierePago ? ticketId : null,
+                estadoAsistencia,
+                estadoPago
+            ]);
             const query = `
-                INSERT IGNORE INTO inscripciones (id_campana, id_contacto, estado_asistencia, estado_pago)
+                INSERT IGNORE INTO inscripciones (
+                    id_campana,
+                    id_contacto,
+                    id_tipo_entrada,
+                    estado_asistencia,
+                    estado_pago
+                )
                 VALUES ?
             `;
 
@@ -102,7 +137,7 @@ const Inscripcion = {
         } catch (error) {
             await connection.rollback();
             console.error("Error en la transacción de convocatoria:", error);
-            throw new Error('Error en el servidor durante la convocatoria.');
+            throw error;
         } finally {
             connection.release();
         }
@@ -529,4 +564,4 @@ const Inscripcion = {
 
 };
 
-module.exports = Inscripcion;   
+module.exports = Inscripcion;

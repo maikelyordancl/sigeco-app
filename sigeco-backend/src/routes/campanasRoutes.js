@@ -126,6 +126,11 @@ router.post(
       .optional({ nullable: true })
       .isFloat({ gt: 0 })
       .withMessage('El monto debe ser mayor a 0.'),
+    body('observacion')
+      .optional({ nullable: true })
+      .isString()
+      .isLength({ max: 500 })
+      .withMessage('La observación no puede superar 500 caracteres.'),
   ],
   tesoreriaController.generarLinkPagoFlow
 );
