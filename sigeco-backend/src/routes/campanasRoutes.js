@@ -135,11 +135,25 @@ router.post(
   tesoreriaController.generarLinkPagoFlow
 );
 
+
+router.put(
+  '/tesoreria/inscripciones/:id_inscripcion/monto-objetivo-manual',
+  [
+    param('id_inscripcion')
+      .isInt({ gt: 0 })
+      .withMessage('El ID de la inscripción debe ser válido.'),
+    body('monto_objetivo_manual')
+      .isFloat({ min: 0 })
+      .withMessage('El monto manual debe ser mayor o igual a 0.'),
+  ],
+  tesoreriaController.updateMontoObjetivoManual
+);
 router.put(
   '/tesoreria/inscripciones/:id_inscripcion/estado-pago',
   [
     param('id_inscripcion').isInt({ gt: 0 }).withMessage('El ID de la inscripción debe ser válido.'),
     body('estado_pago')
+      .optional({ nullable: true })
       .isIn(['No Aplica', 'Pendiente', 'Pagado', 'Rechazado', 'Reembolsado'])
       .withMessage('Estado de pago inválido.'),
     body('monto_pagado')

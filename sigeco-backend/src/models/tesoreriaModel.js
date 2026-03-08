@@ -51,101 +51,133 @@ exports.findEventosConCampanasTesoreria = async () => {
 exports.findAsistentesPorCampana = async (id_campana) => {
   const query = `
     SELECT
-      i.id_inscripcion,
-      i.estado_pago,
-      i.fecha_inscripcion,
-      i.nota,
-      i.monto_pagado_manual,
-      c.nombre,
-      c.email,
-      c.empresa,
-      c.rut,
-      te.nombre AS tipo_entrada,
-      COALESCE(te.precio, 0) AS monto_total,
-      COALESCE(te.precio, 0) AS monto_ref,
-      COALESCE(
-        mp.total_pagado_movimientos,
+      base.id_inscripcion,
+      base.id_tipo_entrada,
+      CASE
+        WHEN base.monto_total <= 0 AND base.monto_pagado_actual <= 0 THEN 'No Aplica'
+        WHEN base.monto_pagado_actual >= base.monto_total THEN 'Pagado'
+        WHEN COALESCE(base.estado_transaccion, '') = 'Reembolsado'
+          AND base.monto_pagado_actual <= 0 THEN 'Reembolsado'
+        WHEN COALESCE(base.estado_transaccion, '') IN ('Rechazado', 'Anulado')
+          AND base.monto_pagado_actual <= 0 THEN 'Rechazado'
+        ELSE 'Pendiente'
+      END AS estado_pago,
+      base.fecha_inscripcion,
+      base.nota,
+      base.monto_pagado_manual,
+      base.monto_objetivo_manual,
+      base.nombre,
+      base.email,
+      base.empresa,
+      base.rut,
+      base.tipo_entrada,
+      base.monto_total,
+      base.monto_ref,
+      base.monto_pagado_actual,
+      GREATEST(base.monto_total - base.monto_pagado_actual, 0) AS saldo_pendiente,
+      base.ultimo_medio_pago,
+      base.estado_transaccion
+    FROM (
+      SELECT
+        i.id_inscripcion,
+        i.id_tipo_entrada,
+        i.fecha_inscripcion,
+        i.nota,
         i.monto_pagado_manual,
-        pp.total_pagado_pasarela,
-        0
-      ) AS monto_pagado_actual,
-      GREATEST(
-        COALESCE(te.precio, 0) - COALESCE(
+        i.monto_objetivo_manual,
+        c.nombre,
+        c.email,
+        c.empresa,
+        c.rut,
+        te.nombre AS tipo_entrada,
+        CASE
+          WHEN i.id_tipo_entrada IS NOT NULL THEN COALESCE(te.precio, 0)
+          ELSE COALESCE(i.monto_objetivo_manual, 0)
+        END AS monto_total,
+        CASE
+          WHEN i.id_tipo_entrada IS NOT NULL THEN COALESCE(te.precio, 0)
+          ELSE COALESCE(i.monto_objetivo_manual, 0)
+        END AS monto_ref,
+        COALESCE(
           mp.total_pagado_movimientos,
           i.monto_pagado_manual,
           pp.total_pagado_pasarela,
           0
-        ),
-        0
-      ) AS saldo_pendiente,
-      (
-        SELECT mp2.medio_pago
-        FROM inscripcion_movimientos_pago mp2
-        WHERE mp2.id_inscripcion = i.id_inscripcion
-        ORDER BY COALESCE(mp2.fecha_pago, mp2.fecha_creado) DESC, mp2.id_movimiento DESC
-        LIMIT 1
-      ) AS ultimo_medio_pago,
-      COALESCE(
-        (
-          SELECT mp3.estado
-          FROM inscripcion_movimientos_pago mp3
-          WHERE mp3.id_inscripcion = i.id_inscripcion
-          ORDER BY COALESCE(mp3.fecha_pago, mp3.fecha_creado) DESC, mp3.id_movimiento DESC
-          LIMIT 1
-        ),
-        (
-          SELECT CASE
-            WHEN p2.estado = 'Fallido' THEN 'Rechazado'
-            ELSE p2.estado
-          END
-          FROM pagos p2
-          WHERE p2.id_inscripcion = i.id_inscripcion
-          ORDER BY p2.fecha_actualizado DESC, p2.id_pago DESC
-          LIMIT 1
-        )
-      ) AS estado_transaccion
-    FROM inscripciones i
-    JOIN contactos c
-      ON c.id_contacto = i.id_contacto
-    LEFT JOIN tipos_de_entrada te
-      ON te.id_tipo_entrada = i.id_tipo_entrada
-    LEFT JOIN (
-      SELECT
-        id_inscripcion,
-        SUM(CASE WHEN estado = 'Pagado' THEN monto ELSE 0 END) AS total_pagado_movimientos
-      FROM inscripcion_movimientos_pago
-      GROUP BY id_inscripcion
-    ) mp ON mp.id_inscripcion = i.id_inscripcion
-    LEFT JOIN (
-      SELECT
-        id_inscripcion,
-        SUM(CASE WHEN estado = 'Pagado' THEN monto ELSE 0 END) AS total_pagado_pasarela
-      FROM pagos
-      GROUP BY id_inscripcion
-    ) pp ON pp.id_inscripcion = i.id_inscripcion
-    WHERE i.id_campana = ?
+        ) AS monto_pagado_actual,
+        COALESCE(mp.ultimo_medio_pago, 'Flow') AS ultimo_medio_pago,
+        COALESCE(mp.ultimo_estado_movimiento, pp.ultimo_estado_pasarela) AS estado_transaccion
+      FROM inscripciones i
+      JOIN contactos c
+        ON c.id_contacto = i.id_contacto
+      LEFT JOIN tipos_de_entrada te
+        ON te.id_tipo_entrada = i.id_tipo_entrada
+      LEFT JOIN (
+        SELECT
+          id_inscripcion,
+          SUM(CASE WHEN estado = 'Pagado' THEN monto ELSE 0 END) AS total_pagado_movimientos,
+          SUBSTRING_INDEX(
+            GROUP_CONCAT(
+              medio_pago
+              ORDER BY COALESCE(fecha_pago, fecha_creado) DESC, id_movimiento DESC
+              SEPARATOR ','
+            ),
+            ',',
+            1
+          ) AS ultimo_medio_pago,
+          SUBSTRING_INDEX(
+            GROUP_CONCAT(
+              estado
+              ORDER BY COALESCE(fecha_pago, fecha_creado) DESC, id_movimiento DESC
+              SEPARATOR ','
+            ),
+            ',',
+            1
+          ) AS ultimo_estado_movimiento
+        FROM inscripcion_movimientos_pago
+        GROUP BY id_inscripcion
+      ) mp ON mp.id_inscripcion = i.id_inscripcion
+      LEFT JOIN (
+        SELECT
+          id_inscripcion,
+          SUM(CASE WHEN estado = 'Pagado' THEN monto ELSE 0 END) AS total_pagado_pasarela,
+          SUBSTRING_INDEX(
+            GROUP_CONCAT(
+              CASE WHEN estado = 'Fallido' THEN 'Rechazado' ELSE estado END
+              ORDER BY fecha_actualizado DESC, id_pago DESC
+              SEPARATOR ','
+            ),
+            ',',
+            1
+          ) AS ultimo_estado_pasarela
+        FROM pagos
+        GROUP BY id_inscripcion
+      ) pp ON pp.id_inscripcion = i.id_inscripcion
+      WHERE i.id_campana = ?
+    ) base
     ORDER BY
-      CASE i.estado_pago
-        WHEN 'Pendiente' THEN 0
-        WHEN 'Pagado' THEN 1
-        WHEN 'Rechazado' THEN 2
-        WHEN 'Reembolsado' THEN 3
-        ELSE 4
+      CASE
+        WHEN base.monto_total <= 0 AND base.monto_pagado_actual <= 0 THEN 4
+        WHEN base.monto_pagado_actual >= base.monto_total THEN 1
+        WHEN COALESCE(base.estado_transaccion, '') IN ('Rechazado', 'Anulado')
+          AND base.monto_pagado_actual <= 0 THEN 2
+        WHEN COALESCE(base.estado_transaccion, '') = 'Reembolsado'
+          AND base.monto_pagado_actual <= 0 THEN 3
+        ELSE 0
       END,
-      i.fecha_inscripcion DESC,
-      c.nombre ASC
+      base.fecha_inscripcion DESC,
+      base.nombre ASC
   `;
 
   const [rows] = await pool.query(query, [id_campana]);
   return rows;
 };
 
-exports.updatePagoTesoreria = async (id_inscripcion, estado_pago, monto_pagado) => {
+exports.updatePagoTesoreria = async (id_inscripcion, _estado_pago, monto_pagado) => {
   const [result] = await pool.query(
     `UPDATE inscripciones
-     SET estado_pago = ?, monto_pagado_manual = ?
+     SET monto_pagado_manual = ?
      WHERE id_inscripcion = ?`,
-    [estado_pago, monto_pagado, id_inscripcion]
+    [monto_pagado, id_inscripcion]
   );
 
   return result;

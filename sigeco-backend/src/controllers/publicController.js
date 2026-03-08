@@ -19,26 +19,6 @@ const mapFlowPagoStatus = (flowStatus) => {
     }
 };
 
-// Mapea el estado numérico de Flow al estado compatible con inscripciones.estado_pago
-const mapFlowInscripcionStatus = (flowStatus) => {
-    switch (flowStatus) {
-        case 1: return 'Pendiente';
-        case 2: return 'Pagado';
-        case 3: return 'Rechazado';
-        case 4: return 'Rechazado';
-        default: return 'Rechazado';
-    }
-};
-
-const mapPagoTableStatusToInscripcionStatus = (estadoPagoFlow) => {
-    switch (estadoPagoFlow) {
-        case 'Pendiente': return 'Pendiente';
-        case 'Pagado': return 'Pagado';
-        case 'Reembolsado': return 'Reembolsado';
-        default: return 'Rechazado';
-    }
-};
-
 const enviarCorreoSiPagoCompleto = async (id_inscripcion) => {
     const inscripcion = await InscripcionModel.findById(id_inscripcion);
 
@@ -73,35 +53,23 @@ const enviarCorreoSiPagoCompleto = async (id_inscripcion) => {
 const aplicarResultadoPago = async (pago, estadoPagoFlow) => {
     await PagoModel.updateById(pago.id_pago, { estado: estadoPagoFlow });
 
-    const syncResult = await InscripcionPagoModel.syncEstadoFromPago(pago.id_pago, estadoPagoFlow);
+    await InscripcionPagoModel.upsertMovimientoFlowDesdePago({
+        id_pago: pago.id_pago,
+        id_inscripcion: pago.id_inscripcion,
+        monto: pago.monto,
+        estado: estadoPagoFlow,
+        observacion: 'Resultado sincronizado desde Flow'
+    });
 
-    // Si existe movimiento en historial, esa es la verdad del negocio
-    if (syncResult.synced) {
-        if (syncResult.estadoPago === 'Pagado') {
-            await enviarCorreoSiPagoCompleto(pago.id_inscripcion);
-        }
+    const recalculo = await InscripcionPagoModel.recalculateInscripcionPayment(pago.id_inscripcion);
 
-        return syncResult;
-    }
-
-    // Fallback legacy para pagos antiguos sin movimiento migrado
-    const dataInscripcion = {
-        estado_pago: mapPagoTableStatusToInscripcionStatus(estadoPagoFlow)
-    };
-
-    if (dataInscripcion.estado_pago === 'Pagado') {
-        dataInscripcion.estado_asistencia = 'Confirmado';
-    }
-
-    await InscripcionModel.update(pago.id_inscripcion, dataInscripcion);
-
-    if (dataInscripcion.estado_pago === 'Pagado') {
+    if (recalculo?.estadoPago === 'Pagado') {
         await enviarCorreoSiPagoCompleto(pago.id_inscripcion);
     }
 
     return {
-        synced: false,
-        estadoPago: dataInscripcion.estado_pago
+        synced: true,
+        ...recalculo
     };
 };
 

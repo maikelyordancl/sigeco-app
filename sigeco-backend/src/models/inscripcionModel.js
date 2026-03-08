@@ -273,7 +273,15 @@ const Inscripcion = {
         i.id_inscripcion,
         i.estado_asistencia,
         i.fecha_acreditacion,
-        i.estado_pago,
+        CASE
+          WHEN te.id_tipo_entrada IS NULL OR COALESCE(te.precio, 0) <= 0 THEN 'No Aplica'
+          WHEN COALESCE(mp.total_pagado_movimientos, i.monto_pagado_manual, pp.total_pagado_pasarela, 0) >= COALESCE(te.precio, 0) THEN 'Pagado'
+          WHEN COALESCE(mp.ultimo_estado_movimiento, pp.ultimo_estado_pasarela, '') = 'Reembolsado'
+            AND COALESCE(mp.total_pagado_movimientos, i.monto_pagado_manual, pp.total_pagado_pasarela, 0) <= 0 THEN 'Reembolsado'
+          WHEN COALESCE(mp.ultimo_estado_movimiento, pp.ultimo_estado_pasarela, '') IN ('Rechazado', 'Anulado')
+            AND COALESCE(mp.total_pagado_movimientos, i.monto_pagado_manual, pp.total_pagado_pasarela, 0) <= 0 THEN 'Rechazado'
+          ELSE 'Pendiente'
+        END AS estado_pago,
         i.nota,
         i.monto_pagado_manual,
         c.id_contacto,
@@ -291,14 +299,15 @@ const Inscripcion = {
         -- Mantengo compatibilidad con campos existentes
         MAX(p.id_pago) AS id_pago,
         MAX(CASE WHEN p.estado = 'Pagado' THEN p.monto ELSE NULL END) AS monto,
-        MAX(p.estado) AS estado_transaccion,
+        COALESCE(mp.ultimo_estado_movimiento, pp.ultimo_estado_pasarela) AS estado_transaccion,
 
         te.nombre AS tipo_entrada,
 
         -- NUEVO: monto visible real
         COALESCE(
+          mp.total_pagado_movimientos,
           i.monto_pagado_manual,
-          SUM(CASE WHEN p.estado = 'Pagado' THEN p.monto ELSE 0 END),
+          pp.total_pagado_pasarela,
           0
         ) AS monto_pagado_actual
 
@@ -307,13 +316,44 @@ const Inscripcion = {
     JOIN contactos c ON i.id_contacto = c.id_contacto
     LEFT JOIN inscripcion_respuestas ir ON i.id_inscripcion = ir.id_inscripcion
     LEFT JOIN pagos p ON i.id_inscripcion = p.id_inscripcion
+    LEFT JOIN (
+      SELECT
+        id_inscripcion,
+        SUM(CASE WHEN estado = 'Pagado' THEN monto ELSE 0 END) AS total_pagado_movimientos,
+        SUBSTRING_INDEX(
+          GROUP_CONCAT(
+            estado
+            ORDER BY COALESCE(fecha_pago, fecha_creado) DESC, id_movimiento DESC
+            SEPARATOR ','
+          ),
+          ',',
+          1
+        ) AS ultimo_estado_movimiento
+      FROM inscripcion_movimientos_pago
+      GROUP BY id_inscripcion
+    ) mp ON mp.id_inscripcion = i.id_inscripcion
+    LEFT JOIN (
+      SELECT
+        id_inscripcion,
+        SUM(CASE WHEN estado = 'Pagado' THEN monto ELSE 0 END) AS total_pagado_pasarela,
+        SUBSTRING_INDEX(
+          GROUP_CONCAT(
+            CASE WHEN estado = 'Fallido' THEN 'Rechazado' ELSE estado END
+            ORDER BY fecha_actualizado DESC, id_pago DESC
+            SEPARATOR ','
+          ),
+          ',',
+          1
+        ) AS ultimo_estado_pasarela
+      FROM pagos
+      GROUP BY id_inscripcion
+    ) pp ON pp.id_inscripcion = i.id_inscripcion
     LEFT JOIN tipos_de_entrada te ON i.id_tipo_entrada = te.id_tipo_entrada
     ${whereClause}
     GROUP BY
         i.id_inscripcion,
         i.estado_asistencia,
         i.fecha_acreditacion,
-        i.estado_pago,
         i.nota,
         i.monto_pagado_manual,
         c.id_contacto,
@@ -327,7 +367,13 @@ const Inscripcion = {
         c.pais,
         c.comuna,
         c.fecha_creado,
-        te.nombre
+        te.id_tipo_entrada,
+        te.nombre,
+        te.precio,
+        mp.total_pagado_movimientos,
+        mp.ultimo_estado_movimiento,
+        pp.total_pagado_pasarela,
+        pp.ultimo_estado_pasarela
     ORDER BY i.fecha_inscripcion ASC
     LIMIT ? OFFSET ?
 `;

@@ -1,12 +1,19 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import MainLayout from "@/components/Layout/MainLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -49,6 +56,7 @@ type ColumnKey =
 
 interface AsistenteTesoreria {
   id_inscripcion: number;
+  id_tipo_entrada: number | null;
   nombre: string;
   email: string;
   empresa: string | null;
@@ -56,6 +64,7 @@ interface AsistenteTesoreria {
   tipo_entrada: string | null;
   monto_total: number | string | null;
   monto_ref: number | string | null;
+  monto_objetivo_manual: number | string | null;
   monto_pagado_actual: number | string | null;
   saldo_pendiente: number | string | null;
   monto_pagado_manual: number | string | null;
@@ -87,6 +96,7 @@ interface CampanaInfo {
 
 interface PaymentDraft {
   monto: string;
+  monto_objetivo_manual: string;
   medio_pago: MedioPagoOpcion;
   nota: string;
   generated_link: string | null;
@@ -142,6 +152,7 @@ const MANUAL_PAYMENT_OPTIONS: MedioPagoOpcion[] = [
 
 const getEmptyDraft = (): PaymentDraft => ({
   monto: "",
+  monto_objetivo_manual: "0",
   medio_pago: "Efectivo",
   nota: "",
   generated_link: null,
@@ -158,12 +169,12 @@ export default function TesoreriaCampanaPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [historial, setHistorial] = useState<Record<number, HistorialPago[]>>({});
-  const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({});
   const [drafts, setDrafts] = useState<DraftsState>({});
   const [showColumnsPanel, setShowColumnsPanel] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState<VisibleColumnsState>(
     DEFAULT_VISIBLE_COLUMNS
   );
+  const [activeGestionId, setActiveGestionId] = useState<number | null>(null);
 
   const columnsStorageKey = `tesoreria-columns-${id_campana}`;
 
@@ -206,6 +217,22 @@ export default function TesoreriaCampanaPage() {
     }
   };
 
+  const getTransactionBadgeClasses = (estado: string | null) => {
+    switch (estado) {
+      case "Pagado":
+        return "bg-green-50 text-green-700 border-green-200";
+      case "Pendiente":
+        return "bg-yellow-50 text-yellow-700 border-yellow-200";
+      case "Rechazado":
+      case "Anulado":
+        return "bg-red-50 text-red-700 border-red-200";
+      case "Reembolsado":
+        return "bg-purple-50 text-purple-700 border-purple-200";
+      default:
+        return "bg-gray-50 text-gray-700 border-gray-200";
+    }
+  };
+
   const fetchAsistentes = useCallback(async () => {
     const response = await apiFetch(`/campanas/tesoreria/${id_campana}/asistentes`);
     const result = await response.json();
@@ -223,6 +250,10 @@ export default function TesoreriaCampanaPage() {
         next[row.id_inscripcion] = {
           ...getEmptyDraft(),
           ...(next[row.id_inscripcion] || {}),
+          monto_objetivo_manual:
+            row.id_tipo_entrada === null
+              ? String(toNumber(row.monto_objetivo_manual))
+              : next[row.id_inscripcion]?.monto_objetivo_manual || "",
         };
       }
       return next;
@@ -352,6 +383,20 @@ export default function TesoreriaCampanaPage() {
     return COLUMN_OPTIONS.filter((col) => visibleColumns[col.key]).length;
   }, [visibleColumns]);
 
+  const selectedRow = useMemo(() => {
+    if (!activeGestionId) return null;
+    return rows.find((row) => row.id_inscripcion === activeGestionId) || null;
+  }, [activeGestionId, rows]);
+
+  const selectedDraft = useMemo(() => {
+    return selectedRow ? drafts[selectedRow.id_inscripcion] || getEmptyDraft() : getEmptyDraft();
+  }, [drafts, selectedRow]);
+
+  const selectedHistorial = useMemo(() => {
+    if (!selectedRow) return [];
+    return historial[selectedRow.id_inscripcion] || [];
+  }, [historial, selectedRow]);
+
   const isBusy = (key: string) => savingKey === key;
 
   const toggleColumn = (key: ColumnKey) => {
@@ -387,18 +432,12 @@ export default function TesoreriaCampanaPage() {
     }));
   };
 
-  const setGeneratedLink = (
-    id_inscripcion: number,
-    redirectUrl: string,
-    clearFields = true
-  ) => {
+  const setGeneratedLink = (id_inscripcion: number, redirectUrl: string) => {
     setDrafts((prev) => ({
       ...prev,
       [id_inscripcion]: {
         ...(prev[id_inscripcion] || getEmptyDraft()),
         generated_link: redirectUrl,
-        monto: clearFields ? "" : prev[id_inscripcion]?.monto || "",
-        nota: clearFields ? "" : prev[id_inscripcion]?.nota || "",
       },
     }));
   };
@@ -416,30 +455,72 @@ export default function TesoreriaCampanaPage() {
     }
   };
 
-  const handleToggleHistory = async (row: AsistenteTesoreria) => {
-    const rowKey = `history-${row.id_inscripcion}`;
+  const openGestion = async (row: AsistenteTesoreria) => {
+    setActiveGestionId(row.id_inscripcion);
 
-    if (expandedRows[row.id_inscripcion]) {
-      setExpandedRows((prev) => ({
-        ...prev,
-        [row.id_inscripcion]: false,
-      }));
+    if (historial[row.id_inscripcion]) {
       return;
     }
 
-    try {
-      setSavingKey(rowKey);
+    const key = `history-${row.id_inscripcion}`;
 
-      if (!historial[row.id_inscripcion]) {
-        await fetchHistorial(row.id_inscripcion);
+    try {
+      setSavingKey(key);
+      await fetchHistorial(row.id_inscripcion);
+    } catch (error: any) {
+      toast.error(error.message || "No se pudo cargar el historial.");
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const handleGuardarMontoObjetivo = async (row: AsistenteTesoreria) => {
+    if (row.id_tipo_entrada) {
+      toast.error("No puedes editar el monto manual si la inscripción tiene ticket.");
+      return;
+    }
+
+    const draft = getDraft(row.id_inscripcion);
+    const monto = Number(draft.monto_objetivo_manual);
+
+    if (!Number.isFinite(monto) || monto < 0) {
+      toast.error("Escribe un monto manual válido mayor o igual a 0.");
+      return;
+    }
+
+    const key = `objective-${row.id_inscripcion}`;
+    const toastId = toast.loading("Guardando monto manual...");
+
+    try {
+      setSavingKey(key);
+
+      const response = await apiFetch(
+        `/campanas/tesoreria/inscripciones/${row.id_inscripcion}/monto-objetivo-manual`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ monto_objetivo_manual: monto }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || result.message || "No se pudo guardar el monto manual.");
       }
 
-      setExpandedRows((prev) => ({
-        ...prev,
-        [row.id_inscripcion]: true,
-      }));
+      await fetchAsistentes();
+      await fetchHistorial(row.id_inscripcion);
+
+      toast.success(
+        monto === 0
+          ? "Monto manual actualizado. La inscripción quedó como cortesía/sin cobro."
+          : "Monto manual actualizado correctamente.",
+        { id: toastId }
+      );
     } catch (error: any) {
-      toast.error(error.message || "No se pudo abrir el historial.");
+      toast.error(error.message || "Error al guardar el monto manual.", {
+        id: toastId,
+      });
     } finally {
       setSavingKey(null);
     }
@@ -484,12 +565,8 @@ export default function TesoreriaCampanaPage() {
       }
 
       resetDraftAfterManual(row.id_inscripcion);
-
       await fetchAsistentes();
-
-      if (expandedRows[row.id_inscripcion]) {
-        await fetchHistorial(row.id_inscripcion);
-      }
+      await fetchHistorial(row.id_inscripcion);
 
       toast.success("Pago registrado correctamente.", { id: toastId });
     } catch (error: any) {
@@ -538,12 +615,8 @@ export default function TesoreriaCampanaPage() {
       }
 
       setGeneratedLink(row.id_inscripcion, redirectUrl);
-
       await fetchAsistentes();
-
-      if (expandedRows[row.id_inscripcion]) {
-        await fetchHistorial(row.id_inscripcion);
-      }
+      await fetchHistorial(row.id_inscripcion);
 
       toast.success("Link de pago generado. Ya puedes copiarlo o abrirlo.", {
         id: toastId,
@@ -556,6 +629,17 @@ export default function TesoreriaCampanaPage() {
   };
 
   const handleProcesarPago = async (row: AsistenteTesoreria) => {
+    const montoTotal = toNumber(row.monto_total);
+
+    if (montoTotal <= 0) {
+      toast.error(
+        row.id_tipo_entrada
+          ? "Esta inscripción no tiene un monto de cobro válido."
+          : "Primero define el monto manual de cobro. Usa 0 si será una cortesía."
+      );
+      return;
+    }
+
     const draft = getDraft(row.id_inscripcion);
 
     if (draft.medio_pago === "Flow") {
@@ -574,21 +658,37 @@ export default function TesoreriaCampanaPage() {
     );
   }
 
+  const selectedMontoTotal = selectedRow ? toNumber(selectedRow.monto_total) : 0;
+  const selectedSaldoPendiente = selectedRow ? toNumber(selectedRow.saldo_pendiente) : 0;
+  const selectedTieneTicket = Boolean(selectedRow?.id_tipo_entrada);
+  const selectedFullyPaid =
+    Boolean(selectedRow) && selectedMontoTotal > 0 && selectedSaldoPendiente <= 0;
+  const selectedWithoutCharge =
+    Boolean(selectedRow) && selectedMontoTotal <= 0 && toNumber(selectedRow?.monto_pagado_actual) <= 0;
+  const selectedIsProcessing = selectedRow
+    ? isBusy(`payment-${selectedRow.id_inscripcion}`)
+    : false;
+  const selectedIsHistoryLoading = selectedRow
+    ? isBusy(`history-${selectedRow.id_inscripcion}`)
+    : false;
+  const selectedIsSavingObjective = selectedRow
+    ? isBusy(`objective-${selectedRow.id_inscripcion}`)
+    : false;
+  const selectedIsFlow = selectedDraft.medio_pago === "Flow";
+
   return (
     <MainLayout title="Tesorería">
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-3xl font-bold">Tesorería</h1>
-            <p className="text-gray-500">
-              {campana?.nombre || `Campaña #${id_campana}`}
-            </p>
+            <p className="text-gray-500">{campana?.nombre || `Campaña #${id_campana}`}</p>
             <p className="text-sm text-gray-500 mt-1">
-              Gestión de pagos manuales, pagos parciales y links de cobro.
+              Gestión de pagos manuales, abonos, montos manuales y links de cobro.
             </p>
           </div>
 
-          <Button variant="outline" onClick={() => router.push("/tesoreria")}> 
+          <Button variant="outline" onClick={() => router.push("/tesoreria")}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Volver
           </Button>
@@ -648,10 +748,7 @@ export default function TesoreriaCampanaPage() {
                   <p className="font-medium mb-3">Columnas visibles</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     {COLUMN_OPTIONS.map((item) => (
-                      <label
-                        key={item.key}
-                        className="flex items-center gap-2 text-sm"
-                      >
+                      <label key={item.key} className="flex items-center gap-2 text-sm">
                         <input
                           type="checkbox"
                           checked={visibleColumns[item.key]}
@@ -694,300 +791,108 @@ export default function TesoreriaCampanaPage() {
                 <TableBody>
                   {visibles.length > 0 ? (
                     visibles.map((row) => {
-                      const draft = getDraft(row.id_inscripcion);
                       const montoTotal = toNumber(row.monto_total);
                       const saldoPendiente = toNumber(row.saldo_pendiente);
-                      const noTieneCobroAsignado =
-                        row.estado_pago === "No Aplica" || montoTotal <= 0;
-                      const fullyPaid =
-                        !noTieneCobroAsignado &&
-                        (row.estado_pago === "Pagado" ||
-                          (montoTotal > 0 && saldoPendiente <= 0));
-                      const isProcessing = isBusy(`payment-${row.id_inscripcion}`);
-                      const isHistoryBusy = isBusy(`history-${row.id_inscripcion}`);
-                      const isFlow = draft.medio_pago === "Flow";
+                      const fullyPaid = montoTotal > 0 && saldoPendiente <= 0;
+                      const withoutCharge =
+                        montoTotal <= 0 && toNumber(row.monto_pagado_actual) <= 0;
 
                       return (
-                        <Fragment key={row.id_inscripcion}>
-                          <TableRow>
-                            {visibleColumns.id && (
-                              <TableCell>{row.id_inscripcion}</TableCell>
-                            )}
+                        <TableRow key={row.id_inscripcion}>
+                          {visibleColumns.id && <TableCell>{row.id_inscripcion}</TableCell>}
 
-                            {visibleColumns.nombre && (
-                              <TableCell className="font-medium">{row.nombre}</TableCell>
-                            )}
-
-                            {visibleColumns.email && (
-                              <TableCell>{row.email}</TableCell>
-                            )}
-
-                            {visibleColumns.empresa && (
-                              <TableCell>{row.empresa || "-"}</TableCell>
-                            )}
-
-                            {visibleColumns.entrada && (
-                              <TableCell>{row.tipo_entrada || "-"}</TableCell>
-                            )}
-
-                            {visibleColumns.montoTotal && (
-                              <TableCell>{formatMoney(row.monto_total)}</TableCell>
-                            )}
-
-                            {visibleColumns.pagado && (
-                              <TableCell>{formatMoney(row.monto_pagado_actual)}</TableCell>
-                            )}
-
-                            {visibleColumns.saldo && (
-                              <TableCell>
-                                <span
-                                  className={
-                                    fullyPaid
-                                      ? "text-green-700 font-medium"
-                                      : "text-yellow-700 font-medium"
-                                  }
-                                >
-                                  {formatMoney(row.saldo_pendiente)}
-                                </span>
-                              </TableCell>
-                            )}
-
-                            {visibleColumns.medio && (
-                              <TableCell>{row.ultimo_medio_pago || "-"}</TableCell>
-                            )}
-
-                            {visibleColumns.estado && (
-                              <TableCell>
-                                <span
-                                  className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getBadgeClasses(
-                                    row.estado_pago
-                                  )}`}
-                                >
-                                  {row.estado_pago}
-                                </span>
-                              </TableCell>
-                            )}
-
-                            {visibleColumns.gestion && (
-                              <TableCell>
-                                <div className="flex flex-col gap-3 min-w-[360px]">
-                                  <div>
-                                    <label className="block text-xs text-gray-500 mb-1">
-                                      Monto del pago / abono
-                                    </label>
-                                    <Input
-                                      type="number"
-                                      min="0"
-                                      step="1"
-                                      value={draft.monto}
-                                      disabled={isProcessing || fullyPaid}
-                                      onChange={(e) =>
-                                        updateDraft(
-                                          row.id_inscripcion,
-                                          "monto",
-                                          e.target.value
-                                        )
-                                      }
-                                      placeholder={
-                                        isFlow
-                                          ? "Vacío = saldo pendiente"
-                                          : "Ej: 15000"
-                                      }
-                                    />
-                                  </div>
-
-                                  <div>
-                                    <label className="block text-xs text-gray-500 mb-1">
-                                      Medio de pago
-                                    </label>
-                                    <select
-                                      className="w-full border rounded-md px-3 py-2 bg-white"
-                                      value={draft.medio_pago}
-                                      disabled={isProcessing || fullyPaid}
-                                      onChange={(e) =>
-                                        updateDraft(
-                                          row.id_inscripcion,
-                                          "medio_pago",
-                                          e.target.value
-                                        )
-                                      }
-                                    >
-                                      {MEDIOS_PAGO_DISPONIBLES.map((medio) => (
-                                        <option key={medio} value={medio}>
-                                          {medio}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-
-                                  <div>
-                                    <label className="block text-xs text-gray-500 mb-1">
-                                      Notas
-                                    </label>
-                                    <Textarea
-                                      value={draft.nota}
-                                      disabled={isProcessing || fullyPaid}
-                                      onChange={(e) =>
-                                        updateDraft(
-                                          row.id_inscripcion,
-                                          "nota",
-                                          e.target.value
-                                        )
-                                      }
-                                      placeholder={
-                                        isFlow
-                                          ? "Ej: Abono pendiente para enviar por correo"
-                                          : "Ej: Pago recibido en caja / observaciones"
-                                      }
-                                      className="min-h-[88px]"
-                                    />
-                                  </div>
-
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                    <Button
-                                      size="sm"
-                                      disabled={isProcessing || fullyPaid}
-                                      onClick={() => handleProcesarPago(row)}
-                                    >
-                                      {isFlow ? "Generar link de pago" : "Registrar pago"}
-                                    </Button>
-
-                                    <Button
-                                      size="sm"
-                                      variant="secondary"
-                                      disabled={isHistoryBusy}
-                                      onClick={() => handleToggleHistory(row)}
-                                    >
-                                      {expandedRows[row.id_inscripcion]
-                                        ? "Ocultar historial"
-                                        : "Ver historial"}
-                                    </Button>
-                                  </div>
-
-                                  {draft.generated_link && (
-                                    <div className="rounded-md border border-sky-200 bg-sky-50 p-3 space-y-2">
-                                      <p className="text-sm font-medium text-sky-900">
-                                        Link listo para enviar al cliente
-                                      </p>
-                                      <p className="break-all text-xs text-sky-800">
-                                        {draft.generated_link}
-                                      </p>
-                                      <div className="flex flex-wrap gap-2">
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() =>
-                                            copyToClipboard(
-                                              draft.generated_link || "",
-                                              "Link copiado al portapapeles."
-                                            )
-                                          }
-                                        >
-                                          <Copy className="mr-2 h-4 w-4" />
-                                          Copiar link
-                                        </Button>
-
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() =>
-                                            window.open(
-                                              draft.generated_link || "",
-                                              "_blank",
-                                              "noopener,noreferrer"
-                                            )
-                                          }
-                                        >
-                                          <ExternalLink className="mr-2 h-4 w-4" />
-                                          Abrir link
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  <p className="text-xs text-gray-500">
-                                    {isFlow
-                                      ? "Si dejas vacío el monto para Flow, se usará automáticamente el saldo pendiente."
-                                      : "Con Efectivo, Transferencia, Cortesía u Otro, el pago se registra directamente y el estado se recalcula según el saldo."}
-                                  </p>
-
-                                  {fullyPaid && (
-                                    <p className="text-xs text-green-700 font-medium">
-                                      Esta inscripción ya está completamente pagada.
-                                    </p>
-                                  )}
-
-                                  {!fullyPaid && noTieneCobroAsignado && (
-                                    <p className="text-xs text-amber-700 font-medium">
-                                      Esta inscripción no tiene ticket o cobro asignado.
-                                    </p>
-                                  )}
-                                </div>
-                              </TableCell>
-                            )}
-
-                            {visibleColumns.fecha && (
-                              <TableCell>{formatDate(row.fecha_inscripcion)}</TableCell>
-                            )}
-                          </TableRow>
-
-                          {expandedRows[row.id_inscripcion] && (
-                            <TableRow>
-                              <TableCell
-                                colSpan={activeColumnCount}
-                                className="bg-gray-50"
-                              >
-                                <div className="p-2">
-                                  <p className="font-medium mb-3">
-                                    Historial de pagos de la inscripción #
-                                    {row.id_inscripcion}
-                                  </p>
-
-                                  {historial[row.id_inscripcion]?.length ? (
-                                    <div className="space-y-2">
-                                      {historial[row.id_inscripcion].map((mov) => (
-                                        <div
-                                          key={mov.id_movimiento}
-                                          className="rounded-md border bg-white p-3"
-                                        >
-                                          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-1">
-                                            <div className="font-medium">
-                                              {formatMoney(mov.monto)} · {mov.medio_pago}
-                                            </div>
-                                            <div className="text-sm text-gray-500">
-                                              {formatDate(
-                                                mov.fecha_pago || mov.fecha_creado
-                                              )}
-                                            </div>
-                                          </div>
-
-                                          <div className="text-sm text-gray-600 mt-1">
-                                            {mov.tipo_registro} · {mov.estado}
-                                            {mov.orden_compra
-                                              ? ` · ${mov.orden_compra}`
-                                              : ""}
-                                          </div>
-
-                                          {mov.observacion && (
-                                            <div className="text-sm text-gray-600 mt-1">
-                                              {mov.observacion}
-                                            </div>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <p className="text-sm text-gray-500">
-                                      No hay movimientos registrados todavía.
-                                    </p>
-                                  )}
-                                </div>
-                              </TableCell>
-                            </TableRow>
+                          {visibleColumns.nombre && (
+                            <TableCell className="font-medium">{row.nombre}</TableCell>
                           )}
-                        </Fragment>
+
+                          {visibleColumns.email && <TableCell>{row.email}</TableCell>}
+
+                          {visibleColumns.empresa && (
+                            <TableCell>{row.empresa || "-"}</TableCell>
+                          )}
+
+                          {visibleColumns.entrada && (
+                            <TableCell>
+                              {row.tipo_entrada || (
+                                <span className="text-gray-500">Sin ticket</span>
+                              )}
+                            </TableCell>
+                          )}
+
+                          {visibleColumns.montoTotal && (
+                            <TableCell>{formatMoney(row.monto_total)}</TableCell>
+                          )}
+
+                          {visibleColumns.pagado && (
+                            <TableCell>{formatMoney(row.monto_pagado_actual)}</TableCell>
+                          )}
+
+                          {visibleColumns.saldo && (
+                            <TableCell>
+                              <span
+                                className={
+                                  fullyPaid
+                                    ? "text-green-700 font-medium"
+                                    : withoutCharge
+                                      ? "text-gray-600 font-medium"
+                                      : "text-yellow-700 font-medium"
+                                }
+                              >
+                                {formatMoney(row.saldo_pendiente)}
+                              </span>
+                            </TableCell>
+                          )}
+
+                          {visibleColumns.medio && (
+                            <TableCell>{row.ultimo_medio_pago || "-"}</TableCell>
+                          )}
+
+                          {visibleColumns.estado && (
+                            <TableCell>
+                              <span
+                                className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getBadgeClasses(
+                                  row.estado_pago
+                                )}`}
+                              >
+                                {row.estado_pago}
+                              </span>
+                            </TableCell>
+                          )}
+
+                          {visibleColumns.gestion && (
+                            <TableCell>
+                              <div className="min-w-[220px] space-y-2">
+                                <p className="text-xs text-gray-500">
+                                  {row.id_tipo_entrada
+                                    ? "Cobro definido por ticket"
+                                    : montoTotal > 0
+                                      ? "Monto manual configurable"
+                                      : "Sin cobro configurado / cortesía"}
+                                </p>
+
+                                <div className="flex flex-wrap gap-2">
+                                  <Button size="sm" onClick={() => openGestion(row)}>
+                                    Gestionar pago
+                                  </Button>
+
+                                  {row.estado_transaccion && (
+                                    <span
+                                      className={`inline-flex items-center rounded-full border px-2 py-1 text-xs font-medium ${getTransactionBadgeClasses(
+                                        row.estado_transaccion
+                                      )}`}
+                                    >
+                                      {row.estado_transaccion}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </TableCell>
+                          )}
+
+                          {visibleColumns.fecha && (
+                            <TableCell>{formatDate(row.fecha_inscripcion)}</TableCell>
+                          )}
+                        </TableRow>
                       );
                     })
                   ) : (
@@ -1006,6 +911,294 @@ export default function TesoreriaCampanaPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={activeGestionId !== null} onOpenChange={(open) => !open && setActiveGestionId(null)}>
+        {selectedRow && (
+          <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                Gestionar pago · Inscripción #{selectedRow.id_inscripcion}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedRow.nombre} · {selectedRow.email}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-gray-500">Estado</p>
+                <p className="mt-1 font-semibold">{selectedRow.estado_pago}</p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-gray-500">Monto objetivo</p>
+                <p className="mt-1 font-semibold">{formatMoney(selectedRow.monto_total)}</p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-gray-500">Total pagado</p>
+                <p className="mt-1 font-semibold">{formatMoney(selectedRow.monto_pagado_actual)}</p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-gray-500">Saldo pendiente</p>
+                <p className="mt-1 font-semibold">{formatMoney(selectedRow.saldo_pendiente)}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-6">
+              <div className="space-y-4">
+                <div className="rounded-md border p-4 space-y-4">
+                  <div>
+                    <h3 className="font-semibold">Monto manual de cobro</h3>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {selectedTieneTicket
+                        ? "Esta inscripción usa el precio del ticket y no permite edición manual."
+                        : "Cuando no hay ticket, este monto define cuánto se debe cobrar. Usa 0 para cortesía o sin cobro."}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">
+                        Monto objetivo manual
+                      </label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={selectedDraft.monto_objetivo_manual}
+                        disabled={selectedTieneTicket || selectedIsSavingObjective}
+                        onChange={(e) =>
+                          updateDraft(
+                            selectedRow.id_inscripcion,
+                            "monto_objetivo_manual",
+                            e.target.value
+                          )
+                        }
+                        placeholder="0 = cortesía"
+                      />
+                    </div>
+
+                    <Button
+                      type="button"
+                      disabled={selectedTieneTicket || selectedIsSavingObjective}
+                      onClick={() => handleGuardarMontoObjetivo(selectedRow)}
+                    >
+                      Guardar monto
+                    </Button>
+                  </div>
+
+                  {!selectedTieneTicket && selectedWithoutCharge && (
+                    <p className="text-xs text-amber-700 font-medium">
+                      Esta inscripción quedó sin cobro. Puedes mantenerla en 0 como cortesía o definir un monto manual antes de registrar pagos.
+                    </p>
+                  )}
+                </div>
+
+                <div className="rounded-md border p-4 space-y-4">
+                  <div>
+                    <h3 className="font-semibold">Registrar pago o generar link</h3>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Los pagos siempre recalculan el estado según el saldo real. Nunca se marcará como pagado si el total abonado no completa el cobro.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Monto del pago / abono
+                    </label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={selectedDraft.monto}
+                      disabled={selectedIsProcessing || selectedFullyPaid || selectedMontoTotal <= 0}
+                      onChange={(e) =>
+                        updateDraft(selectedRow.id_inscripcion, "monto", e.target.value)
+                      }
+                      placeholder={
+                        selectedIsFlow ? "Vacío = saldo pendiente" : "Ej: 15000"
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Medio de pago</label>
+                    <select
+                      className="w-full border rounded-md px-3 py-2 bg-white"
+                      value={selectedDraft.medio_pago}
+                      disabled={selectedIsProcessing || selectedFullyPaid || selectedMontoTotal <= 0}
+                      onChange={(e) =>
+                        updateDraft(
+                          selectedRow.id_inscripcion,
+                          "medio_pago",
+                          e.target.value
+                        )
+                      }
+                    >
+                      {MEDIOS_PAGO_DISPONIBLES.map((medio) => (
+                        <option key={medio} value={medio}>
+                          {medio}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Notas</label>
+                    <Textarea
+                      value={selectedDraft.nota}
+                      disabled={selectedIsProcessing || selectedFullyPaid || selectedMontoTotal <= 0}
+                      onChange={(e) =>
+                        updateDraft(selectedRow.id_inscripcion, "nota", e.target.value)
+                      }
+                      placeholder={
+                        selectedIsFlow
+                          ? "Ej: Abono pendiente para enviar por correo"
+                          : "Ej: Pago recibido en caja / observaciones"
+                      }
+                      className="min-h-[88px]"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      disabled={selectedIsProcessing || selectedFullyPaid || selectedMontoTotal <= 0}
+                      onClick={() => handleProcesarPago(selectedRow)}
+                    >
+                      {selectedIsFlow ? "Generar link de pago" : "Registrar pago"}
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={selectedIsHistoryLoading}
+                      onClick={() => fetchHistorial(selectedRow.id_inscripcion)}
+                    >
+                      Recargar historial
+                    </Button>
+                  </div>
+
+                  {selectedDraft.generated_link && (
+                    <div className="rounded-md border border-sky-200 bg-sky-50 p-3 space-y-2">
+                      <p className="text-sm font-medium text-sky-900">
+                        Link listo para enviar al cliente
+                      </p>
+                      <p className="break-all text-xs text-sky-800">
+                        {selectedDraft.generated_link}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            copyToClipboard(
+                              selectedDraft.generated_link || "",
+                              "Link copiado al portapapeles."
+                            )
+                          }
+                        >
+                          <Copy className="mr-2 h-4 w-4" />
+                          Copiar link
+                        </Button>
+
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            window.open(
+                              selectedDraft.generated_link || "",
+                              "_blank",
+                              "noopener,noreferrer"
+                            )
+                          }
+                        >
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          Abrir link
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-gray-500">
+                    {selectedIsFlow
+                      ? "Si dejas vacío el monto para Flow, se usará automáticamente el saldo pendiente."
+                      : "Con Efectivo, Transferencia, Cortesía u Otro, el pago se registra directamente y el estado se recalcula según el saldo."}
+                  </p>
+
+                  {selectedFullyPaid && (
+                    <p className="text-xs text-green-700 font-medium">
+                      Esta inscripción ya está completamente pagada.
+                    </p>
+                  )}
+
+                  {selectedMontoTotal <= 0 && !selectedFullyPaid && (
+                    <p className="text-xs text-amber-700 font-medium">
+                      {selectedTieneTicket
+                        ? "Esta inscripción no tiene un monto de cobro válido."
+                        : "Primero define el monto manual de cobro. Usa 0 si será una cortesía."}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-md border p-4">
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div>
+                    <h3 className="font-semibold">Historial de pagos</h3>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Últimos movimientos registrados para esta inscripción.
+                    </p>
+                  </div>
+
+                  {selectedRow.estado_transaccion && (
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2 py-1 text-xs font-medium ${getTransactionBadgeClasses(
+                        selectedRow.estado_transaccion
+                      )}`}
+                    >
+                      {selectedRow.estado_transaccion}
+                    </span>
+                  )}
+                </div>
+
+                {selectedIsHistoryLoading ? (
+                  <p className="text-sm text-gray-500">Cargando historial...</p>
+                ) : selectedHistorial.length ? (
+                  <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                    {selectedHistorial.map((mov) => (
+                      <div key={mov.id_movimiento} className="rounded-md border bg-white p-3">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-1">
+                          <div className="font-medium">
+                            {formatMoney(mov.monto)} · {mov.medio_pago}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {formatDate(mov.fecha_pago || mov.fecha_creado)}
+                          </div>
+                        </div>
+
+                        <div className="text-sm text-gray-600 mt-1">
+                          {mov.tipo_registro} · {mov.estado}
+                          {mov.orden_compra ? ` · ${mov.orden_compra}` : ""}
+                        </div>
+
+                        {mov.observacion && (
+                          <div className="text-sm text-gray-600 mt-1">{mov.observacion}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">
+                    No hay movimientos registrados todavía.
+                  </p>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        )}
+      </Dialog>
     </MainLayout>
   );
 }

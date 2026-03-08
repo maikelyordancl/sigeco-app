@@ -80,7 +80,7 @@ async function getInscripcionCobroContext(id_inscripcion) {
       i.id_campana,
       c.nombre AS contacto_nombre,
       c.email,
-      COALESCE(te.nombre, 'Abono') AS ticket_nombre
+      CASE WHEN te.id_tipo_entrada IS NOT NULL THEN te.nombre ELSE 'Cobro manual' END AS ticket_nombre
     FROM inscripciones i
     JOIN contactos c ON c.id_contacto = i.id_contacto
     LEFT JOIN tipos_de_entrada te ON te.id_tipo_entrada = i.id_tipo_entrada
@@ -287,21 +287,31 @@ exports.registrarAbono = async (req, res) => {
     }
 
     const tieneCobroObjetivo = Number(resumen.montoObjetivo || 0) > 0;
+    const tieneTicketAsociado = Number(resumen.idTipoEntrada || 0) > 0;
 
-    if (tieneCobroObjetivo) {
-      if (resumen.saldoPendiente <= 0) {
-        return res.status(400).json({
-          success: false,
-          error: 'La inscripción ya está completamente pagada.',
-        });
-      }
+    if (!tieneCobroObjetivo) {
+      const mensaje = tieneTicketAsociado
+        ? 'La inscripción no tiene un monto de cobro válido.'
+        : 'Esta inscripción no tiene ticket. Primero define el monto manual de cobro; si es cortesía, déjalo en 0.';
 
-      if (montoNumerico > resumen.saldoPendiente) {
-        return res.status(400).json({
-          success: false,
-          error: `El abono no puede superar el saldo pendiente (${resumen.saldoPendiente}).`,
-        });
-      }
+      return res.status(400).json({
+        success: false,
+        error: mensaje,
+      });
+    }
+
+    if (resumen.saldoPendiente <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'La inscripción ya está completamente pagada.',
+      });
+    }
+
+    if (montoNumerico > resumen.saldoPendiente) {
+      return res.status(400).json({
+        success: false,
+        error: `El abono no puede superar el saldo pendiente (${resumen.saldoPendiente}).`,
+      });
     }
 
     const result = await InscripcionPagoModel.registrarAbonoManual({
@@ -362,33 +372,33 @@ exports.generarLinkPagoFlow = async (req, res) => {
     }
 
     const tieneCobroObjetivo = Number(resumen.montoObjetivo || 0) > 0;
-    let montoFinal;
+    const tieneTicketAsociado = Number(resumen.idTipoEntrada || 0) > 0;
 
     if (!tieneCobroObjetivo) {
-      if (montoEnviado === null) {
-        return res.status(400).json({
-          success: false,
-          error: 'Esta inscripción no tiene ticket asignado. Para generar un link Flow debes ingresar un monto manual.',
-        });
-      }
+      const mensaje = tieneTicketAsociado
+        ? 'La inscripción no tiene un monto de cobro válido.'
+        : 'Esta inscripción no tiene ticket. Primero define el monto manual de cobro; si es cortesía, déjalo en 0.';
 
-      montoFinal = montoEnviado;
-    } else {
-      if (resumen.saldoPendiente <= 0) {
-        return res.status(400).json({
-          success: false,
-          error: 'La inscripción ya está completamente pagada.',
-        });
-      }
+      return res.status(400).json({
+        success: false,
+        error: mensaje,
+      });
+    }
 
-      montoFinal = montoEnviado === null ? resumen.saldoPendiente : montoEnviado;
+    if (resumen.saldoPendiente <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'La inscripción ya está completamente pagada.',
+      });
+    }
 
-      if (montoFinal > resumen.saldoPendiente) {
-        return res.status(400).json({
-          success: false,
-          error: `El link no puede superar el saldo pendiente (${resumen.saldoPendiente}).`,
-        });
-      }
+    const montoFinal = montoEnviado === null ? resumen.saldoPendiente : montoEnviado;
+
+    if (montoFinal > resumen.saldoPendiente) {
+      return res.status(400).json({
+        success: false,
+        error: `El link no puede superar el saldo pendiente (${resumen.saldoPendiente}).`,
+      });
     }
 
     const contexto = await getInscripcionCobroContext(id_inscripcion);
@@ -459,6 +469,61 @@ exports.generarLinkPagoFlow = async (req, res) => {
   }
 };
 
+exports.updateMontoObjetivoManual = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
+  try {
+    const userId = getUserId(req);
+    const { id_inscripcion } = req.params;
+    const { monto_objetivo_manual } = req.body;
+
+    const permission = await ensureTesoreriaPermissionByInscripcion(userId, id_inscripcion, 'update');
+
+    if (!permission.ok) {
+      return res.status(permission.status).json({ success: false, error: permission.error });
+    }
+
+    const montoNormalizado = Number(monto_objetivo_manual);
+
+    if (!Number.isFinite(montoNormalizado) || montoNormalizado < 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'El monto manual debe ser un número válido mayor o igual a 0.',
+      });
+    }
+
+    const result = await InscripcionPagoModel.updateMontoObjetivoManual(
+      id_inscripcion,
+      montoNormalizado
+    );
+
+    if (!result) {
+      return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
+    }
+
+    if (result.blockedByTicket) {
+      return res.status(400).json({
+        success: false,
+        error: 'No puedes editar el monto manual porque esta inscripción tiene un ticket asociado.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: montoNormalizado === 0
+        ? 'Monto manual actualizado. La inscripción quedó como cortesía/sin cobro.'
+        : 'Monto manual actualizado correctamente.',
+      data: result,
+    });
+  } catch (error) {
+    console.error('Error al actualizar monto objetivo manual:', error);
+    res.status(500).json({ success: false, error: 'Error del servidor.' });
+  }
+};
+
 exports.updateEstadoPago = async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -476,7 +541,7 @@ exports.updateEstadoPago = async (req, res) => {
       return res.status(permission.status).json({ success: false, error: permission.error });
     }
 
-    if (!ESTADOS_PAGO_VALIDOS.includes(estado_pago)) {
+    if (estado_pago && !ESTADOS_PAGO_VALIDOS.includes(estado_pago)) {
       return res.status(400).json({
         success: false,
         error: 'Estado de pago inválido.',
@@ -523,9 +588,12 @@ exports.updateEstadoPago = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
     }
 
+    const recalculo = await InscripcionPagoModel.recalculateInscripcionPayment(id_inscripcion);
+
     return res.json({
       success: true,
-      message: 'Pago actualizado correctamente.',
+      message: 'Pago recalculado correctamente.',
+      data: recalculo,
     });
   } catch (error) {
     console.error('Error al actualizar pago:', error);
