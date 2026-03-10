@@ -316,10 +316,44 @@ export const FormularioConfigDialog = ({ isOpen, onClose, id_campana }: Formular
                                                     <p className="font-medium">{field.etiqueta}</p>
                                                     <p className="text-xs text-gray-500">{field.tipo_campo}</p>
                                                 </div>
-                                                <div className="flex items-center space-x-2">
-                                                    <Controller name={`campos.${field.originalIndex}.es_obligatorio`} control={control} render={({ field: controllerField }) => (<Checkbox id={`campos.${field.originalIndex}.es_obligatorio`} checked={controllerField.value} onCheckedChange={controllerField.onChange} />)} />
-                                                    <Label htmlFor={`campos.${field.originalIndex}.es_obligatorio`}>Requerido</Label>
+                                                
+                                                {/* --- NUEVO: SWITCH DE VISIBILIDAD --- */}
+                                                <div className="flex items-center space-x-2 border-r pr-4 mr-2">
+                                                    <Controller 
+                                                        name={`campos.${field.originalIndex}.es_visible`} 
+                                                        control={control} 
+                                                        render={({ field: controllerField }) => (
+                                                            <Switch 
+                                                                id={`campos.${field.originalIndex}.es_visible`} 
+                                                                checked={controllerField.value} 
+                                                                onCheckedChange={controllerField.onChange} 
+                                                            />
+                                                        )} 
+                                                    />
+                                                    <Label htmlFor={`campos.${field.originalIndex}.es_visible`} className="text-xs cursor-pointer">
+                                                        Visible Público
+                                                    </Label>
                                                 </div>
+                                                {/* ------------------------------------ */}
+
+                                                <div className="flex items-center space-x-2 mr-2">
+                                                    <Controller 
+                                                        name={`campos.${field.originalIndex}.es_obligatorio`} 
+                                                        control={control} 
+                                                        render={({ field: controllerField }) => (
+                                                            <Checkbox 
+                                                                id={`campos.${field.originalIndex}.es_obligatorio`} 
+                                                                checked={controllerField.value} 
+                                                                onCheckedChange={controllerField.onChange} 
+                                                                disabled={!watch(`campos.${field.originalIndex}.es_visible`)} // Se desactiva si no es visible
+                                                            />
+                                                        )} 
+                                                    />
+                                                    <Label htmlFor={`campos.${field.originalIndex}.es_obligatorio`} className="text-xs cursor-pointer">
+                                                        Requerido
+                                                    </Label>
+                                                </div>
+                                                
                                                 {/* --- 6. BOTONES DE EDITAR Y ELIMINAR --- */}
                                                 <Button type="button" variant="ghost" size="icon" onClick={() => openEditFieldDialog(field, field.originalIndex)}>
                                                     <Pencil className="h-4 w-4 text-blue-600" />

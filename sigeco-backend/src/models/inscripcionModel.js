@@ -143,12 +143,7 @@ const Inscripcion = {
         }
     },
 
-    // sigeco-backend/src/models/inscripcionModel.js
-
-    // --- INICIO DE LA MODIFICACIÓN ---
     findWithCustomFieldsByCampanaId: async (id_campana, limit = 100, offset = 0, searchTerm = null, estadoFiltro = null) => {
-    // Obtenemos la configuración de la campaña/subevento para aplicar
-    // el filtro correcto de asistentes visibles en Acreditación.
     const [campanaRulesRows] = await pool.execute(`
         SELECT
             COALESCE(s.obligatorio_registro, 0) AS obligatorio_registro,
@@ -166,12 +161,6 @@ const Inscripcion = {
     const obligatorioRegistro = Number(campanaRulesRows[0].obligatorio_registro) === 1;
     const obligatorioPago = Number(campanaRulesRows[0].obligatorio_pago) === 1;
 
-    // Regla de negocio para Acreditación:
-    // - Si requiere registro o pago: solo pueden acreditarse Registrado y Confirmado,
-    //   pero también mostramos Asistió para mantener visibles los ya acreditados.
-    // - Si no requiere ni registro ni pago: mostramos Invitado, Registrado, Confirmado
-    //   y también Asistió.
-    // - Cancelado queda fuera por defecto.
     const estadosPermitidos = (obligatorioRegistro || obligatorioPago)
     ? ['Invitado', 'Registrado', 'Confirmado', 'Asistió', 'Cancelado']
     : ['Invitado', 'Registrado', 'Confirmado', 'Asistió', 'Cancelado'];
@@ -179,12 +168,9 @@ const Inscripcion = {
     const whereConditions = ['i.id_campana = ?'];
     const params = [id_campana];
 
-    // Filtro base por estados permitidos según configuración de campaña.
     whereConditions.push(`i.estado_asistencia IN (${estadosPermitidos.map(() => '?').join(', ')})`);
     params.push(...estadosPermitidos);
 
-    // Si el frontend manda un filtro por estado, se respeta
-    // siempre que siga dentro del universo permitido por campaña.
     if (estadoFiltro) {
         whereConditions.push('i.estado_asistencia = ?');
         params.push(estadoFiltro);
@@ -295,15 +281,10 @@ const Inscripcion = {
         c.pais,
         c.comuna,
         c.fecha_creado AS fecha_creacion_contacto,
-
-        -- Mantengo compatibilidad con campos existentes
         MAX(p.id_pago) AS id_pago,
         MAX(CASE WHEN p.estado = 'Pagado' THEN p.monto ELSE NULL END) AS monto,
         COALESCE(mp.ultimo_estado_movimiento, pp.ultimo_estado_pasarela) AS estado_transaccion,
-
         te.nombre AS tipo_entrada,
-
-        -- NUEVO: monto visible real
         COALESCE(
           mp.total_pagado_movimientos,
           i.monto_pagado_manual,
@@ -388,7 +369,6 @@ const Inscripcion = {
         statusCounts
     };
 },
-    // --- FIN DE LA MODIFICACIÓN ---
 
     updateStatus: async (id_inscripcion, estado_asistencia) => {
         const [result] = await pool.execute(
@@ -489,8 +469,6 @@ const Inscripcion = {
         await connection.beginTransaction();
 
         try {
-            console.log('--- Iniciando Proceso de Importación Masiva ---');
-
             const camposQuery = `
                 SELECT fc.id_campo, fc.etiqueta, fc.nombre_interno, fc.es_de_sistema
                 FROM campana_formulario_config cfc
@@ -499,27 +477,59 @@ const Inscripcion = {
             `;
             const [camposDelFormulario] = await connection.query(camposQuery, [id_campana]);
 
+            const normalizeString = (str) => {
+                if (!str) return '';
+                return String(str)
+                    .toLowerCase()
+                    .replace(/ã¡/g, 'a').replace(/ã©/g, 'e').replace(/ã³/g, 'o').replace(/ãº/g, 'u').replace(/ã±/g, 'n').replace(/ã\xad/g, 'i')
+                    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") 
+                    .replace(/[^a-z0-9\s]/g, "") 
+                    .trim();
+            };
+
+            const normalizeHeader = (str) => normalizeString(str).replace(/\s+/g, "");
+
             const mapaEtiquetaAId = camposDelFormulario.reduce((mapa, campo) => {
-                mapa[campo.etiqueta.trim().toLowerCase()] = campo.id_campo;
+                mapa[normalizeHeader(campo.etiqueta)] = campo.id_campo;
                 return mapa;
             }, {});
             
             const camposDeSistema = camposDelFormulario
                 .filter(c => c.es_de_sistema === 1)
                 .reduce((mapa, campo) => {
-                    mapa[campo.etiqueta.trim().toLowerCase()] = campo.nombre_interno;
+                    mapa[normalizeHeader(campo.etiqueta)] = campo.nombre_interno;
                     return mapa;
                 }, {});
 
-            const etiquetasValidas = new Set(Object.keys(mapaEtiquetaAId));
-            const cabecerasRecibidas = new Set();
+            const [opcionesCampos] = await connection.query(`
+                SELECT id_campo, etiqueta_opcion
+                FROM campo_opciones
+                WHERE id_campo IN (SELECT id_campo FROM campana_formulario_config WHERE id_campana = ?)
+            `, [id_campana]);
 
+            const mapaOpcionesDB = {};
+            opcionesCampos.forEach(opc => {
+                if (!mapaOpcionesDB[opc.id_campo]) mapaOpcionesDB[opc.id_campo] = {};
+                mapaOpcionesDB[opc.id_campo][normalizeString(opc.etiqueta_opcion)] = opc.etiqueta_opcion; 
+            });
+
+            const etiquetasValidas = new Set(Object.keys(mapaEtiquetaAId));
+            
+            // --- CONSTANTES DE INTEGRACIÓN TESORERÍA ---
+            const MONTO_HEADER = normalizeHeader('Monto Pagado (Opcional)');
+            const MEDIO_PAGO_HEADER = normalizeHeader('Medio de Pago (Opcional)');
+            
+            // Retrocompatibilidad con nombres antiguos
+            etiquetasValidas.add(MONTO_HEADER);
+            etiquetasValidas.add(MEDIO_PAGO_HEADER);
+            etiquetasValidas.add(normalizeHeader('Monto Pagado Manual (Opcional)'));
+            etiquetasValidas.add(normalizeHeader('Monto Pagado Manual'));
+
+            const cabecerasRecibidas = new Set();
             contactos.forEach((fila) => {
                 Object.keys(fila || {}).forEach((cabecera) => {
-                    const cabeceraNormalizada = String(cabecera).trim().toLowerCase();
-                    if (cabeceraNormalizada) {
-                        cabecerasRecibidas.add(cabeceraNormalizada);
-                    }
+                    const cabeceraNormalizada = normalizeHeader(cabecera);
+                    if (cabeceraNormalizada) cabecerasRecibidas.add(cabeceraNormalizada);
                 });
             });
 
@@ -528,36 +538,50 @@ const Inscripcion = {
             );
 
             if (cabecerasDesconocidas.length > 0) {
-                throw new Error(
-                    `La plantilla no coincide con la campaña seleccionada. Columnas no reconocidas: ${cabecerasDesconocidas.join(', ')}. Descarga nuevamente la plantilla correcta para esta campaña.`
-                );
+                 const reales = Array.from(cabecerasDesconocidas).map(norm => {
+                     let original = norm;
+                     Object.keys(contactos[0] || {}).forEach(k => {
+                         if(normalizeHeader(k) === norm) original = k;
+                     });
+                     return original;
+                 });
+                throw new Error(`La plantilla no coincide con la campaña. Columnas no reconocidas: ${reales.join(', ')}`);
             }
 
-            console.log('Mapa de Campos de Sistema (para tabla contactos):', camposDeSistema);
             let totalProcesados = 0;
 
             for (const [index, fila] of contactos.entries()) {
-                console.log(`\n-------------------- Fila ${index + 2} --------------------`);
-                console.log('Datos CRUDOS del Excel:', fila);
-
-                const emailKey = Object.keys(fila).find(k => k.toLowerCase().trim() === 'email');
+                const emailKey = Object.keys(fila).find(k => normalizeHeader(k) === normalizeHeader('email'));
                 const email = emailKey ? fila[emailKey]?.toLowerCase().trim() : null;
 
-                if (!email || email === '') {
-                    throw new Error(`Fila ${index + 2}: La columna de email es obligatoria y está vacía.`);
-                }
+                if (!email || email === '') continue; 
                 
                 const datosContacto = {};
+                let montoPagadoManual = null;
+                let medioPagoManual = 'Manual/Importado'; // Por defecto si se sube monto sin especificar medio
+
                 for (const cabecera in fila) {
-                    const cabeceraNormalizada = cabecera.trim().toLowerCase();
+                    const cabeceraNormalizada = normalizeHeader(cabecera);
+                    
+                    // Capturamos el Monto
+                    if (cabeceraNormalizada === MONTO_HEADER || cabeceraNormalizada.includes('montopagadomanual')) {
+                         const rawMonto = String(fila[cabecera]).replace(/[^0-9]/g, '');
+                         if (rawMonto) montoPagadoManual = parseInt(rawMonto, 10);
+                         continue;
+                    }
+
+                    // Capturamos el Medio de Pago (Débito, Crédito, etc.)
+                    if (cabeceraNormalizada === MEDIO_PAGO_HEADER) {
+                         if (fila[cabecera]) medioPagoManual = String(fila[cabecera]).trim();
+                         continue;
+                    }
+
                     const nombreColumna = camposDeSistema[cabeceraNormalizada];
                     if (nombreColumna && fila[cabecera] !== null && fila[cabecera] !== '') {
                         datosContacto[nombreColumna] = fila[cabecera];
                     }
                 }
                 datosContacto.email = email;
-
-                console.log('-> Preparando para tabla "contactos":', datosContacto);
 
                 let [contactosExistentes] = await connection.query('SELECT id_contacto FROM contactos WHERE email = ?', [email]);
                 let id_contacto;
@@ -573,10 +597,10 @@ const Inscripcion = {
                     id_contacto = result.insertId;
                 }
 
-                const [resultInscripcion] = await connection.query(
-                    'INSERT IGNORE INTO inscripciones (id_campana, id_contacto, estado_asistencia) VALUES (?, ?, ?)',
-                    [id_campana, id_contacto, 'Invitado']
-                );
+                let queryInsc = 'INSERT IGNORE INTO inscripciones (id_campana, id_contacto, estado_asistencia) VALUES (?, ?, ?)';
+                let valuesInsc = [id_campana, id_contacto, 'Invitado'];
+                
+                const [resultInscripcion] = await connection.query(queryInsc, valuesInsc);
                 
                 let id_inscripcion;
                 if (resultInscripcion.insertId > 0) {
@@ -587,24 +611,56 @@ const Inscripcion = {
                         [id_campana, id_contacto]
                     );
                     if (!inscripcionExistente.length) {
-                         throw new Error(`Fila ${index + 2}: No se pudo crear ni encontrar la inscripción para ${email}.`);
+                         throw new Error(`Fila ${index + 2}: Error en la inscripción para ${email}.`);
                     }
                     id_inscripcion = inscripcionExistente[0].id_inscripcion;
                 }
                 
+                // --- INTEGRACIÓN CON TESORERÍA (MOVIMIENTO DE PAGO REAL) ---
+                if (montoPagadoManual !== null) {
+                    // Verificamos si ya tenía un movimiento de pago manual previo para no duplicarlo si re-subes el excel
+                    const [existingMov] = await connection.query(
+                        "SELECT id_movimiento FROM inscripcion_movimientos_pago WHERE id_inscripcion = ? LIMIT 1",
+                        [id_inscripcion]
+                    );
+
+                    if (existingMov.length > 0) {
+                        await connection.query(
+                            "UPDATE inscripcion_movimientos_pago SET monto = ?, medio_pago = ?, estado = 'Pagado' WHERE id_movimiento = ?",
+                            [montoPagadoManual, medioPagoManual, existingMov[0].id_movimiento]
+                        );
+                    } else {
+                        // Insertamos un movimiento limpio para la Tesorería
+                        await connection.query(
+                            "INSERT INTO inscripcion_movimientos_pago (id_inscripcion, monto, medio_pago, estado) VALUES (?, ?, ?, 'Pagado')",
+                            [id_inscripcion, montoPagadoManual, medioPagoManual]
+                        );
+                    }
+
+                    // Por compatibilidad con código antiguo, se guarda el backup en la misma tabla
+                    await connection.query(
+                        "UPDATE inscripciones SET monto_pagado_manual = ? WHERE id_inscripcion = ?", 
+                        [montoPagadoManual, id_inscripcion]
+                    );
+                }
+                
                 const respuestasParaInsertar = [];
                 for (const cabecera in fila) {
-                    const cabeceraNormalizada = cabecera.trim().toLowerCase();
+                    const cabeceraNormalizada = normalizeHeader(cabecera);
                     const id_campo = mapaEtiquetaAId[cabeceraNormalizada];
-                    const valor = fila[cabecera];
+                    let valor = fila[cabecera];
 
                     if (id_campo && valor !== null && valor !== '') {
+                        if (mapaOpcionesDB[id_campo]) {
+                            const valorNormalizado = normalizeString(valor);
+                            if (mapaOpcionesDB[id_campo][valorNormalizado]) {
+                                valor = mapaOpcionesDB[id_campo][valorNormalizado];
+                            }
+                        }
                         respuestasParaInsertar.push([id_inscripcion, id_campo, String(valor)]);
                     }
                 }
                 
-                console.log('-> Preparando para tabla "inscripcion_respuestas":', respuestasParaInsertar);
-
                 if (respuestasParaInsertar.length > 0) {
                     const queryRespuestas = `
                         INSERT INTO inscripcion_respuestas (id_inscripcion, id_campo, valor) VALUES ?
@@ -622,8 +678,6 @@ const Inscripcion = {
 
         } catch (error) {
             await connection.rollback();
-            console.error("--- ERROR GRAVE: Se revirtió la transacción de importación masiva ---");
-            console.error(error);
             throw error;
         } finally {
             connection.release();

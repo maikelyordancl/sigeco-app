@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-// FIX: Revertido al import original, asumiendo que 'xlsx' está en node_modules
 import * as XLSX from "xlsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -9,11 +8,8 @@ import { Input } from "@/components/ui/input";
 import { toast } from "react-hot-toast";
 import { Contacto } from "../types/contacto";
 import { Table, TableBody, TableHead, TableHeader, TableRow, TableCell } from "@/components/ui/table";
-// FIX: Revertido al alias original '@/' que usa el proyecto
 import { apiFetch } from "@/lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-// --- Interfaces y Lógica de Normalización ---
 
 interface CampanaSimple {
   id_campana: number;
@@ -34,12 +30,24 @@ type ImportarContactosProps = {
   refreshContactos: () => void;
 };
 
+const cleanHeaderFrontend = (str: string) => {
+    if (!str) return '';
+    return String(str)
+        .toLowerCase()
+        .replace(/ã¡/g, 'a').replace(/ã©/g, 'e').replace(/ã³/g, 'o').replace(/ãº/g, 'u').replace(/ã±/g, 'n').replace(/ã\xad/g, 'i')
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9\s_()]/g, "") 
+        .trim();
+};
+
 const normalizeContactos = (contactos: ContactoData[]): ContactoData[] => {
   return contactos.map(contacto => {
     const normalizedContacto: ContactoData = {};
     Object.keys(contacto).forEach(rawKey => {
-      const key = String(rawKey).trim();
+      const key = cleanHeaderFrontend(rawKey);
       let value = contacto[rawKey];
+      
       if (typeof value === 'string') {
         value = value.trim();
         const lowerKey = key.toLowerCase();
@@ -53,7 +61,7 @@ const normalizeContactos = (contactos: ContactoData[]): ContactoData[] => {
             value = value.replace(/[.-]/g, '');
         }
       }
-      normalizedContacto[key] = value;
+      normalizedContacto[rawKey] = value; 
     });
     return normalizedContacto;
   });
@@ -73,16 +81,6 @@ const buildCampanaLabel = (campana: CampanaSimple): string => {
   return bloques.join(' • ');
 };
 
-const getExcelRowFromPath = (path?: string): number | null => {
-  if (!path) return null;
-  const match = path.match(/\[(\d+)\]/);
-  if (!match) return null;
-  return Number(match[1]) + 2;
-};
-
-
-// --- Componente Principal ---
-
 const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, refreshContactos }) => {
   const [file, setFile] = useState<File | null>(null);
   const [contactosPreview, setContactosPreview] = useState<ContactoData[]>([]);
@@ -94,10 +92,6 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
   const [isLoadingCampanas, setIsLoadingCampanas] = useState(false);
   const [headers, setHeaders] = useState<string[]>([]);
 
-  const selectedCampanaData = campanas.find(
-    (campana) => String(campana.id_campana) === selectedCampana
-  ) || null;
-
   useEffect(() => {
     async function fetchCampanas() {
       if (open && campanas.length === 0) {
@@ -107,12 +101,11 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
           if (!response.ok) throw new Error('Error al cargar campañas');
           const data = await response.json();
           if (Array.isArray(data)) {
-            setCampanas(data);
-          } else {
-            toast.error('Error de formato en la respuesta de campañas.');
+            // SOLUCIÓN AL SELECTOR: Solo mostrar las campañas 'Activa'
+            const campañasFiltradas = data.filter(c => String(c.estado).toLowerCase() === 'activa');
+            setCampanas(campañasFiltradas);
           }
         } catch (error) {
-          console.error('Error al cargar la lista de campañas:', error);
           toast.error('No se pudo cargar la lista de campañas.');
         } finally {
           setIsLoadingCampanas(false);
@@ -141,74 +134,23 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
         const jsonDataRaw: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        if (jsonDataRaw.length < 1) {
-            setError("El archivo está vacío.");
-            return;
-        }
-        const fileHeaders = jsonDataRaw[0]
-          .map((header) => String(header ?? '').trim())
-          .filter(Boolean);
-        setHeaders(fileHeaders);
+        if (jsonDataRaw.length < 1) return setError("El archivo está vacío.");
+        
+        const fileHeaders = jsonDataRaw[0].filter(Boolean).map(String);
+        setHeaders(Array.from(new Set(fileHeaders)));
+        
         const jsonData: ContactoData[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-        if (!jsonData.length) {
-            setError("El archivo no contiene filas de datos.");
-            return;
-        }
+        if (!jsonData.length) return setError("El archivo no contiene filas de datos.");
+        
         setContactosPreview(normalizeContactos(jsonData));
         setError(null);
       } catch (err) {
-        console.error(err);
         setError("Error al procesar el archivo. Asegúrese de que el formato sea correcto.");
       }
     };
     reader.readAsBinaryString(file);
   };
 
-  /**
-   * Formatea los errores recibidos de la API (ya sea un string o un array) 
-   * en un solo string legible con saltos de línea.
-   */
-  const formatApiError = (errorData: any): string => {
-    // Caso 1: El error es un array 'errors' (como en tu JSON)
-    if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
-      
-      const mensajesError = errorData.errors.map((err: any, index: number) => {
-        const excelRow = getExcelRowFromPath(err.path);
-        let errorMsg = excelRow ? `Fila ${excelRow} (Excel): ` : `Error ${index + 1}: `;
-        
-        if (err.path) {
-          errorMsg += `[Campo: ${err.path}] `;
-        }
-
-        if (err.msg) {
-          errorMsg += `${err.msg} `;
-        }
-
-        if (err.value) {
-          errorMsg += `(Valor: "${err.value}")`;
-        }
-
-        if (!err.path && !err.msg && !err.value) {
-          errorMsg += 'Error de validación desconocido.';
-        }
-        
-        return errorMsg.trim();
-
-      }).join('\n');
-      
-      return `Ocurrieron errores en la importación:\n${mensajesError}`;
-    }
-    
-    // Caso 2: El error es un string 'error' (el formato anterior)
-    if (errorData.error && typeof errorData.error === 'string') {
-      return errorData.error;
-    }
-
-    // Caso 3: Fallback genérico
-    return 'Ocurrió un error desconocido en el servidor.';
-  };
-
-  // --- FUNCIÓN handleUpload (sin cambios en la lógica, solo usa el formatApiError actualizado) ---
   const handleUpload = async () => {
     if (!contactosPreview.length) return setError("No hay contactos para importar.");
     setLoading(true);
@@ -216,50 +158,29 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
 
     try {
       let response;
-      
       if (selectedCampana) {
-        // --- Importar a Evento (Campaña) ---
         response = await apiFetch(`/campanas/${selectedCampana}/importar-inscripciones`, {
             method: "POST",
-            body: JSON.stringify({
-                contactos: contactosPreview 
-            }),
+            body: JSON.stringify({ contactos: contactosPreview }),
         });
-
       } else {
-        // --- Importar a nueva Base de Datos ---
         if (!nombreBase.trim()) {
             setError("Debe ingresar un nombre para la base de datos.");
             setLoading(false);
-            return; // Salir temprano si falta el nombre
+            return;
         }
-        
         response = await apiFetch(`/basedatos/importar`, {
             method: "POST",
-            body: JSON.stringify({
-                nombre_base: nombreBase.trim(),
-                contactos: contactosPreview
-            }),
+            body: JSON.stringify({ nombre_base: nombreBase.trim(), contactos: contactosPreview }),
         });
       }
 
-      // --- Manejo de Respuesta Unificado ---
       if (!response.ok) {
-        // Si la respuesta no es OK (ej: 400, 500)
         const errorData = await response.json();
-        // Usamos la función helper para formatear el error
-        throw new Error(formatApiError(errorData)); 
+        throw new Error(errorData.error || errorData.message || "Error desconocido"); 
       }
 
-      // Si la respuesta es OK (ej: 200, 201)
-      if (selectedCampana) {
-        const result = await response.json();
-        toast.success(result.message || "Importación a la campaña completada.");
-      } else {
-        toast.success("Contactos importados con éxito a la nueva base de datos.");
-      }
-
-      // Limpieza y cierre del modal
+      toast.success("Importación completada con éxito.");
       refreshContactos(); 
       setOpen(false);
       setFile(null);
@@ -269,9 +190,7 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
       setSelectedCampana("");
 
     } catch (error: any) {
-      // El 'catch' ahora recibe el error formateado desde el 'throw'
       setError(error.message || "Error al procesar la importación.");
-    
     } finally {
       setLoading(false);
     }
@@ -293,65 +212,43 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
             a.click();
             a.remove();
             window.URL.revokeObjectURL(url);
-            toast.success('Descargando plantilla de la campaña...');
+            toast.success('Descargando plantilla...');
         })
         .catch(err => toast.error(err.message));
       return;
     }
 
+    // Plantilla genérica
     const headers = ["nombre", "email", "telefono", "rut", "empresa", "actividad", "profesion", "pais", "comuna"];
-    const exampleData = [{ nombre: "Juan Pérez", email: "juan.perez@ejemplo.com", telefono: "+56912345678", rut: "12.345.678-9", empresa: "Empresa Ejemplo S.A.", actividad: "Tecnología", profesion: "Ingeniero de Software", pais: "Chile", comuna: "Coronel" }];
+    const exampleData = [{ nombre: "Juan Pérez", email: "juan.perez@ejemplo.com", telefono: "+56912345678", rut: "12.345.678-9", empresa: "Empresa S.A.", actividad: "Tecnología", profesion: "Ingeniero", pais: "Chile", comuna: "Concepción" }];
     const worksheet = XLSX.utils.json_to_sheet(exampleData, { header: headers });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Contactos");
     XLSX.writeFile(workbook, "plantilla_importacion_contactos.xlsx");
   };
 
-  // --- Renderizado del Componente (Layout) ---
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
-        
         <DialogHeader>
           <DialogTitle>Importar Contactos desde Excel</DialogTitle>
         </DialogHeader>
 
-        {/* Contenido con Scroll */}
         <div className="flex-1 overflow-y-auto space-y-4 py-4 px-6">
-          
           <div className="space-y-2">
             <label className="text-sm font-medium">Asociar a una campaña (opcional)</label>
-            <p className="text-xs text-muted-foreground">
-              La plantilla y la importación se aplican a la campaña seleccionada. Se muestra el evento, subevento e ID para evitar confusiones cuando hay nombres repetidos.
-            </p>
-            <div className="flex items-center gap-2">
-              <Select value={selectedCampana} onValueChange={setSelectedCampana} disabled={isLoadingCampanas}>
-                <SelectTrigger>
-                  <SelectValue placeholder={isLoadingCampanas ? "Cargando campañas..." : "Seleccione una campaña"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {campanas.map((campana) => (
-                    <SelectItem key={campana.id_campana} value={String(campana.id_campana)}>
-                      {buildCampanaLabel(campana)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {selectedCampanaData && (
-              <div className="rounded-md border bg-slate-50 p-3 text-sm">
-                <div><span className="font-medium">Evento:</span> {selectedCampanaData.evento_nombre || 'Sin evento'}</div>
-                <div><span className="font-medium">Campaña:</span> {selectedCampanaData.nombre}</div>
-                {selectedCampanaData.subevento_nombre && (
-                  <div><span className="font-medium">Subevento:</span> {selectedCampanaData.subevento_nombre}</div>
-                )}
-                <div className="text-xs text-muted-foreground mt-1">
-                  ID campaña: {selectedCampanaData.id_campana}
-                  {selectedCampanaData.id_evento ? ` • ID evento: ${selectedCampanaData.id_evento}` : ''}
-                </div>
-              </div>
-            )}
+            <Select value={selectedCampana} onValueChange={setSelectedCampana} disabled={isLoadingCampanas}>
+              <SelectTrigger>
+                <SelectValue placeholder={isLoadingCampanas ? "Cargando campañas..." : "Seleccione la campaña activa"} />
+              </SelectTrigger>
+              <SelectContent>
+                {campanas.map((campana) => (
+                  <SelectItem key={campana.id_campana} value={String(campana.id_campana)}>
+                    {buildCampanaLabel(campana)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           
           <Input type="file" accept=".xlsx, .xls" onChange={handleFileChange} />
@@ -368,11 +265,8 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
             </div>
           )}
           
-          {/* El contenedor de error ya estaba preparado para múltiples líneas */}
           {error && (
-            <div className="text-red-500 mt-2 p-2 bg-red-50 rounded whitespace-pre-wrap"
-              dangerouslySetInnerHTML={{ __html: error.replace(/\n/g, '<br />') }}>
-            </div>
+            <div className="text-red-500 mt-2 p-2 bg-red-50 rounded whitespace-pre-wrap">{error}</div>
           )}
 
           {contactosPreview.length > 0 && headers.length > 0 && (
@@ -383,7 +277,7 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
                   <TableHeader>
                     <TableRow>
                       {headers.map((header, index) => (
-                        <TableHead key={`${header}-${index}`}>{header}</TableHead>
+                        <TableHead key={`${header}-${index}`} className="capitalize">{header}</TableHead>
                       ))}
                     </TableRow>
                   </TableHeader>
@@ -402,7 +296,6 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
           )}
         </div>
         
-        {/* Footer Fijo */}
         <DialogFooter className="border-t pt-4">
           <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
           <Button onClick={handleUpload} disabled={loading || contactosPreview.length === 0 || (!nombreBase.trim() && !selectedCampana)}>
@@ -416,4 +309,3 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
 };
 
 export default ImportarContactos;
-
