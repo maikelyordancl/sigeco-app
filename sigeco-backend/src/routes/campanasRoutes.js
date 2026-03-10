@@ -191,7 +191,11 @@ router.post(
     body('fecha_personalizada')
       .optional({ nullable: true })
       .isString()
-      .withMessage('La fecha personalizada debe ser un texto.')
+      .withMessage('La fecha personalizada debe ser un texto.'),
+    body('registro_sin_pago_inmediato')
+      .optional()
+      .isBoolean()
+      .withMessage('La opción de registro sin pago inmediato debe ser booleana.')
   ],
   campanasController.crearSubCampana
 );
@@ -328,7 +332,11 @@ router.put(
     body('fecha_personalizada')
       .optional({ nullable: true })
       .isString()
-      .withMessage('La fecha personalizada debe ser un texto.')
+      .withMessage('La fecha personalizada debe ser un texto.'),
+    body('registro_sin_pago_inmediato')
+      .optional()
+      .isBoolean()
+      .withMessage('La opción de registro sin pago inmediato debe ser booleana.')
   ],
   campanasController.actualizarCampana
 );

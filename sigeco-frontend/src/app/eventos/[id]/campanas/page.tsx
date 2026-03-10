@@ -129,6 +129,30 @@ const GestionCampanasPage = () => {
     router.push(`/eventos/${id_evento}/campanas/${id_campana}/asistentes`);
   };
 
+  const formatMoney = (value: number | string | null | undefined) =>
+    new Intl.NumberFormat("es-CL", {
+      style: "currency",
+      currency: "CLP",
+      maximumFractionDigits: 0,
+    }).format(Number(value || 0));
+
+  const campanasConIngreso = [
+    ...(campanaPrincipal ? [campanaPrincipal] : []),
+    ...subCampanas,
+  ];
+
+  const resumenHeader = {
+    totalSubCampanas: subCampanas.length,
+    totalPagados: campanasConIngreso.reduce(
+      (acc, campana) => acc + Number(campana.pagados || 0),
+      0
+    ),
+    totalIngresos: campanasConIngreso.reduce(
+      (acc, campana) => acc + Number(campana.total_ingresos || 0),
+      0
+    ),
+  };
+
   const renderCard = (campana: CampanaAdmin) => (
     <Card key={campana.id_campana} className="flex flex-col shadow-md hover:shadow-lg transition-shadow">
       <CardHeader>
@@ -237,6 +261,31 @@ const GestionCampanasPage = () => {
             <PlusCircle className="mr-2 h-4 w-4" /> Crear Sub-Campaña
           </Button>
         </div>
+
+        {!loading && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Sub-campañas</CardDescription>
+                <CardTitle className="text-2xl">{resumenHeader.totalSubCampanas}</CardTitle>
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Pagados</CardDescription>
+                <CardTitle className="text-2xl text-green-700">{resumenHeader.totalPagados}</CardTitle>
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardDescription>Total ingresos</CardDescription>
+                <CardTitle className="text-2xl text-emerald-700">{formatMoney(resumenHeader.totalIngresos)}</CardTitle>
+              </CardHeader>
+            </Card>
+          </div>
+        )}
 
         {loading ? (
           <p className="text-center py-10">Cargando campañas...</p>

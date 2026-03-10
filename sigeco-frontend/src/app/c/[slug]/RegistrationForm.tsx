@@ -241,11 +241,19 @@ const DynamicForm = ({
   onSubmit,
   isSubmitting,
   defaultValues,
+  onPrepareImmediateSubmit,
+  onPrepareDeferredSubmit,
+  showDeferredSubmit = false,
+  primarySubmitLabel = 'Enviar formulario',
 }: {
   campos: FormularioCampo[];
   onSubmit: (d: FormDataShape, reset: () => void) => void;
   isSubmitting: boolean;
   defaultValues?: Record<string, any>;
+  onPrepareImmediateSubmit?: () => void;
+  onPrepareDeferredSubmit?: () => void;
+  showDeferredSubmit?: boolean;
+  primarySubmitLabel?: string;
 }) => {
   const schema = useMemo(() => buildSchema(campos), [campos]);
   const {
@@ -413,18 +421,31 @@ const DynamicForm = ({
   return (
     <form onSubmit={handleSubmit((d) => onSubmit(d, reset))} className="space-y-4">
   {(campos || []).map(renderCampo)}
-  <Button
-    type="submit"
-    className="w-full !mt-6 transition-all" // Añadí transition-all para el hover
-    disabled={isSubmitting}
-    style={{ backgroundColor: '#d30aca' }} // Aquí aplicas el color
-    
-    // Esto simula el efecto hover oscureciendo el botón
-    onMouseEnter={(e) => (e.currentTarget.style.filter = 'brightness(90%)')}
-    onMouseLeave={(e) => (e.currentTarget.style.filter = 'brightness(100%)')}
-  >
-    {isSubmitting ? 'Procesando...' : 'Enviar Formulario'}
-  </Button>
+  <div className="space-y-3 !mt-6">
+    <Button
+      type="submit"
+      className="w-full transition-all"
+      disabled={isSubmitting}
+      style={{ backgroundColor: '#d30aca' }}
+      onMouseEnter={(e) => (e.currentTarget.style.filter = 'brightness(90%)')}
+      onMouseLeave={(e) => (e.currentTarget.style.filter = 'brightness(100%)')}
+      onClick={() => onPrepareImmediateSubmit?.()}
+    >
+      {isSubmitting ? 'Procesando...' : primarySubmitLabel}
+    </Button>
+
+    {showDeferredSubmit && (
+      <Button
+        type="submit"
+        variant="outline"
+        className="w-full"
+        disabled={isSubmitting}
+        onClick={() => onPrepareDeferredSubmit?.()}
+      >
+        {isSubmitting ? 'Procesando...' : 'Registrar y pagar después'}
+      </Button>
+    )}
+  </div>
 </form>
   );
 };
@@ -437,6 +458,7 @@ const RegistrationForm: React.FC<{
 }> = ({ campana, tickets, formulario }) => {
   const campos = normalizeCampos(formulario);
   const isPago = !!campana.obligatorio_pago;
+  const allowDeferredPayment = isPago && !!campana.registro_sin_pago_inmediato;
   const [step, setStep] = useState<'selection' | 'email_check' | 'form'>(isPago ? 'selection' : 'form');
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
@@ -449,6 +471,7 @@ const RegistrationForm: React.FC<{
   const [email, setEmail] = useState(emailFromUrl || '');
   const [prefilled, setPrefilled] = useState<Record<string, any> | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitMode, setSubmitMode] = useState<'pay_now' | 'register_only'>('pay_now');
 
   // Nuevo estado de carga para el auto-relleno
   const [isLoadingPrefill, setIsLoadingPrefill] = useState(true);
@@ -570,6 +593,14 @@ const RegistrationForm: React.FC<{
       if (inscripcion && inscripcion.estado_pago === 'Pagado') {
         throw new Error('Ya tienes una entrada válida para este evento.');
       }
+
+      if (inscripcion?.id_tipo_entrada) {
+        const matchedTicket = tickets.find((item) => item.id_tipo_entrada === Number(inscripcion.id_tipo_entrada));
+        if (matchedTicket) {
+          setSelectedTicket(matchedTicket);
+        }
+      }
+
       if (contacto) {
         setPrefilled(contacto);
         toast.success('¡Hola de nuevo! Hemos rellenado tus datos.', { id: toastId });
@@ -592,6 +623,9 @@ const RegistrationForm: React.FC<{
     const data = new FormData();
     data.append('id_campana', String(campana.id_campana));
     if (selectedTicket) data.append('id_tipo_entrada', String(selectedTicket.id_tipo_entrada));
+    if (allowDeferredPayment && submitMode === 'register_only') {
+      data.append('registrar_sin_pago', 'true');
+    }
 
     for (const key in formData) {
       if (!Object.prototype.hasOwnProperty.call(formData, key)) continue;
@@ -615,9 +649,29 @@ const RegistrationForm: React.FC<{
         return;
       }
 
-      toast.success('¡Inscripción exitosa! Revisa tu email.', { id: toastId, duration: 6000 });
+      const pendingPayment = Boolean(json?.data?.pendingPayment);
+
+      if (pendingPayment) {
+        const resumePaymentUrl = json?.data?.resumePaymentUrl;
+        const resumeText = resumePaymentUrl
+          ? ` Puedes retomar el pago más tarde desde ${resumePaymentUrl}.`
+          : '';
+
+        toast.success(
+          `¡Registro guardado! Tu pago quedó pendiente para retomarlo más tarde con tu correo.${resumeText}`,
+          { id: toastId, duration: 7000 }
+        );
+      } else {
+        toast.success('¡Inscripción exitosa! Revisa tu email.', { id: toastId, duration: 6000 });
+      }
+
       reset();
-      if (isPago) setStep('selection');
+      setSubmitMode('pay_now');
+      if (isPago) {
+        setSelectedTicket(null);
+        setPrefilled({ email });
+        setStep('selection');
+      }
     } catch (err: any) {
       toast.error(err.message || 'No se pudo completar la inscripción', { id: toastId });
     } finally {
@@ -645,6 +699,11 @@ const RegistrationForm: React.FC<{
         <CardTitle className="flex items-center text-2xl font-bold">
           {isPago ? 'Registrarse / Comprar' : 'Registrarse'}
         </CardTitle>
+        {allowDeferredPayment && (
+          <p className="text-sm text-gray-500">
+            Esta campaña permite registrar primero y dejar el pago pendiente para retomarlo luego con el mismo correo.
+          </p>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         {isPago ? (
@@ -664,6 +723,10 @@ const RegistrationForm: React.FC<{
               onSubmit={handleSubmitInscripcion}
               isSubmitting={submitting}
               defaultValues={prefilled || undefined}
+              onPrepareImmediateSubmit={() => setSubmitMode('pay_now')}
+              onPrepareDeferredSubmit={() => setSubmitMode('register_only')}
+              showDeferredSubmit={allowDeferredPayment}
+              primarySubmitLabel="Continuar al pago"
             />
           )
         ) : (
@@ -672,6 +735,10 @@ const RegistrationForm: React.FC<{
             onSubmit={handleSubmitInscripcion}
             isSubmitting={submitting}
             defaultValues={prefilled || undefined}
+            onPrepareImmediateSubmit={() => setSubmitMode('pay_now')}
+            onPrepareDeferredSubmit={() => setSubmitMode('register_only')}
+            showDeferredSubmit={allowDeferredPayment}
+            primarySubmitLabel={isPago ? 'Continuar al pago' : 'Enviar formulario'}
           />
         )}
       </CardContent>

@@ -37,6 +37,7 @@ const campanaSchema = yup.object().shape({
     .oneOf(["Borrador", "Activa", "Pausada", "Finalizada"])
     .required("El estado es requerido."),
   inscripcion_libre: yup.boolean().required(),
+  registro_sin_pago_inmediato: yup.boolean().required(),
   id_plantilla: yup.number().required("La plantilla es obligatoria."),
   // --- NUEVO CAMPO EN EL ESQUEMA ---
   fecha_personalizada: yup.string().nullable().optional(),
@@ -74,6 +75,7 @@ export const EditarCampanaDialog = ({
         nombre: campana.nombre,
         estado: campana.estado,
         inscripcion_libre: !!campana.inscripcion_libre,
+        registro_sin_pago_inmediato: !!campana.registro_sin_pago_inmediato,
         id_plantilla: campana.id_plantilla || 1,
         // --- NUEVO CAMPO EN EL RESET ---
         fecha_personalizada: campana.fecha_personalizada || '',
@@ -136,6 +138,28 @@ export const EditarCampanaDialog = ({
               render={({ field }) => (
                 <Switch
                   id="inscripcion_libre"
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              )}
+            />
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="space-y-0.5 pr-4">
+              <Label htmlFor="registro_sin_pago_inmediato">
+                Registro sin pago inmediato
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Permite registrar al asistente ahora y dejar el pago pendiente para que vuelva luego con su correo y pague desde la misma landing.
+              </p>
+            </div>
+            <Controller
+              control={control}
+              name="registro_sin_pago_inmediato"
+              render={({ field }) => (
+                <Switch
+                  id="registro_sin_pago_inmediato"
                   checked={field.value}
                   onCheckedChange={field.onChange}
                 />

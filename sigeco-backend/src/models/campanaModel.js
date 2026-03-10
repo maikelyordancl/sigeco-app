@@ -23,14 +23,44 @@ const Campana = {
         await connection.beginTransaction();
 
         try {
-            const { id_evento, id_subevento = null, nombre, estado, url_amigable = null, id_plantilla = 1, fecha_personalizada = null, email_incluye_qr = false } = campanaData;
+            const {
+                id_evento,
+                id_subevento = null,
+                nombre,
+                estado,
+                url_amigable = null,
+                id_plantilla = 1,
+                fecha_personalizada = null,
+                email_incluye_qr = false,
+                registro_sin_pago_inmediato = false,
+            } = campanaData;
 
             // 1. Insertar la nueva campaña
             const queryCampana = `
-                INSERT INTO campanas (id_evento, id_subevento, nombre, estado, url_amigable, id_plantilla, fecha_personalizada, email_incluye_qr)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO campanas (
+                    id_evento,
+                    id_subevento,
+                    nombre,
+                    estado,
+                    url_amigable,
+                    id_plantilla,
+                    fecha_personalizada,
+                    email_incluye_qr,
+                    registro_sin_pago_inmediato
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             `;
-            const [result] = await connection.query(queryCampana, [id_evento, id_subevento, nombre, estado, url_amigable, id_plantilla, fecha_personalizada, email_incluye_qr]);
+            const [result] = await connection.query(queryCampana, [
+                id_evento,
+                id_subevento,
+                nombre,
+                estado,
+                url_amigable,
+                id_plantilla,
+                fecha_personalizada,
+                email_incluye_qr,
+                registro_sin_pago_inmediato,
+            ]);
             const newCampanaId = result.insertId;
 
             // 2. Si es una SUB-CAMPAÑA, asociar los campos de formulario por defecto
@@ -62,7 +92,12 @@ const Campana = {
             await connection.commit();
 
             // Devolver el objeto de la campaña recién creada
-            return { id_campana: newCampanaId, ...campanaData, email_incluye_qr };
+            return {
+                id_campana: newCampanaId,
+                ...campanaData,
+                email_incluye_qr,
+                registro_sin_pago_inmediato,
+            };
 
         } catch (error) {
             // 4. Si algo falla, revertir todos los cambios de la transacción
@@ -94,21 +129,49 @@ const Campana = {
                 COALESCE(stats.confirmados, 0) AS confirmados,
                 COALESCE(stats.asistieron, 0) AS asistieron,
                 COALESCE(stats.cancelados, 0) AS cancelados,
-                COALESCE(stats.pagados, 0) AS pagados
+                COALESCE(stats.pagados, 0) AS pagados,
+                COALESCE(stats.total_ingresos, 0) AS total_ingresos
             FROM campanas c
             JOIN eventos e ON c.id_evento = e.id_evento
             LEFT JOIN subeventos s ON c.id_subevento = s.id_subevento
             LEFT JOIN (
                 SELECT
-                    id_campana,
-                    COUNT(CASE WHEN estado_asistencia = 'Invitado' THEN 1 END) AS invitados,
-                    COUNT(CASE WHEN estado_asistencia = 'Registrado' THEN 1 END) AS registrados,
-                    COUNT(CASE WHEN estado_asistencia = 'Confirmado' THEN 1 END) AS confirmados,
-                    COUNT(CASE WHEN estado_asistencia = 'Asistió' THEN 1 END) AS asistieron,
-                    COUNT(CASE WHEN estado_asistencia = 'Cancelado' THEN 1 END) AS cancelados,
-                    COUNT(CASE WHEN estado_pago = 'Pagado' THEN 1 END) AS pagados
-                FROM inscripciones
-                GROUP BY id_campana
+                    base.id_campana,
+                    COUNT(CASE WHEN base.estado_asistencia = 'Invitado' THEN 1 END) AS invitados,
+                    COUNT(CASE WHEN base.estado_asistencia = 'Registrado' THEN 1 END) AS registrados,
+                    COUNT(CASE WHEN base.estado_asistencia = 'Confirmado' THEN 1 END) AS confirmados,
+                    COUNT(CASE WHEN base.estado_asistencia = 'Asistió' THEN 1 END) AS asistieron,
+                    COUNT(CASE WHEN base.estado_asistencia = 'Cancelado' THEN 1 END) AS cancelados,
+                    COUNT(CASE WHEN base.estado_pago = 'Pagado' THEN 1 END) AS pagados,
+                    SUM(base.total_pagado_actual) AS total_ingresos
+                FROM (
+                    SELECT
+                        i.id_campana,
+                        i.estado_asistencia,
+                        i.estado_pago,
+                        COALESCE(
+                            mp.total_pagado_movimientos,
+                            i.monto_pagado_manual,
+                            pp.total_pagado_pasarela,
+                            0
+                        ) AS total_pagado_actual
+                    FROM inscripciones i
+                    LEFT JOIN (
+                        SELECT
+                            id_inscripcion,
+                            SUM(CASE WHEN estado = 'Pagado' THEN monto ELSE 0 END) AS total_pagado_movimientos
+                        FROM inscripcion_movimientos_pago
+                        GROUP BY id_inscripcion
+                    ) mp ON mp.id_inscripcion = i.id_inscripcion
+                    LEFT JOIN (
+                        SELECT
+                            id_inscripcion,
+                            SUM(CASE WHEN estado = 'Pagado' THEN monto ELSE 0 END) AS total_pagado_pasarela
+                        FROM pagos
+                        GROUP BY id_inscripcion
+                    ) pp ON pp.id_inscripcion = i.id_inscripcion
+                ) base
+                GROUP BY base.id_campana
             ) AS stats ON c.id_campana = stats.id_campana
             WHERE c.id_evento = ? 
             ORDER BY c.id_subevento ASC, c.fecha_creado ASC
@@ -185,6 +248,7 @@ const Campana = {
             SELECT
                 c.id_campana, c.id_subevento, c.nombre, c.estado, c.url_amigable,
                 c.inscripcion_libre,
+                c.registro_sin_pago_inmediato,
                 c.landing_page_json,
                 c.id_plantilla, -- <--- AÑADIDO
                 c.fecha_personalizada, -- <--- NUEVO CAMPO
@@ -233,7 +297,8 @@ const Campana = {
         const query = `
             SELECT 
                 s.obligatorio_registro,
-                s.obligatorio_pago
+                s.obligatorio_pago,
+                c.registro_sin_pago_inmediato
             FROM campanas c
             LEFT JOIN subeventos s ON c.id_subevento = s.id_subevento
             WHERE c.id_campana = ?;
@@ -257,6 +322,7 @@ const Campana = {
         SELECT
             c.id_campana, c.id_subevento, c.nombre, c.estado, c.url_amigable,
             c.inscripcion_libre,
+            c.registro_sin_pago_inmediato,
             c.landing_page_json,
             c.id_plantilla, -- <--- AÑADIDO
             c.fecha_personalizada, -- <--- NUEVO CAMPO

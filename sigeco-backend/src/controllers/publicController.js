@@ -187,6 +187,11 @@ exports.crearInscripcionPublica = async (req, res) => {
     }
 
     const { id_campana, id_tipo_entrada, email } = req.body;
+    const registrarSinPago =
+        req.body.registrar_sin_pago === true ||
+        req.body.registrar_sin_pago === 'true' ||
+        req.body.registrar_sin_pago === '1' ||
+        req.body.registrar_sin_pago === 1;
 
     if (!email) {
         return res.status(400).json({ success: false, message: 'El campo "Email" es obligatorio.' });
@@ -206,6 +211,10 @@ exports.crearInscripcionPublica = async (req, res) => {
         if (!campanaRules) {
             return res.status(404).json({ success: false, message: 'No se pudieron obtener las reglas de la campaña.' });
         }
+
+        const permiteRegistroSinPago =
+            Boolean(campanaRules.obligatorio_pago) &&
+            Boolean(campana.registro_sin_pago_inmediato);
 
         const ticket = campanaRules.obligatorio_pago ? await PagoModel.findTicketById(id_tipo_entrada) : null;
         if (campanaRules.obligatorio_pago && !ticket) {
@@ -314,52 +323,6 @@ exports.crearInscripcionPublica = async (req, res) => {
                 estado_pago: estadoPagoObjetivo
             });
 
-            // Si estaba intentando pagar antes, anulamos pagos anteriores para dejar uno nuevo limpio.
-            if (campanaRules.obligatorio_pago) {
-    const ordenCompra = `sigeco-insc-${inscripcion.id_inscripcion}-${Date.now()}`;
-    const nuevoPago = await PagoModel.create({
-        id_inscripcion: inscripcion.id_inscripcion,
-        monto: ticket.precio,
-        orden_compra: ordenCompra,
-    });
-
-    await InscripcionPagoModel.upsertMovimientoFlowDesdePago({
-        id_pago: nuevoPago.id_pago,
-        id_inscripcion: inscripcion.id_inscripcion,
-        monto: ticket.precio,
-        estado: 'Pendiente',
-        observacion: 'Pago generado desde inscripción pública',
-    });
-
-    try {
-        const flowResponse = await FlowService.crearOrdenDePago({
-            orden_compra: ordenCompra,
-            monto: ticket.precio,
-            subject: `Entrada: ${ticket.nombre}`,
-            email: email,
-        });
-
-        await PagoModel.updateById(nuevoPago.id_pago, { token_flow: flowResponse.token });
-
-        return res.status(200).json({
-            success: true,
-            redirectUrl: flowResponse.redirectUrl
-        });
-    } catch (flowError) {
-        console.error('Error al crear orden de pago en Flow:', flowError);
-        const errorMsg = flowError.message || 'No se pudo crear la orden de pago.';
-
-        await PagoModel.updateById(nuevoPago.id_pago, {
-            estado: 'Fallido',
-            detalle_error: errorMsg
-        });
-
-        await InscripcionPagoModel.syncEstadoFromPago(nuevoPago.id_pago, 'Fallido');
-
-        return res.status(500).json({ success: false, message: errorMsg });
-    }
-}
-
             // Refrescamos el objeto local
             inscripcion = {
                 ...inscripcion,
@@ -381,13 +344,39 @@ exports.crearInscripcionPublica = async (req, res) => {
             await FormularioModel.saveRespuestas(inscripcion.id_inscripcion, respuestasPersonalizadas);
         }
 
-        // Si requiere pago, ya quedó Registrado/Pendiente y ahora se deriva a Flow.
+        // Si requiere pago, ya quedó Registrado/Pendiente. Dependiendo de la campaña,
+        // puede pagar ahora o dejar el pago pendiente para retomarlo luego.
         if (campanaRules.obligatorio_pago) {
+            if (registrarSinPago && permiteRegistroSinPago) {
+                const resumePaymentUrl = campana.url_amigable
+                    ? `/c/${campana.url_amigable}?email=${encodeURIComponent(email)}`
+                    : null;
+
+                return res.status(200).json({
+                    success: true,
+                    message: 'Inscripción registrada correctamente. El pago quedó pendiente para retomarlo más tarde.',
+                    data: {
+                        pendingPayment: true,
+                        resumePaymentUrl,
+                    },
+                });
+            }
+
+            await PagoModel.anularPagosAnteriores(inscripcion.id_inscripcion);
+
             const ordenCompra = `sigeco-insc-${inscripcion.id_inscripcion}-${Date.now()}`;
             const nuevoPago = await PagoModel.create({
                 id_inscripcion: inscripcion.id_inscripcion,
                 monto: ticket.precio,
                 orden_compra: ordenCompra,
+            });
+
+            await InscripcionPagoModel.upsertMovimientoFlowDesdePago({
+                id_pago: nuevoPago.id_pago,
+                id_inscripcion: inscripcion.id_inscripcion,
+                monto: ticket.precio,
+                estado: 'Pendiente',
+                observacion: 'Pago generado desde inscripción pública',
             });
 
             try {
@@ -407,6 +396,14 @@ exports.crearInscripcionPublica = async (req, res) => {
             } catch (flowError) {
                 console.error('Error al crear orden de pago en Flow:', flowError);
                 const errorMsg = flowError.message || 'No se pudo crear la orden de pago.';
+
+                await PagoModel.updateById(nuevoPago.id_pago, {
+                    estado: 'Fallido',
+                    detalle_error: errorMsg
+                });
+
+                await InscripcionPagoModel.syncEstadoFromPago(nuevoPago.id_pago, 'Fallido');
+
                 return res.status(500).json({ success: false, message: errorMsg });
             }
         }

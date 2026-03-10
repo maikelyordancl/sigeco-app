@@ -5,6 +5,7 @@ export interface CampanaPublica {
     landing_page_json: string | null;
     id_plantilla?: number; // Aseguramos que este campo siempre esté presente
     inscripcion_libre: boolean;
+    registro_sin_pago_inmediato?: boolean;
     obligatorio_pago?: boolean;
 }
 
@@ -57,7 +58,9 @@ export interface CampanaAdmin {
   url_amigable: string;
   id_subevento: number | null;
   inscripcion_libre: boolean;
+  registro_sin_pago_inmediato?: boolean;
   id_plantilla: number; // 👈 aseguramos que esté
+  total_ingresos?: number;
   subevento_nombre?: string;
   obligatorio_registro: boolean | null;
   obligatorio_pago: boolean | null;

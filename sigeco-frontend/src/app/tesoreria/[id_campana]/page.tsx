@@ -125,11 +125,11 @@ const COLUMN_OPTIONS: Array<{ key: ColumnKey; label: string }> = [
   { key: "nombre", label: "Nombre" },
   { key: "email", label: "Email" },
   { key: "empresa", label: "Empresa" },
-  { key: "entrada", label: "Entrada" },
-  { key: "montoTotal", label: "Monto total" },
+  { key: "entrada", label: "Detalle compra" },
+  { key: "montoTotal", label: "Valor compra" },
   { key: "pagado", label: "Total pagado" },
   { key: "saldo", label: "Saldo pendiente" },
-  { key: "medio", label: "Último medio" },
+  { key: "medio", label: "Medio de pago" },
   { key: "estado", label: "Estado" },
   { key: "gestion", label: "Gestión" },
   { key: "fecha", label: "Fecha" },
@@ -675,6 +675,10 @@ export default function TesoreriaCampanaPage() {
     ? isBusy(`objective-${selectedRow.id_inscripcion}`)
     : false;
   const selectedIsFlow = selectedDraft.medio_pago === "Flow";
+  const tableHeadClass =
+    "whitespace-nowrap border-r border-slate-300 bg-slate-100 px-3 py-3 text-slate-700 font-semibold last:border-r-0";
+  const tableCellClass =
+    "border-r border-slate-200 px-3 py-3 align-top last:border-r-0";
 
   return (
     <MainLayout title="Tesorería">
@@ -711,14 +715,14 @@ export default function TesoreriaCampanaPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Total recaudado</CardTitle>
+              <CardTitle>Total ingresos</CardTitle>
             </CardHeader>
             <CardContent>{formatMoney(resumen.totalRecaudado)}</CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Por cobrar</CardTitle>
+              <CardTitle>Saldo total pendiente</CardTitle>
             </CardHeader>
             <CardContent>{formatMoney(resumen.totalPorCobrar)}</CardContent>
           </Card>
@@ -769,28 +773,28 @@ export default function TesoreriaCampanaPage() {
             <CardTitle>Inscritos</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="rounded-md border overflow-auto">
-              <Table>
+            <div className="rounded-md border-2 border-slate-300 overflow-auto shadow-sm">
+              <Table className="min-w-full border-collapse [&_tbody_tr:last-child_td]:border-b-0">
                 <TableHeader>
-                  <TableRow>
-                    {visibleColumns.id && <TableHead>ID</TableHead>}
-                    {visibleColumns.nombre && <TableHead>Nombre</TableHead>}
-                    {visibleColumns.email && <TableHead>Email</TableHead>}
-                    {visibleColumns.empresa && <TableHead>Empresa</TableHead>}
-                    {visibleColumns.entrada && <TableHead>Entrada</TableHead>}
-                    {visibleColumns.montoTotal && <TableHead>Monto total</TableHead>}
-                    {visibleColumns.pagado && <TableHead>Total pagado</TableHead>}
-                    {visibleColumns.saldo && <TableHead>Saldo pendiente</TableHead>}
-                    {visibleColumns.medio && <TableHead>Último medio</TableHead>}
-                    {visibleColumns.estado && <TableHead>Estado</TableHead>}
-                    {visibleColumns.gestion && <TableHead>Gestión</TableHead>}
-                    {visibleColumns.fecha && <TableHead>Fecha inscripción</TableHead>}
+                  <TableRow className="border-b-2 border-slate-300 bg-slate-100 hover:bg-slate-100">
+                    {visibleColumns.id && <TableHead className={tableHeadClass}>ID</TableHead>}
+                    {visibleColumns.nombre && <TableHead className={tableHeadClass}>Nombre</TableHead>}
+                    {visibleColumns.email && <TableHead className={tableHeadClass}>Email</TableHead>}
+                    {visibleColumns.empresa && <TableHead className={tableHeadClass}>Empresa</TableHead>}
+                    {visibleColumns.entrada && <TableHead className={tableHeadClass}>Detalle compra</TableHead>}
+                    {visibleColumns.montoTotal && <TableHead className={tableHeadClass}>Valor compra</TableHead>}
+                    {visibleColumns.pagado && <TableHead className={tableHeadClass}>Total pagado</TableHead>}
+                    {visibleColumns.saldo && <TableHead className={tableHeadClass}>Saldo pendiente</TableHead>}
+                    {visibleColumns.medio && <TableHead className={tableHeadClass}>Medio de pago</TableHead>}
+                    {visibleColumns.estado && <TableHead className={tableHeadClass}>Estado</TableHead>}
+                    {visibleColumns.gestion && <TableHead className={tableHeadClass}>Gestión</TableHead>}
+                    {visibleColumns.fecha && <TableHead className={tableHeadClass}>Fecha inscripción</TableHead>}
                   </TableRow>
                 </TableHeader>
 
                 <TableBody>
                   {visibles.length > 0 ? (
-                    visibles.map((row) => {
+                    visibles.map((row, index) => {
                       const montoTotal = toNumber(row.monto_total);
                       const saldoPendiente = toNumber(row.saldo_pendiente);
                       const fullyPaid = montoTotal > 0 && saldoPendiente <= 0;
@@ -798,21 +802,24 @@ export default function TesoreriaCampanaPage() {
                         montoTotal <= 0 && toNumber(row.monto_pagado_actual) <= 0;
 
                       return (
-                        <TableRow key={row.id_inscripcion}>
-                          {visibleColumns.id && <TableCell>{row.id_inscripcion}</TableCell>}
+                        <TableRow
+                          key={row.id_inscripcion}
+                          className={`${index % 2 === 0 ? "bg-white" : "bg-slate-50/60"} border-b border-slate-200 hover:bg-slate-100/70`}
+                        >
+                          {visibleColumns.id && <TableCell className={tableCellClass}>{row.id_inscripcion}</TableCell>}
 
                           {visibleColumns.nombre && (
-                            <TableCell className="font-medium">{row.nombre}</TableCell>
+                            <TableCell className={`${tableCellClass} font-medium`}>{row.nombre}</TableCell>
                           )}
 
-                          {visibleColumns.email && <TableCell>{row.email}</TableCell>}
+                          {visibleColumns.email && <TableCell className={tableCellClass}>{row.email}</TableCell>}
 
                           {visibleColumns.empresa && (
-                            <TableCell>{row.empresa || "-"}</TableCell>
+                            <TableCell className={tableCellClass}>{row.empresa || "-"}</TableCell>
                           )}
 
                           {visibleColumns.entrada && (
-                            <TableCell>
+                            <TableCell className={tableCellClass}>
                               {row.tipo_entrada || (
                                 <span className="text-gray-500">Sin ticket</span>
                               )}
@@ -820,15 +827,15 @@ export default function TesoreriaCampanaPage() {
                           )}
 
                           {visibleColumns.montoTotal && (
-                            <TableCell>{formatMoney(row.monto_total)}</TableCell>
+                            <TableCell className={tableCellClass}>{formatMoney(row.monto_total)}</TableCell>
                           )}
 
                           {visibleColumns.pagado && (
-                            <TableCell>{formatMoney(row.monto_pagado_actual)}</TableCell>
+                            <TableCell className={tableCellClass}>{formatMoney(row.monto_pagado_actual)}</TableCell>
                           )}
 
                           {visibleColumns.saldo && (
-                            <TableCell>
+                            <TableCell className={tableCellClass}>
                               <span
                                 className={
                                   fullyPaid
@@ -844,11 +851,11 @@ export default function TesoreriaCampanaPage() {
                           )}
 
                           {visibleColumns.medio && (
-                            <TableCell>{row.ultimo_medio_pago || "-"}</TableCell>
+                            <TableCell className={tableCellClass}>{row.ultimo_medio_pago || "-"}</TableCell>
                           )}
 
                           {visibleColumns.estado && (
-                            <TableCell>
+                            <TableCell className={tableCellClass}>
                               <span
                                 className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getBadgeClasses(
                                   row.estado_pago
@@ -860,13 +867,13 @@ export default function TesoreriaCampanaPage() {
                           )}
 
                           {visibleColumns.gestion && (
-                            <TableCell>
+                            <TableCell className={tableCellClass}>
                               <div className="min-w-[220px] space-y-2">
                                 <p className="text-xs text-gray-500">
                                   {row.id_tipo_entrada
-                                    ? "Cobro definido por ticket"
+                                    ? "Valor definido por ticket"
                                     : montoTotal > 0
-                                      ? "Monto manual configurable"
+                                      ? "Pago manual configurable"
                                       : "Sin cobro configurado / cortesía"}
                                 </p>
 
@@ -890,7 +897,7 @@ export default function TesoreriaCampanaPage() {
                           )}
 
                           {visibleColumns.fecha && (
-                            <TableCell>{formatDate(row.fecha_inscripcion)}</TableCell>
+                            <TableCell className={tableCellClass}>{formatDate(row.fecha_inscripcion)}</TableCell>
                           )}
                         </TableRow>
                       );
@@ -930,7 +937,7 @@ export default function TesoreriaCampanaPage() {
                 <p className="mt-1 font-semibold">{selectedRow.estado_pago}</p>
               </div>
               <div className="rounded-md border p-3">
-                <p className="text-xs text-gray-500">Monto objetivo</p>
+                <p className="text-xs text-gray-500">Valor compra</p>
                 <p className="mt-1 font-semibold">{formatMoney(selectedRow.monto_total)}</p>
               </div>
               <div className="rounded-md border p-3">
@@ -947,7 +954,7 @@ export default function TesoreriaCampanaPage() {
               <div className="space-y-4">
                 <div className="rounded-md border p-4 space-y-4">
                   <div>
-                    <h3 className="font-semibold">Monto manual de cobro</h3>
+                    <h3 className="font-semibold">Valor manual a pagar</h3>
                     <p className="text-sm text-gray-500 mt-1">
                       {selectedTieneTicket
                         ? "Esta inscripción usa el precio del ticket y no permite edición manual."
@@ -958,7 +965,7 @@ export default function TesoreriaCampanaPage() {
                   <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">
-                        Monto objetivo manual
+                        Pago manual
                       </label>
                       <Input
                         type="number"
@@ -1003,7 +1010,7 @@ export default function TesoreriaCampanaPage() {
 
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">
-                      Monto del pago / abono
+                      Monto pagado / abono
                     </label>
                     <Input
                       type="number"

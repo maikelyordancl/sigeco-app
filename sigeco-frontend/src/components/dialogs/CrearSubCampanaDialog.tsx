@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import * as yup from "yup";
 import { yupResolver } from "@hookform/resolvers/yup";
 import {
@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -34,6 +35,7 @@ const schema = yup.object().shape({
     .transform(value => (isNaN(value) ? undefined : value))
     .required("Debes seleccionar un sub-evento.")
     .positive("Debes seleccionar un sub-evento."),
+  registro_sin_pago_inmediato: yup.boolean().required(),
 });
 // --- FIN DE LA CORRECCIÓN ---
 
@@ -75,10 +77,14 @@ export const CrearSubCampanaDialog = ({
     handleSubmit,
     setValue,
     watch,
+    control,
     formState: { errors },
     reset,
   } = useForm<FormData>({
     resolver: yupResolver(schema),
+    defaultValues: {
+      registro_sin_pago_inmediato: false,
+    },
   });
 
   const nombreCampana = watch("nombre");
@@ -206,6 +212,28 @@ export const CrearSubCampanaDialog = ({
               <Label htmlFor="url_amigable">URL Amigable (slug)</Label>
               <Input id="url_amigable" {...register("url_amigable")} autoComplete="off" />
               {errors.url_amigable && <p className="text-red-500 text-sm mt-1">{errors.url_amigable.message}</p>}
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5 pr-4">
+                <Label htmlFor="registro_sin_pago_inmediato">
+                  Registro sin pago inmediato
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  El asistente se podrá registrar primero y volver luego con su correo para pagar desde la landing de la campaña.
+                </p>
+              </div>
+              <Controller
+                control={control}
+                name="registro_sin_pago_inmediato"
+                render={({ field }) => (
+                  <Switch
+                    id="registro_sin_pago_inmediato"
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                )}
+              />
             </div>
             
             {/* --- CORRECCIÓN: Se elimina el campo 'tipo_acceso' del formulario --- */}

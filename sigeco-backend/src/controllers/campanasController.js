@@ -85,7 +85,15 @@ exports.crearSubCampana = async (req, res) => {
     }
 
     // AÑADIDO: id_plantilla y fecha_personalizada extraídos del body
-    const { id_evento, id_subevento, nombre, url_amigable, id_plantilla = 1, fecha_personalizada } = req.body;
+    const {
+        id_evento,
+        id_subevento,
+        nombre,
+        url_amigable,
+        id_plantilla = 1,
+        fecha_personalizada,
+        registro_sin_pago_inmediato = false,
+    } = req.body;
 
     try {
         const subevento = await SubeventoModel.findById(id_subevento);
@@ -100,7 +108,8 @@ exports.crearSubCampana = async (req, res) => {
             estado: 'Borrador',
             url_amigable: url_amigable,
             id_plantilla: id_plantilla,
-            fecha_personalizada: fecha_personalizada // AÑADIDO: Se pasa el nuevo campo
+            fecha_personalizada: fecha_personalizada, // AÑADIDO: Se pasa el nuevo campo
+            registro_sin_pago_inmediato: Boolean(registro_sin_pago_inmediato),
         };
 
         const nuevaCampana = await Campana.create(campanaData);
