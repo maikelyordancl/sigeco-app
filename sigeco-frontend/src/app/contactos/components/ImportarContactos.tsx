@@ -12,13 +12,18 @@ import { Table, TableBody, TableHead, TableHeader, TableRow, TableCell } from "@
 // FIX: Revertido al alias original '@/' que usa el proyecto
 import { apiFetch } from "@/lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download } from 'lucide-react';
 
 // --- Interfaces y Lógica de Normalización ---
 
 interface CampanaSimple {
   id_campana: number;
   nombre: string;
+  id_evento?: number | null;
+  evento_nombre?: string | null;
+  id_subevento?: number | null;
+  subevento_nombre?: string | null;
+  fecha_personalizada?: string | null;
+  estado?: string | number | null;
 }
 
 type ContactoData = Partial<Contacto> & { [key: string]: any };
@@ -32,8 +37,9 @@ type ImportarContactosProps = {
 const normalizeContactos = (contactos: ContactoData[]): ContactoData[] => {
   return contactos.map(contacto => {
     const normalizedContacto: ContactoData = {};
-    Object.keys(contacto).forEach(key => {
-      let value = contacto[key];
+    Object.keys(contacto).forEach(rawKey => {
+      const key = String(rawKey).trim();
+      let value = contacto[rawKey];
       if (typeof value === 'string') {
         value = value.trim();
         const lowerKey = key.toLowerCase();
@@ -53,6 +59,27 @@ const normalizeContactos = (contactos: ContactoData[]): ContactoData[] => {
   });
 };
 
+const buildCampanaLabel = (campana: CampanaSimple): string => {
+  const evento = campana.evento_nombre?.trim();
+  const campanaNombre = campana.nombre?.trim();
+  const subevento = campana.subevento_nombre?.trim();
+
+  const bloques = [
+    campana.id_evento ? `Evento #${campana.id_evento}${evento ? ` - ${evento}` : ''}` : evento,
+    subevento ? `Subevento: ${subevento}` : null,
+    `Campaña #${campana.id_campana}${campanaNombre ? ` - ${campanaNombre}` : ''}`,
+  ].filter(Boolean);
+
+  return bloques.join(' • ');
+};
+
+const getExcelRowFromPath = (path?: string): number | null => {
+  if (!path) return null;
+  const match = path.match(/\[(\d+)\]/);
+  if (!match) return null;
+  return Number(match[1]) + 2;
+};
+
 
 // --- Componente Principal ---
 
@@ -67,22 +94,26 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
   const [isLoadingCampanas, setIsLoadingCampanas] = useState(false);
   const [headers, setHeaders] = useState<string[]>([]);
 
+  const selectedCampanaData = campanas.find(
+    (campana) => String(campana.id_campana) === selectedCampana
+  ) || null;
+
   useEffect(() => {
     async function fetchCampanas() {
       if (open && campanas.length === 0) {
         try {
           setIsLoadingCampanas(true);
           const response = await apiFetch('/campanas/listado-simple');
-          if (!response.ok) throw new Error('Error al cargar eventos');
+          if (!response.ok) throw new Error('Error al cargar campañas');
           const data = await response.json();
           if (Array.isArray(data)) {
             setCampanas(data);
           } else {
-            toast.error('Error de formato en la respuesta de eventos.');
+            toast.error('Error de formato en la respuesta de campañas.');
           }
         } catch (error) {
-          console.error('Error al cargar la lista de eventos:', error);
-          toast.error('No se pudo cargar la lista de eventos.');
+          console.error('Error al cargar la lista de campañas:', error);
+          toast.error('No se pudo cargar la lista de campañas.');
         } finally {
           setIsLoadingCampanas(false);
         }
@@ -114,7 +145,9 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
             setError("El archivo está vacío.");
             return;
         }
-        const fileHeaders = jsonDataRaw[0].map(String);
+        const fileHeaders = jsonDataRaw[0]
+          .map((header) => String(header ?? '').trim())
+          .filter(Boolean);
         setHeaders(fileHeaders);
         const jsonData: ContactoData[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
         if (!jsonData.length) {
@@ -140,35 +173,28 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
     if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
       
       const mensajesError = errorData.errors.map((err: any, index: number) => {
-        // Asumimos que el 'index' del error corresponde a la fila de datos enviada.
-        // Los datos (jsonData) no incluyen la cabecera (Fila 1 del Excel).
-        // Por lo tanto, el error en el índice 0 corresponde a la Fila 2 del Excel.
+        const excelRow = getExcelRowFromPath(err.path);
+        let errorMsg = excelRow ? `Fila ${excelRow} (Excel): ` : `Error ${index + 1}: `;
         
-        let errorMsg = `Fila ${index + 2} (Excel): `; // Fila 1 es cabecera, Fila 2 es index 0
-        
-        // 'path' suele ser el campo/columna (ej: 'email')
         if (err.path) {
           errorMsg += `[Campo: ${err.path}] `;
         }
 
-        // 'msg' es el mensaje de validación (ej: 'Email inválido')
         if (err.msg) {
           errorMsg += `${err.msg} `;
         }
 
-        // 'value' es el valor que causó el error
         if (err.value) {
           errorMsg += `(Valor: "${err.value}")`;
         }
 
-        // Fallback si el error no tiene ninguno de esos campos
         if (!err.path && !err.msg && !err.value) {
           errorMsg += 'Error de validación desconocido.';
         }
         
         return errorMsg.trim();
 
-      }).join('\n'); // Unir con saltos de línea
+      }).join('\n');
       
       return `Ocurrieron errores en la importación:\n${mensajesError}`;
     }
@@ -228,7 +254,7 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
       // Si la respuesta es OK (ej: 200, 201)
       if (selectedCampana) {
         const result = await response.json();
-        toast.success(result.message || "Importación a evento completada.");
+        toast.success(result.message || "Importación a la campaña completada.");
       } else {
         toast.success("Contactos importados con éxito a la nueva base de datos.");
       }
@@ -267,7 +293,7 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
             a.click();
             a.remove();
             window.URL.revokeObjectURL(url);
-            toast.success('Descargando plantilla del evento...');
+            toast.success('Descargando plantilla de la campaña...');
         })
         .catch(err => toast.error(err.message));
       return;
@@ -294,28 +320,45 @@ const ImportarContactos: React.FC<ImportarContactosProps> = ({ open, setOpen, re
         <div className="flex-1 overflow-y-auto space-y-4 py-4 px-6">
           
           <div className="space-y-2">
-            <label className="text-sm font-medium">Asociar a un Evento (Opcional)</label>
+            <label className="text-sm font-medium">Asociar a una campaña (opcional)</label>
+            <p className="text-xs text-muted-foreground">
+              La plantilla y la importación se aplican a la campaña seleccionada. Se muestra el evento, subevento e ID para evitar confusiones cuando hay nombres repetidos.
+            </p>
             <div className="flex items-center gap-2">
-              <Select onValueChange={setSelectedCampana} disabled={isLoadingCampanas}>
+              <Select value={selectedCampana} onValueChange={setSelectedCampana} disabled={isLoadingCampanas}>
                 <SelectTrigger>
-                  <SelectValue placeholder={isLoadingCampanas ? "Cargando eventos..." : "Seleccione un evento"} />
+                  <SelectValue placeholder={isLoadingCampanas ? "Cargando campañas..." : "Seleccione una campaña"} />
                 </SelectTrigger>
                 <SelectContent>
                   {campanas.map((campana) => (
                     <SelectItem key={campana.id_campana} value={String(campana.id_campana)}>
-                      {campana.nombre}
+                      {buildCampanaLabel(campana)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+
+            {selectedCampanaData && (
+              <div className="rounded-md border bg-slate-50 p-3 text-sm">
+                <div><span className="font-medium">Evento:</span> {selectedCampanaData.evento_nombre || 'Sin evento'}</div>
+                <div><span className="font-medium">Campaña:</span> {selectedCampanaData.nombre}</div>
+                {selectedCampanaData.subevento_nombre && (
+                  <div><span className="font-medium">Subevento:</span> {selectedCampanaData.subevento_nombre}</div>
+                )}
+                <div className="text-xs text-muted-foreground mt-1">
+                  ID campaña: {selectedCampanaData.id_campana}
+                  {selectedCampanaData.id_evento ? ` • ID evento: ${selectedCampanaData.id_evento}` : ''}
+                </div>
+              </div>
+            )}
           </div>
           
           <Input type="file" accept=".xlsx, .xls" onChange={handleFileChange} />
           <Button onClick={handleParseFile} className="w-full">Leer, Limpiar y Previsualizar</Button>
           
           <button onClick={handleDownloadTemplate} className="text-blue-600 text-sm underline mt-2 block text-center w-full">
-            {selectedCampana ? 'Descargar plantilla para el evento seleccionado' : 'Descargar planilla de ejemplo genérica'}
+            {selectedCampana ? 'Descargar plantilla de la campaña seleccionada' : 'Descargar planilla de ejemplo genérica'}
           </button>
           
           {!selectedCampana && (

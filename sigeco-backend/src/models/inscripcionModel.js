@@ -511,6 +511,28 @@ const Inscripcion = {
                     return mapa;
                 }, {});
 
+            const etiquetasValidas = new Set(Object.keys(mapaEtiquetaAId));
+            const cabecerasRecibidas = new Set();
+
+            contactos.forEach((fila) => {
+                Object.keys(fila || {}).forEach((cabecera) => {
+                    const cabeceraNormalizada = String(cabecera).trim().toLowerCase();
+                    if (cabeceraNormalizada) {
+                        cabecerasRecibidas.add(cabeceraNormalizada);
+                    }
+                });
+            });
+
+            const cabecerasDesconocidas = Array.from(cabecerasRecibidas).filter(
+                (cabecera) => !etiquetasValidas.has(cabecera)
+            );
+
+            if (cabecerasDesconocidas.length > 0) {
+                throw new Error(
+                    `La plantilla no coincide con la campaña seleccionada. Columnas no reconocidas: ${cabecerasDesconocidas.join(', ')}. Descarga nuevamente la plantilla correcta para esta campaña.`
+                );
+            }
+
             console.log('Mapa de Campos de Sistema (para tabla contactos):', camposDeSistema);
             let totalProcesados = 0;
 

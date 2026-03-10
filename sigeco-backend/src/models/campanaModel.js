@@ -364,9 +364,21 @@ const Campana = {
     },
     // AÑADE ESTE NUEVO MÉTODO DENTRO DEL OBJETO
     getListadoSimple: async () => {
-        const [rows] = await pool.query(
-            'SELECT id_campana, nombre FROM campanas ORDER BY nombre ASC'
-        );
+        const [rows] = await pool.query(`
+            SELECT
+                c.id_campana,
+                c.nombre,
+                c.id_evento,
+                e.nombre AS evento_nombre,
+                c.id_subevento,
+                s.nombre AS subevento_nombre,
+                c.fecha_personalizada,
+                c.estado
+            FROM campanas c
+            JOIN eventos e ON e.id_evento = c.id_evento
+            LEFT JOIN subeventos s ON s.id_subevento = c.id_subevento
+            ORDER BY e.nombre ASC, c.nombre ASC, c.id_campana ASC
+        `);
         return rows;
     },
 
