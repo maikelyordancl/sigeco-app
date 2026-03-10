@@ -22,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowLeft, Copy, ExternalLink } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Ticket } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { apiFetch } from "@/lib/api";
 
@@ -94,9 +94,16 @@ interface CampanaInfo {
   obligatorio_pago: boolean;
 }
 
+interface TicketInfo {
+  id_tipo_entrada: number;
+  nombre: string;
+  precio: number;
+}
+
 interface PaymentDraft {
   monto: string;
   monto_objetivo_manual: string;
+  id_tipo_entrada: string; // <-- NUEVO: Para almacenar el ticket seleccionado
   medio_pago: MedioPagoOpcion;
   nota: string;
   generated_link: string | null;
@@ -153,6 +160,7 @@ const MANUAL_PAYMENT_OPTIONS: MedioPagoOpcion[] = [
 const getEmptyDraft = (): PaymentDraft => ({
   monto: "",
   monto_objetivo_manual: "0",
+  id_tipo_entrada: "", // <-- NUEVO
   medio_pago: "Efectivo",
   nota: "",
   generated_link: null,
@@ -164,6 +172,7 @@ export default function TesoreriaCampanaPage() {
   const id_campana = params.id_campana as string;
 
   const [campana, setCampana] = useState<CampanaInfo | null>(null);
+  const [tickets, setTickets] = useState<TicketInfo[]>([]); // <-- NUEVO ESTADO PARA TICKETS
   const [rows, setRows] = useState<AsistenteTesoreria[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -247,13 +256,16 @@ export default function TesoreriaCampanaPage() {
     setDrafts((prev) => {
       const next = { ...prev };
       for (const row of data) {
+        // Inicializamos el draft con el ticket actual y el monto actual de la BD
+        const montoBase = toNumber(row.monto_objetivo_manual) > 0 
+                          ? toNumber(row.monto_objetivo_manual) 
+                          : toNumber(row.monto_total);
+
         next[row.id_inscripcion] = {
           ...getEmptyDraft(),
           ...(next[row.id_inscripcion] || {}),
-          monto_objetivo_manual:
-            row.id_tipo_entrada === null
-              ? String(toNumber(row.monto_objetivo_manual))
-              : next[row.id_inscripcion]?.monto_objetivo_manual || "",
+          id_tipo_entrada: row.id_tipo_entrada ? String(row.id_tipo_entrada) : "",
+          monto_objetivo_manual: next[row.id_inscripcion]?.monto_objetivo_manual || String(montoBase),
         };
       }
       return next;
@@ -266,14 +278,25 @@ export default function TesoreriaCampanaPage() {
     try {
       setLoading(true);
 
-      const campanaRes = await apiFetch(`/campanas/${id_campana}`);
-      const campanaJson = await campanaRes.json();
+      // Cargamos Campaña, Asistentes y Tickets en paralelo
+      const [campanaRes, ticketsRes] = await Promise.all([
+        apiFetch(`/campanas/${id_campana}`),
+        apiFetch(`/tickets/campana/${id_campana}`).catch(() => null) // <--- ESTA ES LA RUTA CORRECTA
+      ]);
 
+      const campanaJson = await campanaRes.json();
       if (!campanaRes.ok || !campanaJson.success) {
         throw new Error(campanaJson.error || "No se pudo cargar la campaña.");
       }
-
       setCampana(campanaJson.data);
+
+      if (ticketsRes && ticketsRes.ok) {
+        const ticketsJson = await ticketsRes.json();
+        if (ticketsJson.success) {
+            setTickets(ticketsJson.data || []);
+        }
+      }
+
       await fetchAsistentes();
     } catch (error: any) {
       toast.error(error.message || "Error al cargar Tesorería.");
@@ -475,13 +498,9 @@ export default function TesoreriaCampanaPage() {
   };
 
   const handleGuardarMontoObjetivo = async (row: AsistenteTesoreria) => {
-    if (row.id_tipo_entrada) {
-      toast.error("No puedes editar el monto manual si la inscripción tiene ticket.");
-      return;
-    }
-
     const draft = getDraft(row.id_inscripcion);
     const monto = Number(draft.monto_objetivo_manual);
+    const idTicket = draft.id_tipo_entrada ? Number(draft.id_tipo_entrada) : null;
 
     if (!Number.isFinite(monto) || monto < 0) {
       toast.error("Escribe un monto manual válido mayor o igual a 0.");
@@ -489,7 +508,7 @@ export default function TesoreriaCampanaPage() {
     }
 
     const key = `objective-${row.id_inscripcion}`;
-    const toastId = toast.loading("Guardando monto manual...");
+    const toastId = toast.loading("Guardando configuración...");
 
     try {
       setSavingKey(key);
@@ -498,27 +517,30 @@ export default function TesoreriaCampanaPage() {
         `/campanas/tesoreria/inscripciones/${row.id_inscripcion}/monto-objetivo-manual`,
         {
           method: "PUT",
-          body: JSON.stringify({ monto_objetivo_manual: monto }),
+          body: JSON.stringify({ 
+            monto_objetivo_manual: monto,
+            id_tipo_entrada: idTicket // Mandamos el ticket seleccionado también
+          }),
         }
       );
 
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || result.message || "No se pudo guardar el monto manual.");
+        throw new Error(result.error || result.message || "No se pudo guardar la configuración.");
       }
 
       await fetchAsistentes();
       await fetchHistorial(row.id_inscripcion);
 
       toast.success(
-        monto === 0
-          ? "Monto manual actualizado. La inscripción quedó como cortesía/sin cobro."
-          : "Monto manual actualizado correctamente.",
+        monto === 0 && !idTicket
+          ? "Configuración guardada. La inscripción quedó como cortesía/sin cobro."
+          : "Configuración y monto guardados correctamente.",
         { id: toastId }
       );
     } catch (error: any) {
-      toast.error(error.message || "Error al guardar el monto manual.", {
+      toast.error(error.message || "Error al guardar el monto.", {
         id: toastId,
       });
     } finally {
@@ -633,9 +655,7 @@ export default function TesoreriaCampanaPage() {
 
     if (montoTotal <= 0) {
       toast.error(
-        row.id_tipo_entrada
-          ? "Esta inscripción no tiene un monto de cobro válido."
-          : "Primero define el monto manual de cobro. Usa 0 si será una cortesía."
+        "Primero define un Ticket o un monto manual a cobrar. Usa 0 solo si será una cortesía sin pago."
       );
       return;
     }
@@ -676,7 +696,7 @@ export default function TesoreriaCampanaPage() {
     : false;
   const selectedIsFlow = selectedDraft.medio_pago === "Flow";
 
-  // CLASES DE COLORES EXACTAS: Azul para cabecera, Cian para columnas clave
+  // CLASES DE COLORES EXACTAS
   const tableHeadClass = "whitespace-nowrap border-r border-blue-500 bg-blue-600 px-3 py-3 text-white font-semibold last:border-r-0";
   const tableHeadCyanClass = "whitespace-nowrap border-r border-cyan-400 bg-cyan-400 px-3 py-3 text-cyan-950 font-bold last:border-r-0";
   const tableCellClass = "border-r border-slate-200 px-3 py-3 align-top last:border-r-0";
@@ -690,7 +710,7 @@ export default function TesoreriaCampanaPage() {
             <h1 className="text-3xl font-bold">Tesorería</h1>
             <p className="text-gray-500">{campana?.nombre || `Campaña #${id_campana}`}</p>
             <p className="text-sm text-gray-500 mt-1">
-              Gestión de pagos manuales, abonos, montos manuales y links de cobro.
+              Gestión de pagos manuales, abonos, asignación de tickets y links de cobro.
             </p>
           </div>
 
@@ -833,7 +853,7 @@ export default function TesoreriaCampanaPage() {
                           {visibleColumns.entrada && (
                             <TableCell className={tableCellClass}>
                               {row.tipo_entrada || (
-                                <span className="text-gray-500">Sin ticket</span>
+                                <span className="text-gray-500">Sin ticket asignado</span>
                               )}
                             </TableCell>
                           )}
@@ -885,10 +905,10 @@ export default function TesoreriaCampanaPage() {
                               <div className="min-w-[220px] space-y-2">
                                 <p className="text-xs text-gray-500">
                                   {row.id_tipo_entrada
-                                    ? "Valor definido por ticket"
+                                    ? "Con ticket asignado"
                                     : montoTotal > 0
-                                      ? "Pago manual configurable"
-                                      : "Sin cobro configurado / cortesía"}
+                                      ? "Cobro manual configurado"
+                                      : "Sin cobro configurado"}
                                 </p>
 
                                 <div className="flex flex-wrap gap-2">
@@ -971,59 +991,96 @@ export default function TesoreriaCampanaPage() {
 
             <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-6 mt-2">
               <div className="space-y-4">
-                <div className="rounded-lg border bg-white p-5 shadow-sm space-y-4">
+                
+                {/* --- NUEVA ZONA DE VALOR MANUAL Y TICKETS --- */}
+                <div className="rounded-lg border bg-white p-5 shadow-sm space-y-4 border-l-4 border-l-blue-500">
                   <div>
-                    <h3 className="font-bold text-lg text-slate-800">Valor manual a pagar</h3>
+                    <h3 className="font-bold text-lg text-slate-800 flex items-center">
+                      <Ticket className="w-5 h-5 mr-2 text-blue-600" />
+                      Asignar Ticket y Valor a Cobrar
+                    </h3>
                     <p className="text-sm text-gray-500 mt-1">
-                      {selectedTieneTicket
-                        ? "Esta inscripción usa el precio del ticket y no permite edición manual."
-                        : "Cuando no hay ticket, este monto define cuánto se debe cobrar. Usa 0 para cortesía o sin cobro."}
+                      Puedes asignarle un ticket para llenar automáticamente el precio. Una vez seleccionado, eres libre de modificar el "Monto a cobrar" si deseas aplicar un recargo o descuento.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                     <div>
                       <label className="block text-sm font-semibold text-slate-700 mb-1">
-                        Monto a cobrar
+                        Ticket / Entrada
                       </label>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="1"
-                        className="text-lg font-medium"
-                        value={selectedDraft.monto_objetivo_manual}
-                        disabled={selectedTieneTicket || selectedIsSavingObjective}
-                        onChange={(e) =>
-                          updateDraft(
-                            selectedRow.id_inscripcion,
-                            "monto_objetivo_manual",
-                            e.target.value
-                          )
-                        }
-                        placeholder="0 = cortesía"
-                      />
+                      <select
+                        className="w-full border rounded-md px-3 py-2 bg-slate-50 text-base font-medium h-11 border-slate-300"
+                        value={selectedDraft.id_tipo_entrada || ""}
+                        disabled={selectedIsSavingObjective}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          updateDraft(selectedRow.id_inscripcion, "id_tipo_entrada", val);
+                          
+                          // Lógica mágica: Al cambiar de ticket, autocompleta el precio
+                          if (val) {
+                            const t = tickets.find(t => String(t.id_tipo_entrada) === val);
+                            if (t) updateDraft(selectedRow.id_inscripcion, "monto_objetivo_manual", String(t.precio));
+                          } else {
+                            // Si lo deja en "Sin ticket", vuelve a 0
+                            updateDraft(selectedRow.id_inscripcion, "monto_objetivo_manual", "0");
+                          }
+                        }}
+                      >
+                        <option value="">Sin ticket (Cobro libre / Cortesía)</option>
+                        {tickets.map(t => (
+                          <option key={t.id_tipo_entrada} value={t.id_tipo_entrada}>
+                            {t.nombre} - {formatMoney(t.precio)}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
-                    <Button
-                      type="button"
-                      size="lg"
-                      disabled={selectedTieneTicket || selectedIsSavingObjective}
-                      onClick={() => handleGuardarMontoObjetivo(selectedRow)}
-                    >
-                      Guardar monto
-                    </Button>
+                    <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">
+                          Monto a cobrar final
+                        </label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="1"
+                          className="text-lg font-bold bg-yellow-50 border-yellow-300"
+                          value={selectedDraft.monto_objetivo_manual}
+                          disabled={selectedIsSavingObjective}
+                          onChange={(e) =>
+                            updateDraft(
+                              selectedRow.id_inscripcion,
+                              "monto_objetivo_manual",
+                              e.target.value
+                            )
+                          }
+                          placeholder="0 = cortesía"
+                        />
+                      </div>
+
+                      <Button
+                        type="button"
+                        size="lg"
+                        className="bg-slate-800 hover:bg-slate-900"
+                        disabled={selectedIsSavingObjective}
+                        onClick={() => handleGuardarMontoObjetivo(selectedRow)}
+                      >
+                        Guardar Monto
+                      </Button>
+                    </div>
                   </div>
 
-                  {!selectedTieneTicket && selectedWithoutCharge && (
+                  {selectedWithoutCharge && (
                     <p className="text-sm text-amber-700 font-medium bg-amber-50 p-2 rounded border border-amber-200">
-                      Esta inscripción quedó sin cobro. Puedes mantenerla en 0 como cortesía o definir un monto manual antes de registrar pagos.
+                      Esta inscripción quedó en $0. Puedes mantenerla así como cortesía o definir un monto antes de registrar pagos.
                     </p>
                   )}
                 </div>
 
+                {/* --- ZONA DE PAGOS --- */}
                 <div className="rounded-lg border bg-white p-5 shadow-sm space-y-4">
                   <div>
-                    {/* El texto exacto que solicitaste */}
                     <h3 className="font-bold text-lg text-slate-800">Registrar pago o generar link de pago por Flow</h3>
                     <p className="text-sm text-gray-500 mt-1">
                       Los pagos siempre recalculan el estado según el saldo real. Nunca se marcará como pagado si el total abonado no completa el cobro.
@@ -1158,9 +1215,7 @@ export default function TesoreriaCampanaPage() {
 
                   {selectedMontoTotal <= 0 && !selectedFullyPaid && (
                     <div className="bg-amber-50 border border-amber-200 p-3 rounded text-amber-800 font-bold text-center text-sm">
-                      {selectedTieneTicket
-                        ? "⚠️ Esta inscripción no tiene un monto de cobro válido."
-                        : "⚠️ Primero define el monto manual de cobro arriba. Usa 0 si será una cortesía."}
+                      ⚠️ Primero define el ticket o monto a cobrar arriba.
                     </div>
                   )}
                 </div>
