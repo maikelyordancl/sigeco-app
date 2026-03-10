@@ -1,57 +1,67 @@
 import { getAccessToken, getRefreshToken, setAccessToken, setRefreshToken, clearTokens } from './auth';
 
-// Interceptor para refrescar el token
+// Candado para evitar que múltiples peticiones choquen al renovar el token
+let refreshPromise: Promise<string | null> | null = null;
+
 const refreshTokenInterceptor = async (url: string, options: RequestInit): Promise<Response> => {
     let response = await fetch(url, options);
 
     if (response.status === 401) {
         const refreshToken = getRefreshToken();
-        if (refreshToken) {
-            try {
-                const refreshResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ refreshToken }),
-                });
+        
+        if (!refreshToken) {
+            clearTokens();
+            if (typeof window !== 'undefined') window.location.href = '/login';
+            return response;
+        }
 
-                if (refreshResponse.ok) {
-                    const { accessToken, refreshToken: newRefreshToken } = await refreshResponse.json();
-                    
-                    setAccessToken(accessToken);
-                    setRefreshToken(newRefreshToken);
-                    
-                    // Reintentar la solicitud original con el nuevo token
-                    const newOptions = {
-                        ...options,
-                        headers: {
-                            ...options.headers,
-                            'Authorization': `Bearer ${accessToken}`,
-                        },
-                    };
-                    response = await fetch(url, newOptions);
-                } else {
-                    clearTokens();
-                    if (typeof window !== 'undefined') {
-                        window.location.href = '/login';
+        // Si no hay un refresco en curso, lo iniciamos
+        if (!refreshPromise) {
+            refreshPromise = fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken }),
+            }).then(async (res) => {
+                if (res.ok) {
+                    const result = await res.json();
+                    if (result.success && result.data) {
+                        setAccessToken(result.data.accessToken);
+                        setRefreshToken(result.data.refreshToken);
+                        return result.data.accessToken; // Retornamos el nuevo token
                     }
                 }
-            } catch (error) {
+                // Si falla la respuesta
                 clearTokens();
-                if (typeof window !== 'undefined') {
-                    window.location.href = '/login';
-                }
-            }
-        } else {
-            clearTokens();
-            if (typeof window !== 'undefined') {
-                window.location.href = '/login';
-            }
+                if (typeof window !== 'undefined') window.location.href = '/login';
+                return null;
+            }).catch(() => {
+                clearTokens();
+                if (typeof window !== 'undefined') window.location.href = '/login';
+                return null;
+            }).finally(() => {
+                // Liberamos el candado
+                refreshPromise = null;
+            });
+        }
+
+        // Esperamos a que el proceso de refresco (el actual o el que estaba en curso) termine
+        const newAccessToken = await refreshPromise;
+
+        if (newAccessToken) {
+            // Reintentar la solicitud original de forma transparente con el nuevo token
+            const newOptions = {
+                ...options,
+                headers: {
+                    ...options.headers,
+                    'Authorization': `Bearer ${newAccessToken}`,
+                },
+            };
+            response = await fetch(url, newOptions);
         }
     }
 
     return response;
 };
-
 
 export const apiFetch = async (endpoint: string, options: RequestInit = {}): Promise<Response> => {
     const token = getAccessToken();
@@ -71,8 +81,6 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}): Pro
     };
 
     const response = await refreshTokenInterceptor(url, config);
-    
-    // Dejamos que los componentes manejen las respuestas no exitosas (ej. para leer mensajes de error)
     return response;
 };
 
@@ -85,34 +93,26 @@ export const apiFetchImage = async (
   const token = getAccessToken();
   const url = `${process.env.NEXT_PUBLIC_API_URL}${endpoint}`;
 
-  // Construimos Headers seguros: NO seteamos Content-Type para que el navegador
-  // agregue el boundary automáticamente.
   const h = new Headers(options.headers || {});
   if (token && !h.has('Authorization')) {
     h.set('Authorization', `Bearer ${token}`);
   }
-  // Si alguien puso Content-Type por accidente, lo removemos.
   if (h.has('Content-Type')) {
     h.delete('Content-Type');
   }
 
   const config: RequestInit = {
-    // Por defecto POST si no viene otro método
     method: options.method || 'POST',
     headers: h,
     body: formData,
-    // preserva resto de opciones (credentials, signal, etc.)
     ...options,
   };
 
-  // Muy importante: asegurar que no se sobreescriba body al hacer el spread:
   config.body = formData;
 
-  // Usa el mismo interceptor de refresh que ya tienes
   const response = await refreshTokenInterceptor(url, config);
   return response;
 };
-
 
 // --- FUNCIONES PARA PERMISOS Y ROLES ---
 
@@ -145,7 +145,6 @@ export const deleteUserPermission = (userId: number, eventId: number, module: st
 
 export const getUserSummary = (userId: number) => apiFetch(`/permisos/user/${userId}`);
 
-
 // --- FUNCIONES PARA GESTIÓN DE USUARIOS (CRUD) ---
 
 export const getUsuarios = () => apiFetch('/usuarios');
@@ -160,9 +159,6 @@ export const updateUsuario = (id_usuario: number, usuarioData: { nombre: string;
   body: JSON.stringify(usuarioData),
 });
 
-/**
- * Actualiza la contraseña de un usuario (Admin)
- */
 export const updatePassword = (id_usuario: number, password: string) => apiFetch(`/usuarios/${id_usuario}/password`, {
   method: 'PUT',
   body: JSON.stringify({ password }),
@@ -172,7 +168,4 @@ export const deleteUsuario = (id_usuario: number) => apiFetch(`/usuarios/${id_us
   method: 'DELETE',
 });
 
-
-// Nota: Mantengo esta función `findUsers` porque la usamos en la UI para buscar. 
-// Asegúrate de que tu backend tenga un endpoint como /api/usuarios/buscar?q=...
 export const findUsers = (searchTerm: string) => apiFetch(`/usuarios?search=${searchTerm}`);

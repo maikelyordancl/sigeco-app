@@ -675,10 +675,12 @@ export default function TesoreriaCampanaPage() {
     ? isBusy(`objective-${selectedRow.id_inscripcion}`)
     : false;
   const selectedIsFlow = selectedDraft.medio_pago === "Flow";
-  const tableHeadClass =
-    "whitespace-nowrap border-r border-slate-300 bg-slate-100 px-3 py-3 text-slate-700 font-semibold last:border-r-0";
-  const tableCellClass =
-    "border-r border-slate-200 px-3 py-3 align-top last:border-r-0";
+
+  // CLASES DE COLORES EXACTAS: Azul para cabecera, Cian para columnas clave
+  const tableHeadClass = "whitespace-nowrap border-r border-blue-500 bg-blue-600 px-3 py-3 text-white font-semibold last:border-r-0";
+  const tableHeadCyanClass = "whitespace-nowrap border-r border-cyan-400 bg-cyan-400 px-3 py-3 text-cyan-950 font-bold last:border-r-0";
+  const tableCellClass = "border-r border-slate-200 px-3 py-3 align-top last:border-r-0";
+  const tableCellCyanClass = "border-r border-cyan-300 bg-cyan-100 px-3 py-3 align-top last:border-r-0 font-bold text-cyan-900";
 
   return (
     <MainLayout title="Tesorería">
@@ -703,28 +705,29 @@ export default function TesoreriaCampanaPage() {
             <CardHeader>
               <CardTitle>Total inscritos</CardTitle>
             </CardHeader>
-            <CardContent>{resumen.total}</CardContent>
+            <CardContent className="text-2xl font-semibold">{resumen.total}</CardContent>
           </Card>
 
           <Card>
             <CardHeader>
               <CardTitle>Con saldo pendiente</CardTitle>
             </CardHeader>
-            <CardContent>{resumen.conSaldoPendiente}</CardContent>
+            <CardContent className="text-2xl font-semibold">{resumen.conSaldoPendiente}</CardContent>
           </Card>
 
-          <Card>
+          {/* Tarjeta de Total Pagado Destacada en Cian */}
+          <Card className="bg-cyan-100 border-cyan-300 border-2">
             <CardHeader>
-              <CardTitle>Total ingresos</CardTitle>
+              <CardTitle className="text-cyan-900 font-bold uppercase text-sm">Total pagado</CardTitle>
             </CardHeader>
-            <CardContent>{formatMoney(resumen.totalRecaudado)}</CardContent>
+            <CardContent className="text-cyan-950 font-bold text-3xl">{formatMoney(resumen.totalRecaudado)}</CardContent>
           </Card>
 
           <Card>
             <CardHeader>
               <CardTitle>Saldo total pendiente</CardTitle>
             </CardHeader>
-            <CardContent>{formatMoney(resumen.totalPorCobrar)}</CardContent>
+            <CardContent className="text-2xl font-semibold">{formatMoney(resumen.totalPorCobrar)}</CardContent>
           </Card>
         </div>
 
@@ -732,38 +735,44 @@ export default function TesoreriaCampanaPage() {
           <CardHeader>
             <CardTitle>Buscar y configurar columnas</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <Input
-              placeholder="Buscar por nombre, email, empresa, RUT, ID o medio de pago..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <CardContent>
+            {/* Buscador y configuración de columnas en una línea, Buscador en amarillo */}
+            <div className="flex flex-col md:flex-row items-center gap-4">
+              <div className="relative">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowColumnsPanel((prev) => !prev)}
+                  className="whitespace-nowrap font-medium"
+                >
+                  Configurar columnas
+                </Button>
 
-            <div className="relative">
-              <Button
-                variant="outline"
-                onClick={() => setShowColumnsPanel((prev) => !prev)}
-              >
-                Configurar columnas
-              </Button>
-
-              {showColumnsPanel && (
-                <div className="absolute z-10 mt-2 w-full md:w-[420px] rounded-md border bg-white p-4 shadow-lg">
-                  <p className="font-medium mb-3">Columnas visibles</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {COLUMN_OPTIONS.map((item) => (
-                      <label key={item.key} className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={visibleColumns[item.key]}
-                          onChange={() => toggleColumn(item.key)}
-                        />
-                        <span>{item.label}</span>
-                      </label>
-                    ))}
+                {showColumnsPanel && (
+                  <div className="absolute z-10 mt-2 w-full min-w-[300px] md:w-[420px] rounded-md border bg-white p-4 shadow-xl left-0">
+                    <p className="font-medium mb-3">Columnas visibles</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {COLUMN_OPTIONS.map((item) => (
+                        <label key={item.key} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-50 p-1 rounded">
+                          <input
+                            type="checkbox"
+                            checked={visibleColumns[item.key]}
+                            onChange={() => toggleColumn(item.key)}
+                          />
+                          <span>{item.label}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+
+              {/* Input con fondo amarillo fuerte */}
+              <Input
+                className="bg-yellow-200 border-yellow-400 text-yellow-900 placeholder:text-yellow-700 font-medium flex-1 h-10"
+                placeholder="Buscar por nombre, email, empresa, RUT, ID o medio de pago..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
           </CardContent>
         </Card>
@@ -776,17 +785,20 @@ export default function TesoreriaCampanaPage() {
             <div className="rounded-md border-2 border-slate-300 overflow-auto shadow-sm">
               <Table className="min-w-full border-collapse [&_tbody_tr:last-child_td]:border-b-0">
                 <TableHeader>
-                  <TableRow className="border-b-2 border-slate-300 bg-slate-100 hover:bg-slate-100">
+                  <TableRow className="border-b-2 border-blue-700 bg-blue-600">
                     {visibleColumns.id && <TableHead className={tableHeadClass}>ID</TableHead>}
                     {visibleColumns.nombre && <TableHead className={tableHeadClass}>Nombre</TableHead>}
                     {visibleColumns.email && <TableHead className={tableHeadClass}>Email</TableHead>}
                     {visibleColumns.empresa && <TableHead className={tableHeadClass}>Empresa</TableHead>}
                     {visibleColumns.entrada && <TableHead className={tableHeadClass}>Detalle compra</TableHead>}
                     {visibleColumns.montoTotal && <TableHead className={tableHeadClass}>Valor compra</TableHead>}
-                    {visibleColumns.pagado && <TableHead className={tableHeadClass}>Total pagado</TableHead>}
+                    
+                    {/* Encabezados destacados en Cian */}
+                    {visibleColumns.pagado && <TableHead className={tableHeadCyanClass}>Total pagado</TableHead>}
                     {visibleColumns.saldo && <TableHead className={tableHeadClass}>Saldo pendiente</TableHead>}
                     {visibleColumns.medio && <TableHead className={tableHeadClass}>Medio de pago</TableHead>}
-                    {visibleColumns.estado && <TableHead className={tableHeadClass}>Estado</TableHead>}
+                    {visibleColumns.estado && <TableHead className={tableHeadCyanClass}>Estado</TableHead>}
+                    
                     {visibleColumns.gestion && <TableHead className={tableHeadClass}>Gestión</TableHead>}
                     {visibleColumns.fecha && <TableHead className={tableHeadClass}>Fecha inscripción</TableHead>}
                   </TableRow>
@@ -804,7 +816,7 @@ export default function TesoreriaCampanaPage() {
                       return (
                         <TableRow
                           key={row.id_inscripcion}
-                          className={`${index % 2 === 0 ? "bg-white" : "bg-slate-50/60"} border-b border-slate-200 hover:bg-slate-100/70`}
+                          className={`${index % 2 === 0 ? "bg-white" : "bg-slate-50"} border-b border-slate-200 hover:bg-slate-100/70`}
                         >
                           {visibleColumns.id && <TableCell className={tableCellClass}>{row.id_inscripcion}</TableCell>}
 
@@ -830,8 +842,9 @@ export default function TesoreriaCampanaPage() {
                             <TableCell className={tableCellClass}>{formatMoney(row.monto_total)}</TableCell>
                           )}
 
+                          {/* Celdas destacadas en Cian */}
                           {visibleColumns.pagado && (
-                            <TableCell className={tableCellClass}>{formatMoney(row.monto_pagado_actual)}</TableCell>
+                            <TableCell className={tableCellCyanClass}>{formatMoney(row.monto_pagado_actual)}</TableCell>
                           )}
 
                           {visibleColumns.saldo && (
@@ -839,10 +852,10 @@ export default function TesoreriaCampanaPage() {
                               <span
                                 className={
                                   fullyPaid
-                                    ? "text-green-700 font-medium"
+                                    ? "text-green-700 font-bold"
                                     : withoutCharge
                                       ? "text-gray-600 font-medium"
-                                      : "text-yellow-700 font-medium"
+                                      : "text-red-600 font-bold"
                                 }
                               >
                                 {formatMoney(row.saldo_pendiente)}
@@ -854,10 +867,11 @@ export default function TesoreriaCampanaPage() {
                             <TableCell className={tableCellClass}>{row.ultimo_medio_pago || "-"}</TableCell>
                           )}
 
+                          {/* Estado destacado en Cian claro */}
                           {visibleColumns.estado && (
-                            <TableCell className={tableCellClass}>
+                            <TableCell className={tableCellCyanClass}>
                               <span
-                                className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${getBadgeClasses(
+                                className={`inline-flex rounded-full px-2 py-1 text-xs font-bold ${getBadgeClasses(
                                   row.estado_pago
                                 )}`}
                               >
@@ -921,40 +935,45 @@ export default function TesoreriaCampanaPage() {
 
       <Dialog open={activeGestionId !== null} onOpenChange={(open) => !open && setActiveGestionId(null)}>
         {selectedRow && (
-          <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-5xl max-h-[90vh] overflow-y-auto bg-slate-50">
             <DialogHeader>
-              <DialogTitle>
+              <DialogTitle className="text-xl">
                 Gestionar pago · Inscripción #{selectedRow.id_inscripcion}
               </DialogTitle>
-              <DialogDescription>
-                {selectedRow.nombre} · {selectedRow.email}
+              <DialogDescription className="text-base text-slate-700">
+                <span className="font-bold text-slate-900">{selectedRow.nombre}</span> · {selectedRow.email}
               </DialogDescription>
             </DialogHeader>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-              <div className="rounded-md border p-3">
-                <p className="text-xs text-gray-500">Estado</p>
-                <p className="mt-1 font-semibold">{selectedRow.estado_pago}</p>
+              {/* Cuadro de Estado destacado en Cian */}
+              <div className="rounded-md border p-3 bg-cyan-200 border-cyan-400 shadow-sm">
+                <p className="text-xs text-cyan-900 font-bold uppercase tracking-wider">Estado</p>
+                <p className="mt-1 font-black text-cyan-950 text-lg">{selectedRow.estado_pago}</p>
               </div>
-              <div className="rounded-md border p-3">
-                <p className="text-xs text-gray-500">Valor compra</p>
-                <p className="mt-1 font-semibold">{formatMoney(selectedRow.monto_total)}</p>
+              
+              <div className="rounded-md border p-3 bg-white shadow-sm">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Valor compra</p>
+                <p className="mt-1 font-bold text-lg">{formatMoney(selectedRow.monto_total)}</p>
               </div>
-              <div className="rounded-md border p-3">
-                <p className="text-xs text-gray-500">Total pagado</p>
-                <p className="mt-1 font-semibold">{formatMoney(selectedRow.monto_pagado_actual)}</p>
+              
+              {/* Cuadro de Total Pagado destacado en Cian */}
+              <div className="rounded-md border p-3 bg-cyan-200 border-cyan-400 shadow-sm">
+                <p className="text-xs text-cyan-900 font-bold uppercase tracking-wider">Total pagado</p>
+                <p className="mt-1 font-black text-cyan-950 text-lg">{formatMoney(selectedRow.monto_pagado_actual)}</p>
               </div>
-              <div className="rounded-md border p-3">
-                <p className="text-xs text-gray-500">Saldo pendiente</p>
-                <p className="mt-1 font-semibold">{formatMoney(selectedRow.saldo_pendiente)}</p>
+
+              <div className="rounded-md border p-3 bg-white shadow-sm">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Saldo pendiente</p>
+                <p className="mt-1 font-bold text-lg text-red-600">{formatMoney(selectedRow.saldo_pendiente)}</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-6">
+            <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-6 mt-2">
               <div className="space-y-4">
-                <div className="rounded-md border p-4 space-y-4">
+                <div className="rounded-lg border bg-white p-5 shadow-sm space-y-4">
                   <div>
-                    <h3 className="font-semibold">Valor manual a pagar</h3>
+                    <h3 className="font-bold text-lg text-slate-800">Valor manual a pagar</h3>
                     <p className="text-sm text-gray-500 mt-1">
                       {selectedTieneTicket
                         ? "Esta inscripción usa el precio del ticket y no permite edición manual."
@@ -964,13 +983,14 @@ export default function TesoreriaCampanaPage() {
 
                   <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
                     <div>
-                      <label className="block text-xs text-gray-500 mb-1">
-                        Pago manual
+                      <label className="block text-sm font-semibold text-slate-700 mb-1">
+                        Monto a cobrar
                       </label>
                       <Input
                         type="number"
                         min="0"
                         step="1"
+                        className="text-lg font-medium"
                         value={selectedDraft.monto_objetivo_manual}
                         disabled={selectedTieneTicket || selectedIsSavingObjective}
                         onChange={(e) =>
@@ -986,6 +1006,7 @@ export default function TesoreriaCampanaPage() {
 
                     <Button
                       type="button"
+                      size="lg"
                       disabled={selectedTieneTicket || selectedIsSavingObjective}
                       onClick={() => handleGuardarMontoObjetivo(selectedRow)}
                     >
@@ -994,43 +1015,45 @@ export default function TesoreriaCampanaPage() {
                   </div>
 
                   {!selectedTieneTicket && selectedWithoutCharge && (
-                    <p className="text-xs text-amber-700 font-medium">
+                    <p className="text-sm text-amber-700 font-medium bg-amber-50 p-2 rounded border border-amber-200">
                       Esta inscripción quedó sin cobro. Puedes mantenerla en 0 como cortesía o definir un monto manual antes de registrar pagos.
                     </p>
                   )}
                 </div>
 
-                <div className="rounded-md border p-4 space-y-4">
+                <div className="rounded-lg border bg-white p-5 shadow-sm space-y-4">
                   <div>
-                    <h3 className="font-semibold">Registrar pago o generar link</h3>
+                    {/* El texto exacto que solicitaste */}
+                    <h3 className="font-bold text-lg text-slate-800">Registrar pago o generar link de pago por Flow</h3>
                     <p className="text-sm text-gray-500 mt-1">
                       Los pagos siempre recalculan el estado según el saldo real. Nunca se marcará como pagado si el total abonado no completa el cobro.
                     </p>
                   </div>
 
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">
-                      Monto pagado / abono
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">
+                      Monto pagado / abono a registrar
                     </label>
                     <Input
                       type="number"
                       min="0"
                       step="1"
+                      className="text-lg font-medium"
                       value={selectedDraft.monto}
                       disabled={selectedIsProcessing || selectedFullyPaid || selectedMontoTotal <= 0}
                       onChange={(e) =>
                         updateDraft(selectedRow.id_inscripcion, "monto", e.target.value)
                       }
                       placeholder={
-                        selectedIsFlow ? "Vacío = saldo pendiente" : "Ej: 15000"
+                        selectedIsFlow ? "Vacío = cobrar el total del saldo pendiente" : "Ej: 15000"
                       }
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Medio de pago</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Medio de pago</label>
                     <select
-                      className="w-full border rounded-md px-3 py-2 bg-white"
+                      className="w-full border rounded-md px-3 py-2 bg-white text-base font-medium h-11"
                       value={selectedDraft.medio_pago}
                       disabled={selectedIsProcessing || selectedFullyPaid || selectedMontoTotal <= 0}
                       onChange={(e) =>
@@ -1050,7 +1073,7 @@ export default function TesoreriaCampanaPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">Notas</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Notas u observaciones</label>
                     <Textarea
                       value={selectedDraft.nota}
                       disabled={selectedIsProcessing || selectedFullyPaid || selectedMontoTotal <= 0}
@@ -1060,24 +1083,25 @@ export default function TesoreriaCampanaPage() {
                       placeholder={
                         selectedIsFlow
                           ? "Ej: Abono pendiente para enviar por correo"
-                          : "Ej: Pago recibido en caja / observaciones"
+                          : "Ej: Pago recibido en caja o número de transferencia"
                       }
                       className="min-h-[88px]"
                     />
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-2 pt-2">
                     <Button
-                      size="sm"
+                      size="lg"
+                      className={selectedIsFlow ? "bg-orange-500 hover:bg-orange-600 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"}
                       disabled={selectedIsProcessing || selectedFullyPaid || selectedMontoTotal <= 0}
                       onClick={() => handleProcesarPago(selectedRow)}
                     >
-                      {selectedIsFlow ? "Generar link de pago" : "Registrar pago"}
+                      {selectedIsFlow ? "Generar link de pago por Flow" : "Registrar pago manual"}
                     </Button>
 
                     <Button
-                      size="sm"
-                      variant="secondary"
+                      size="lg"
+                      variant="outline"
                       disabled={selectedIsHistoryLoading}
                       onClick={() => fetchHistorial(selectedRow.id_inscripcion)}
                     >
@@ -1086,18 +1110,17 @@ export default function TesoreriaCampanaPage() {
                   </div>
 
                   {selectedDraft.generated_link && (
-                    <div className="rounded-md border border-sky-200 bg-sky-50 p-3 space-y-2">
-                      <p className="text-sm font-medium text-sky-900">
-                        Link listo para enviar al cliente
+                    <div className="rounded-md border border-sky-200 bg-sky-50 p-4 space-y-3 mt-4">
+                      <p className="text-sm font-bold text-sky-900">
+                        🔗 Link listo para enviar al cliente
                       </p>
-                      <p className="break-all text-xs text-sky-800">
+                      <p className="break-all text-sm font-medium text-sky-800 bg-white p-2 border rounded">
                         {selectedDraft.generated_link}
                       </p>
                       <div className="flex flex-wrap gap-2">
                         <Button
                           type="button"
-                          size="sm"
-                          variant="outline"
+                          className="bg-sky-600 hover:bg-sky-700 text-white"
                           onClick={() =>
                             copyToClipboard(
                               selectedDraft.generated_link || "",
@@ -1111,7 +1134,6 @@ export default function TesoreriaCampanaPage() {
 
                         <Button
                           type="button"
-                          size="sm"
                           variant="outline"
                           onClick={() =>
                             window.open(
@@ -1122,46 +1144,40 @@ export default function TesoreriaCampanaPage() {
                           }
                         >
                           <ExternalLink className="mr-2 h-4 w-4" />
-                          Abrir link
+                          Abrir pestaña de pago
                         </Button>
                       </div>
                     </div>
                   )}
 
-                  <p className="text-xs text-gray-500">
-                    {selectedIsFlow
-                      ? "Si dejas vacío el monto para Flow, se usará automáticamente el saldo pendiente."
-                      : "Con Efectivo, Transferencia, Cortesía u Otro, el pago se registra directamente y el estado se recalcula según el saldo."}
-                  </p>
-
                   {selectedFullyPaid && (
-                    <p className="text-xs text-green-700 font-medium">
-                      Esta inscripción ya está completamente pagada.
-                    </p>
+                    <div className="bg-green-50 border border-green-200 p-3 rounded text-green-800 font-bold text-center">
+                      ✅ Esta inscripción ya está completamente pagada.
+                    </div>
                   )}
 
                   {selectedMontoTotal <= 0 && !selectedFullyPaid && (
-                    <p className="text-xs text-amber-700 font-medium">
+                    <div className="bg-amber-50 border border-amber-200 p-3 rounded text-amber-800 font-bold text-center text-sm">
                       {selectedTieneTicket
-                        ? "Esta inscripción no tiene un monto de cobro válido."
-                        : "Primero define el monto manual de cobro. Usa 0 si será una cortesía."}
-                    </p>
+                        ? "⚠️ Esta inscripción no tiene un monto de cobro válido."
+                        : "⚠️ Primero define el monto manual de cobro arriba. Usa 0 si será una cortesía."}
+                    </div>
                   )}
                 </div>
               </div>
 
-              <div className="rounded-md border p-4">
+              <div className="rounded-lg border bg-white p-5 shadow-sm self-start sticky top-4">
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <div>
-                    <h3 className="font-semibold">Historial de pagos</h3>
+                    <h3 className="font-bold text-lg text-slate-800">Historial de pagos</h3>
                     <p className="text-sm text-gray-500 mt-1">
-                      Últimos movimientos registrados para esta inscripción.
+                      Últimos movimientos registrados.
                     </p>
                   </div>
 
                   {selectedRow.estado_transaccion && (
                     <span
-                      className={`inline-flex items-center rounded-full border px-2 py-1 text-xs font-medium ${getTransactionBadgeClasses(
+                      className={`inline-flex items-center rounded-full border px-2 py-1 text-xs font-bold ${getTransactionBadgeClasses(
                         selectedRow.estado_transaccion
                       )}`}
                     >
@@ -1171,35 +1187,47 @@ export default function TesoreriaCampanaPage() {
                 </div>
 
                 {selectedIsHistoryLoading ? (
-                  <p className="text-sm text-gray-500">Cargando historial...</p>
+                  <div className="p-4 text-center">
+                    <p className="text-sm font-medium text-gray-500">Cargando historial...</p>
+                  </div>
                 ) : selectedHistorial.length ? (
-                  <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
                     {selectedHistorial.map((mov) => (
-                      <div key={mov.id_movimiento} className="rounded-md border bg-white p-3">
-                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-1">
-                          <div className="font-medium">
-                            {formatMoney(mov.monto)} · {mov.medio_pago}
+                      <div key={mov.id_movimiento} className="rounded-md border border-slate-200 bg-slate-50 p-3 shadow-sm">
+                        <div className="flex flex-col gap-1 mb-2">
+                          <div className="font-bold text-lg text-slate-800">
+                            {formatMoney(mov.monto)} 
                           </div>
-                          <div className="text-sm text-gray-500">
-                            {formatDate(mov.fecha_pago || mov.fecha_creado)}
+                          <div className="text-sm font-semibold text-blue-700">
+                            Medio: {mov.medio_pago}
                           </div>
                         </div>
 
-                        <div className="text-sm text-gray-600 mt-1">
-                          {mov.tipo_registro} · {mov.estado}
-                          {mov.orden_compra ? ` · ${mov.orden_compra}` : ""}
+                        <div className="flex items-center justify-between text-xs text-gray-500 border-t pt-2">
+                          <span className="font-medium">{mov.tipo_registro} · {mov.estado}</span>
+                          <span>{formatDate(mov.fecha_pago || mov.fecha_creado)}</span>
                         </div>
+
+                        {mov.orden_compra && (
+                          <div className="text-xs text-slate-600 font-mono mt-1 bg-white p-1 rounded inline-block border">
+                            Ref: {mov.orden_compra}
+                          </div>
+                        )}
 
                         {mov.observacion && (
-                          <div className="text-sm text-gray-600 mt-1">{mov.observacion}</div>
+                          <div className="text-sm text-slate-700 mt-2 bg-white p-2 rounded border italic">
+                            "{mov.observacion}"
+                          </div>
                         )}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500">
-                    No hay movimientos registrados todavía.
-                  </p>
+                  <div className="p-6 text-center border-2 border-dashed rounded-md bg-slate-50">
+                    <p className="text-sm font-medium text-gray-500">
+                      No hay movimientos registrados todavía.
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
