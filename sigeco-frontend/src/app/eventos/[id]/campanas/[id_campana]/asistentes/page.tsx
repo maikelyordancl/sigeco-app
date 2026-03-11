@@ -1,27 +1,31 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AsistentesTable } from "./AsistentesTable";
 import { AsistenteDetalleSheet } from "./AsistenteDetalleSheet";
 import { apiFetch } from "@/lib/api";
 import { Asistente, CampoFormulario, EstadoAsistencia } from "./types";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft } from "lucide-react";
 import toast from "react-hot-toast";
 import MainLayout from "@/components/Layout/MainLayout";
 
 const useDebounce = (value: string, delay: number) => {
-    const [debouncedValue, setDebouncedValue] = useState(value);
-    useEffect(() => {
-        const handler = setTimeout(() => {
-            setDebouncedValue(value);
-        }, delay);
-        return () => {
-            clearTimeout(handler);
-        };
-    }, [value, delay]);
-    return debouncedValue;
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
 };
 
 const ALL_STATUS = "__ALL__";
@@ -33,7 +37,6 @@ export default function AsistentesPage() {
   const router = useRouter();
 
   const [asistentes, setAsistentes] = useState<Asistente[]>([]);
-  
   const [initialLoading, setInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -42,7 +45,7 @@ export default function AsistentesPage() {
   const [campanaInfo, setCampanaInfo] = useState<any>(null);
   const [camposFormulario, setCamposFormulario] = useState<CampoFormulario[]>([]);
   const [eventoInfo, setEventoInfo] = useState<any>(null);
-  
+
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(50);
   const [totalPages, setTotalPages] = useState(1);
@@ -50,28 +53,26 @@ export default function AsistentesPage() {
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
 
   const [estadoFiltro, setEstadoFiltro] = useState<string>(ALL_STATUS);
-  const [searchTerm, setSearchTerm] = useState('');
-  
-  // --- INICIO DE LA MODIFICACIÓN ---
-  // Aumentamos el tiempo de espera para una escritura más fluida.
+  const [searchTerm, setSearchTerm] = useState("");
+
   const debouncedSearchTerm = useDebounce(searchTerm, 700);
-  // --- FIN DE LA MODIFICACIÓN ---
 
   const fetchData = useCallback(async () => {
     if (!id_campana || !id_evento) return;
-    
+
     setIsRefreshing(true);
 
     const queryParams = new URLSearchParams({
-        page: page.toString(),
-        limit: limit.toString(),
+      page: page.toString(),
+      limit: limit.toString(),
     });
 
     if (debouncedSearchTerm) {
-        queryParams.append('search', debouncedSearchTerm);
+      queryParams.append("search", debouncedSearchTerm);
     }
+
     if (estadoFiltro !== ALL_STATUS) {
-        queryParams.append('estado', estadoFiltro);
+      queryParams.append("estado", estadoFiltro);
     }
 
     try {
@@ -90,22 +91,23 @@ export default function AsistentesPage() {
       const campanaData = await campanaRes.json();
       const formularioData = await formularioRes.json();
       const eventoData = await eventoRes.json();
-      
+
       const arr = Array.isArray(asistentesData.asistentes) ? asistentesData.asistentes : [];
 
       setAsistentes(arr);
       setTotalInscripciones(asistentesData.totalInscripciones ?? 0);
       setTotalPages(asistentesData.totalPages ?? 1);
       setStatusCounts(asistentesData.statusCounts ?? {});
-      
+
       setCampanaInfo(campanaData.data);
       setCamposFormulario(formularioData.data || []);
       setEventoInfo(eventoData.data);
     } catch (error) {
-      console.error("Error fetching data:", error);
+      console.error("Error cargando asistentes:", error);
+      toast.error("No se pudieron cargar los asistentes.");
     } finally {
-        setInitialLoading(false);
-        setIsRefreshing(false);
+      setInitialLoading(false);
+      setIsRefreshing(false);
     }
   }, [id_campana, id_evento, page, limit, debouncedSearchTerm, estadoFiltro]);
 
@@ -116,7 +118,7 @@ export default function AsistentesPage() {
   useEffect(() => {
     setPage(1);
   }, [debouncedSearchTerm, estadoFiltro]);
-  
+
   const handleEditAsistente = (asistente: Asistente) => {
     setSelectedAsistente(asistente);
     setSheetOpen(true);
@@ -128,43 +130,59 @@ export default function AsistentesPage() {
   };
 
   const handleAsistenteUpdate = (updatedAsistente: Asistente) => {
-    setAsistentes(currentAsistentes =>
-      currentAsistentes.map(a =>
+    setAsistentes((currentAsistentes) =>
+      currentAsistentes.map((a) =>
         a.id_inscripcion === updatedAsistente.id_inscripcion ? updatedAsistente : a
       )
     );
   };
 
   const handleEstadoChange = async (id_inscripcion: number, nuevoEstado: EstadoAsistencia) => {
-    setAsistentes(currentAsistentes =>
-      currentAsistentes.map(a =>
+    setAsistentes((currentAsistentes) =>
+      currentAsistentes.map((a) =>
         a.id_inscripcion === id_inscripcion ? { ...a, estado_asistencia: nuevoEstado } : a
       )
     );
 
     try {
       const response = await apiFetch(`/campanas/asistentes/${id_inscripcion}/estado`, {
-        method: 'PUT',
+        method: "PUT",
         body: JSON.stringify({ estado_asistencia: nuevoEstado }),
       });
 
       if (!response.ok) {
-        throw new Error('No se pudo actualizar el estado.');
+        throw new Error("No se pudo actualizar el estado.");
       }
-      toast.success('Estado actualizado');
-      fetchData(); 
+
+      toast.success("Estado actualizado");
+      fetchData();
     } catch (error) {
-      toast.error('Error al actualizar. Intente de nuevo.');
+      toast.error("Error al actualizar. Intente de nuevo.");
       console.error("Error actualizando estado:", error);
       fetchData();
     }
   };
-  
+
   const handlePageChange = (newPage: number) => {
     if (newPage > 0 && newPage <= totalPages) {
       setPage(newPage);
     }
   };
+
+  const montoAcumuladoVisible = useMemo(() => {
+    if (!campanaInfo?.obligatorio_pago) return 0;
+
+    return asistentes.reduce((acc, asistente) => {
+      return acc + Number(asistente.monto_pagado_actual || 0);
+    }, 0);
+  }, [asistentes, campanaInfo?.obligatorio_pago]);
+
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat("es-CL", {
+      style: "currency",
+      currency: "CLP",
+      maximumFractionDigits: 0,
+    }).format(value);
 
   if (initialLoading) return <div className="p-10">Cargando asistentes...</div>;
 
@@ -177,7 +195,7 @@ export default function AsistentesPage() {
               {eventoInfo ? `${id_evento.toString().padStart(4, "00")} - ${eventoInfo.nombre}` : `Evento`}
             </h1>
             <h3 className="text-xl font-semibold leading-snug m-0">
-              {campanaInfo?.nombre || 'Campaña'}
+              {campanaInfo?.nombre || "Campaña"}
             </h3>
             <p className="text-muted-foreground m-0">Lista de Usuarios</p>
           </div>
@@ -190,6 +208,24 @@ export default function AsistentesPage() {
             Volver a las campañas
           </Button>
         </div>
+
+        {campanaInfo?.obligatorio_pago && (
+          <Card className="mb-4 border-emerald-200 bg-emerald-50">
+            <CardContent className="py-4">
+              <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-sm font-medium text-emerald-800">Acumulado visible en la lista</p>
+                  <p className="text-2xl font-bold text-emerald-900">
+                    {formatCurrency(montoAcumuladoVisible)}
+                  </p>
+                </div>
+                <div className="text-sm text-emerald-700">
+                  Calculado con los asistentes cargados en la vista actual y sus pagos registrados.
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <AsistentesTable
           data={asistentes}
@@ -213,6 +249,7 @@ export default function AsistentesPage() {
           estadoFiltro={estadoFiltro}
           onEstadoFiltroChange={setEstadoFiltro}
           isRefreshing={isRefreshing}
+          esCampanaDePago={!!campanaInfo?.obligatorio_pago}
         />
 
         {selectedAsistente && campanaInfo && (

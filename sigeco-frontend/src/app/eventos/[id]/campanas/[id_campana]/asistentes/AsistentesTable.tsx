@@ -36,6 +36,7 @@ interface AsistentesTableProps {
   estadoFiltro: string;
   onEstadoFiltroChange: (value: string) => void;
   isRefreshing: boolean;
+  esCampanaDePago?: boolean;
 }
 
 const PaginationControls = ({ page, totalPages, totalInscripciones, limit, onPageChange }: any) => (

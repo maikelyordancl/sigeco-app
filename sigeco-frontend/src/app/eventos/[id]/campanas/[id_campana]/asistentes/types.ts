@@ -19,6 +19,9 @@ export interface Asistente {
   telefono?: string;
   rut?: string;
   empresa?: string;
+  tipo_entrada?: string;
+  estado_pago?: string;
+  monto_pagado_actual?: number;
   // 2. USAMOS EL NUEVO TIPO AQUÍ
   estado_asistencia: EstadoAsistencia;
   nota?: string;

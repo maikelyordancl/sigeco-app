@@ -15,6 +15,7 @@ import { Calendar, Megaphone, ExternalLink, Settings } from 'lucide-react';
 interface Evento {
   id_evento: number;
   nombre: string;
+  estado: number;
 }
 
 interface Campana {
@@ -45,7 +46,7 @@ const CampanasPorEventoPage = () => {
         const data = await response.json();
 
         if (data.success && Array.isArray(data.data)) {
-          setEventos(data.data);
+          setEventos(data.data.filter((evento: Evento) => Number(evento.estado) === 1));
         } else {
           setError(data.error || "La respuesta de la API de eventos no fue exitosa.");
         }
@@ -61,7 +62,6 @@ const CampanasPorEventoPage = () => {
     fetchEventos();
   }, [fetchEventos]);
 
-  // 🔁 Mantengo tu efecto original para cargar campañas (no hará falta al redirigir).
   useEffect(() => {
     if (!selectedEvento) {
       setCampanas([]);
@@ -91,11 +91,9 @@ const CampanasPorEventoPage = () => {
       }
     };
 
-    // ⛳️ Si prefieres no hacer esta llamada porque vamos a redirigir, puedes comentar la siguiente línea.
     // fetchCampanas();
   }, [selectedEvento]);
 
-  // 🚀 NUEVO: en cuanto haya un evento seleccionado, redirigimos a /eventos/{id_evento}/campanas
   useEffect(() => {
     if (selectedEvento) {
       router.push(`/eventos/${selectedEvento}/campanas`);
@@ -124,8 +122,6 @@ const CampanasPorEventoPage = () => {
           </SelectContent>
         </Select>
 
-        {/* Todo lo de abajo se mantiene intacto, pero en la práctica no se verá
-            porque al seleccionar un evento te redirige inmediatamente. */}
         {selectedEvento && (
           <>
             {loading && <p className="text-center">Cargando campañas...</p>}
