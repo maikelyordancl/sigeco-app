@@ -558,7 +558,7 @@ const Inscripcion = {
                 
                 const datosContacto = {};
                 let montoPagadoManual = null;
-                let medioPagoManual = 'Manual/Importado'; // Por defecto si se sube monto sin especificar medio
+                let medioPagoManual = 'Transferencia'; // Por defecto si se sube monto sin especificar medio
 
                 for (const cabecera in fila) {
                     const cabeceraNormalizada = normalizeHeader(cabecera);

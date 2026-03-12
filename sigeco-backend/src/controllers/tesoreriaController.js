@@ -40,7 +40,6 @@ async function getEventIdByCampana(id_campana) {
      LIMIT 1`,
     [id_campana]
   );
-
   return rows[0]?.id_evento || null;
 }
 
@@ -53,7 +52,6 @@ async function getEventIdByInscripcion(id_inscripcion) {
      LIMIT 1`,
     [id_inscripcion]
   );
-
   return rows[0]?.id_evento || null;
 }
 
@@ -65,11 +63,7 @@ async function getMontoPagadoManualActual(id_inscripcion) {
      LIMIT 1`,
     [id_inscripcion]
   );
-
-  if (!rows.length) {
-    return undefined;
-  }
-
+  if (!rows.length) return undefined;
   return rows[0].monto_pagado_manual;
 }
 
@@ -88,7 +82,6 @@ async function getInscripcionCobroContext(id_inscripcion) {
     LIMIT 1`,
     [id_inscripcion]
   );
-
   return rows[0] || null;
 }
 
@@ -99,159 +92,96 @@ async function isSuperAdmin(userId) {
 }
 
 async function ensureTesoreriaPermissionByCampana(userId, id_campana, action = 'read') {
-  if (!userId) {
-    return { ok: false, status: 401, error: 'No autorizado.' };
-  }
-
+  if (!userId) return { ok: false, status: 401, error: 'No autorizado.' };
   const eventId = await getEventIdByCampana(id_campana);
+  if (!eventId) return { ok: false, status: 404, error: 'Campaña no encontrada.' };
+  if (await isSuperAdmin(userId)) return { ok: true, eventId };
 
-  if (!eventId) {
-    return { ok: false, status: 404, error: 'Campaña no encontrada.' };
-  }
-
-  if (await isSuperAdmin(userId)) {
-    return { ok: true, eventId };
-  }
-
-  const allowed = await permissionModel.isAllowedOnEvent(
-    userId,
-    eventId,
-    'tesoreria',
-    action
-  );
-
+  const allowed = await permissionModel.isAllowedOnEvent(userId, eventId, 'tesoreria', action);
   if (!allowed) {
     return {
       ok: false,
       status: 403,
-      error: action === 'update'
-        ? 'Sin acceso para actualizar pagos en este evento.'
-        : 'Sin acceso a este evento.',
+      error: action === 'update' ? 'Sin acceso para actualizar pagos.' : 'Sin acceso a este evento.',
     };
   }
-
   return { ok: true, eventId };
 }
 
 async function ensureTesoreriaPermissionByInscripcion(userId, id_inscripcion, action = 'read') {
-  if (!userId) {
-    return { ok: false, status: 401, error: 'No autorizado.' };
-  }
-
+  if (!userId) return { ok: false, status: 401, error: 'No autorizado.' };
   const eventId = await getEventIdByInscripcion(id_inscripcion);
+  if (!eventId) return { ok: false, status: 404, error: 'Inscripción no encontrada.' };
+  if (await isSuperAdmin(userId)) return { ok: true, eventId };
 
-  if (!eventId) {
-    return { ok: false, status: 404, error: 'Inscripción no encontrada.' };
-  }
-
-  if (await isSuperAdmin(userId)) {
-    return { ok: true, eventId };
-  }
-
-  const allowed = await permissionModel.isAllowedOnEvent(
-    userId,
-    eventId,
-    'tesoreria',
-    action
-  );
-
+  const allowed = await permissionModel.isAllowedOnEvent(userId, eventId, 'tesoreria', action);
   if (!allowed) {
     return {
       ok: false,
       status: 403,
-      error: action === 'update'
-        ? 'Sin acceso para actualizar pagos en este evento.'
-        : 'Sin acceso a este evento.',
+      error: action === 'update' ? 'Sin acceso para actualizar pagos.' : 'Sin acceso a este evento.',
     };
   }
-
   return { ok: true, eventId };
 }
 
 exports.getCampanasParaTesoreria = async (req, res) => {
   try {
     const userId = getUserId(req);
-
-    if (!userId) {
-      return res.status(401).json({ success: false, error: 'No autorizado.' });
-    }
+    if (!userId) return res.status(401).json({ success: false, error: 'No autorizado.' });
 
     const eventos = await TesoreriaModel.findEventosConCampanasTesoreria();
-
-    if (await isSuperAdmin(userId)) {
-      return res.json({ success: true, data: eventos });
-    }
+    if (await isSuperAdmin(userId)) return res.json({ success: true, data: eventos });
 
     const allowedIds = await permissionModel.getAllowedEventIds(userId, 'tesoreria', 'read');
-
-    if (!allowedIds.length) {
-      return res.json({ success: true, data: [] });
-    }
+    if (!allowedIds.length) return res.json({ success: true, data: [] });
 
     const filtrados = eventos.filter((ev) => allowedIds.includes(ev.id_evento));
-
     return res.json({ success: true, data: filtrados });
   } catch (error) {
-    console.error('Error al obtener campañas para tesorería:', error);
     res.status(500).json({ success: false, error: 'Error del servidor.' });
   }
 };
 
 exports.getAsistentesTesoreria = async (req, res) => {
   const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
-  }
+  if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
 
   try {
     const userId = getUserId(req);
     const { id_campana } = req.params;
 
     const permission = await ensureTesoreriaPermissionByCampana(userId, id_campana, 'read');
-
-    if (!permission.ok) {
-      return res.status(permission.status).json({ success: false, error: permission.error });
-    }
+    if (!permission.ok) return res.status(permission.status).json({ success: false, error: permission.error });
 
     const asistentes = await TesoreriaModel.findAsistentesPorCampana(id_campana);
-
     return res.json({ success: true, data: asistentes });
   } catch (error) {
-    console.error('Error al obtener asistentes de tesorería:', error);
     res.status(500).json({ success: false, error: 'Error del servidor.' });
   }
 };
 
 exports.getHistorialPagos = async (req, res) => {
   const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
-  }
+  if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
 
   try {
     const userId = getUserId(req);
     const { id_inscripcion } = req.params;
 
     const permission = await ensureTesoreriaPermissionByInscripcion(userId, id_inscripcion, 'read');
-
-    if (!permission.ok) {
-      return res.status(permission.status).json({ success: false, error: permission.error });
-    }
+    if (!permission.ok) return res.status(permission.status).json({ success: false, error: permission.error });
 
     const historial = await InscripcionPagoModel.getHistorialByInscripcion(id_inscripcion);
-
     return res.json({ success: true, data: historial });
   } catch (error) {
-    console.error('Error al obtener historial de pagos:', error);
     res.status(500).json({ success: false, error: 'Error del servidor.' });
   }
 };
 
 exports.registrarAbono = async (req, res) => {
   const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
-  }
+  if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
 
   try {
     const userId = getUserId(req);
@@ -259,59 +189,35 @@ exports.registrarAbono = async (req, res) => {
     const { monto, medio_pago, observacion = null } = req.body;
 
     const permission = await ensureTesoreriaPermissionByInscripcion(userId, id_inscripcion, 'update');
-
-    if (!permission.ok) {
-      return res.status(permission.status).json({ success: false, error: permission.error });
-    }
+    if (!permission.ok) return res.status(permission.status).json({ success: false, error: permission.error });
 
     if (!MEDIOS_PAGO_MANUALES_VALIDOS.includes(medio_pago)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Medio de pago manual inválido.',
-      });
+      return res.status(400).json({ success: false, error: 'Medio de pago manual inválido.' });
     }
 
     const montoNumerico = Number(monto);
-
     if (!Number.isFinite(montoNumerico) || montoNumerico <= 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'El monto debe ser mayor a 0.',
-      });
+      return res.status(400).json({ success: false, error: 'El monto debe ser mayor a 0.' });
     }
 
     const resumen = await InscripcionPagoModel.getCobroResumen(id_inscripcion);
-
-    if (!resumen) {
-      return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
-    }
+    if (!resumen) return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
 
     const tieneCobroObjetivo = Number(resumen.montoObjetivo || 0) > 0;
-    const tieneTicketAsociado = Number(resumen.idTipoEntrada || 0) > 0;
 
     if (!tieneCobroObjetivo) {
-      const mensaje = tieneTicketAsociado
-        ? 'La inscripción no tiene un monto de cobro válido.'
-        : 'Esta inscripción no tiene ticket. Primero define el monto manual de cobro; si es cortesía, déjalo en 0.';
-
       return res.status(400).json({
         success: false,
-        error: mensaje,
+        error: 'Primero define el ticket o el monto manual de cobro; si es cortesía, déjalo en 0.',
       });
     }
 
     if (resumen.saldoPendiente <= 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'La inscripción ya está completamente pagada.',
-      });
+      return res.status(400).json({ success: false, error: 'La inscripción ya está completamente pagada.' });
     }
 
     if (montoNumerico > resumen.saldoPendiente) {
-      return res.status(400).json({
-        success: false,
-        error: `El abono no puede superar el saldo pendiente (${resumen.saldoPendiente}).`,
-      });
+      return res.status(400).json({ success: false, error: `El abono supera el saldo pendiente (${resumen.saldoPendiente}).` });
     }
 
     const result = await InscripcionPagoModel.registrarAbonoManual({
@@ -322,22 +228,15 @@ exports.registrarAbono = async (req, res) => {
       creado_por: userId,
     });
 
-    return res.json({
-      success: true,
-      message: 'Abono registrado correctamente.',
-      data: result,
-    });
+    return res.json({ success: true, message: 'Abono registrado correctamente.', data: result });
   } catch (error) {
-    console.error('Error al registrar abono manual:', error);
     res.status(500).json({ success: false, error: 'Error del servidor.' });
   }
 };
 
 exports.generarLinkPagoFlow = async (req, res) => {
   const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
-  }
+  if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
 
   try {
     const userId = getUserId(req);
@@ -345,73 +244,38 @@ exports.generarLinkPagoFlow = async (req, res) => {
     const { monto, observacion = null } = req.body;
 
     const permission = await ensureTesoreriaPermissionByInscripcion(userId, id_inscripcion, 'update');
-
-    if (!permission.ok) {
-      return res.status(permission.status).json({ success: false, error: permission.error });
-    }
+    if (!permission.ok) return res.status(permission.status).json({ success: false, error: permission.error });
 
     const resumen = await InscripcionPagoModel.getCobroResumen(id_inscripcion);
+    if (!resumen) return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
 
-    if (!resumen) {
-      return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
-    }
+    const montoEnviado = monto === null || monto === '' || typeof monto === 'undefined' ? null : Number(monto);
 
-    const montoEnviado =
-      monto === null || monto === '' || typeof monto === 'undefined'
-        ? null
-        : Number(monto);
-
-    if (
-      montoEnviado !== null &&
-      (!Number.isFinite(montoEnviado) || montoEnviado <= 0)
-    ) {
-      return res.status(400).json({
-        success: false,
-        error: 'El monto para Flow debe ser mayor a 0.',
-      });
+    if (montoEnviado !== null && (!Number.isFinite(montoEnviado) || montoEnviado <= 0)) {
+      return res.status(400).json({ success: false, error: 'El monto para Flow debe ser mayor a 0.' });
     }
 
     const tieneCobroObjetivo = Number(resumen.montoObjetivo || 0) > 0;
-    const tieneTicketAsociado = Number(resumen.idTipoEntrada || 0) > 0;
-
     if (!tieneCobroObjetivo) {
-      const mensaje = tieneTicketAsociado
-        ? 'La inscripción no tiene un monto de cobro válido.'
-        : 'Esta inscripción no tiene ticket. Primero define el monto manual de cobro; si es cortesía, déjalo en 0.';
-
       return res.status(400).json({
         success: false,
-        error: mensaje,
+        error: 'Primero define el ticket o el monto manual de cobro.',
       });
     }
 
     if (resumen.saldoPendiente <= 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'La inscripción ya está completamente pagada.',
-      });
+      return res.status(400).json({ success: false, error: 'La inscripción ya está completamente pagada.' });
     }
 
     const montoFinal = montoEnviado === null ? resumen.saldoPendiente : montoEnviado;
-
     if (montoFinal > resumen.saldoPendiente) {
-      return res.status(400).json({
-        success: false,
-        error: `El link no puede superar el saldo pendiente (${resumen.saldoPendiente}).`,
-      });
+      return res.status(400).json({ success: false, error: `El link supera el saldo pendiente (${resumen.saldoPendiente}).` });
     }
 
     const contexto = await getInscripcionCobroContext(id_inscripcion);
+    if (!contexto) return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
 
-    if (!contexto) {
-      return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
-    }
-
-    const observacionNormalizada =
-      typeof observacion === 'string' && observacion.trim().length > 0
-        ? observacion.trim()
-        : null;
-
+    const observacionNormalizada = typeof observacion === 'string' && observacion.trim().length > 0 ? observacion.trim() : null;
     const ordenCompra = `sigeco-abono-${id_inscripcion}-${Date.now()}`;
 
     const nuevoPago = await PagoModel.create({
@@ -436,86 +300,57 @@ exports.generarLinkPagoFlow = async (req, res) => {
         email: contexto.email,
       });
 
-      await PagoModel.updateById(nuevoPago.id_pago, {
-        token_flow: flowResponse.token,
-      });
+      await PagoModel.updateById(nuevoPago.id_pago, { token_flow: flowResponse.token });
 
       return res.status(200).json({
         success: true,
         message: 'Link de pago generado correctamente.',
-        data: {
-          redirectUrl: flowResponse.redirectUrl,
-          monto: montoFinal,
-        },
+        data: { redirectUrl: flowResponse.redirectUrl, monto: montoFinal },
       });
     } catch (flowError) {
-      const errorMsg = flowError.message || 'No se pudo crear la orden de pago.';
-
-      await PagoModel.updateById(nuevoPago.id_pago, {
-        estado: 'Fallido',
-        detalle_error: errorMsg,
-      });
-
+      await PagoModel.updateById(nuevoPago.id_pago, { estado: 'Fallido', detalle_error: flowError.message });
       await InscripcionPagoModel.syncEstadoFromPago(nuevoPago.id_pago, 'Fallido');
-
-      return res.status(500).json({
-        success: false,
-        error: errorMsg,
-      });
+      return res.status(500).json({ success: false, error: flowError.message || 'No se pudo crear la orden.' });
     }
   } catch (error) {
-    console.error('Error al generar link Flow desde Tesorería:', error);
     res.status(500).json({ success: false, error: 'Error del servidor.' });
   }
 };
 
+// --- AQUÍ ESTÁ LA MODIFICACIÓN CLAVE (RECIBE id_tipo_entrada) ---
 exports.updateMontoObjetivoManual = async (req, res) => {
   const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
-  }
+  if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
 
   try {
     const userId = getUserId(req);
     const { id_inscripcion } = req.params;
-    const { monto_objetivo_manual } = req.body;
+    const { monto_objetivo_manual, id_tipo_entrada } = req.body;
 
     const permission = await ensureTesoreriaPermissionByInscripcion(userId, id_inscripcion, 'update');
-
-    if (!permission.ok) {
-      return res.status(permission.status).json({ success: false, error: permission.error });
-    }
+    if (!permission.ok) return res.status(permission.status).json({ success: false, error: permission.error });
 
     const montoNormalizado = Number(monto_objetivo_manual);
 
     if (!Number.isFinite(montoNormalizado) || montoNormalizado < 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'El monto manual debe ser un número válido mayor o igual a 0.',
-      });
+      return res.status(400).json({ success: false, error: 'El monto manual debe ser válido y mayor o igual a 0.' });
     }
+
+    const ticketAsignado = id_tipo_entrada ? Number(id_tipo_entrada) : null;
 
     const result = await InscripcionPagoModel.updateMontoObjetivoManual(
       id_inscripcion,
-      montoNormalizado
+      montoNormalizado,
+      ticketAsignado
     );
 
-    if (!result) {
-      return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
-    }
-
-    if (result.blockedByTicket) {
-      return res.status(400).json({
-        success: false,
-        error: 'No puedes editar el monto manual porque esta inscripción tiene un ticket asociado.',
-      });
-    }
+    if (!result) return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
 
     return res.json({
       success: true,
-      message: montoNormalizado === 0
-        ? 'Monto manual actualizado. La inscripción quedó como cortesía/sin cobro.'
-        : 'Monto manual actualizado correctamente.',
+      message: montoNormalizado === 0 && !ticketAsignado
+        ? 'Inscripción configurada como cortesía/sin cobro.'
+        : 'Configuración y monto a cobrar guardados correctamente.',
       data: result,
     });
   } catch (error) {
@@ -525,10 +360,9 @@ exports.updateMontoObjetivoManual = async (req, res) => {
 };
 
 exports.updateEstadoPago = async (req, res) => {
+  // Lógica sin cambios
   const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, errors: errors.array() });
-  }
+  if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
 
   try {
     const userId = getUserId(req);
@@ -536,16 +370,10 @@ exports.updateEstadoPago = async (req, res) => {
     const { estado_pago } = req.body;
 
     const permission = await ensureTesoreriaPermissionByInscripcion(userId, id_inscripcion, 'update');
-
-    if (!permission.ok) {
-      return res.status(permission.status).json({ success: false, error: permission.error });
-    }
+    if (!permission.ok) return res.status(permission.status).json({ success: false, error: permission.error });
 
     if (estado_pago && !ESTADOS_PAGO_VALIDOS.includes(estado_pago)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Estado de pago inválido.',
-      });
+      return res.status(400).json({ success: false, error: 'Estado de pago inválido.' });
     }
 
     const montoFueEnviado = Object.prototype.hasOwnProperty.call(req.body, 'monto_pagado');
@@ -553,50 +381,23 @@ exports.updateEstadoPago = async (req, res) => {
 
     if (!montoFueEnviado) {
       const montoActual = await getMontoPagadoManualActual(id_inscripcion);
-
-      if (typeof montoActual === 'undefined') {
-        return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
-      }
-
+      if (typeof montoActual === 'undefined') return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
       montoNormalizado = montoActual;
     } else {
       const { monto_pagado } = req.body;
-
-      montoNormalizado =
-        monto_pagado === null || monto_pagado === '' || typeof monto_pagado === 'undefined'
-          ? null
-          : Number(monto_pagado);
-
-      if (
-        montoNormalizado !== null &&
-        (!Number.isFinite(montoNormalizado) || montoNormalizado < 0)
-      ) {
-        return res.status(400).json({
-          success: false,
-          error: 'El monto pagado debe ser un número válido mayor o igual a 0.',
-        });
+      montoNormalizado = monto_pagado === null || monto_pagado === '' || typeof monto_pagado === 'undefined' ? null : Number(monto_pagado);
+      if (montoNormalizado !== null && (!Number.isFinite(montoNormalizado) || montoNormalizado < 0)) {
+        return res.status(400).json({ success: false, error: 'El monto pagado debe ser válido y mayor a 0.' });
       }
     }
 
-    const result = await TesoreriaModel.updatePagoTesoreria(
-      id_inscripcion,
-      estado_pago,
-      montoNormalizado
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
-    }
+    const result = await TesoreriaModel.updatePagoTesoreria(id_inscripcion, estado_pago, montoNormalizado);
+    if (result.affectedRows === 0) return res.status(404).json({ success: false, error: 'Inscripción no encontrada.' });
 
     const recalculo = await InscripcionPagoModel.recalculateInscripcionPayment(id_inscripcion);
 
-    return res.json({
-      success: true,
-      message: 'Pago recalculado correctamente.',
-      data: recalculo,
-    });
+    return res.json({ success: true, message: 'Pago recalculado correctamente.', data: recalculo });
   } catch (error) {
-    console.error('Error al actualizar pago:', error);
     res.status(500).json({ success: false, error: 'Error del servidor.' });
   }
 };

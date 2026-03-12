@@ -26,106 +26,41 @@ async function findByPagoId(id_pago) {
      LIMIT 1`,
     [id_pago]
   );
-
   return rows[0] || null;
 }
 
 async function createMovimiento(data) {
-  const {
-    id_inscripcion,
-    id_pago = null,
-    monto,
-    medio_pago,
-    tipo_registro = 'Manual',
-    estado = 'Pagado',
-    observacion = null,
-    creado_por = null,
-    fecha_pago = null,
-  } = data;
-
+  const { id_inscripcion, id_pago = null, monto, medio_pago, tipo_registro = 'Manual', estado = 'Pagado', observacion = null, creado_por = null, fecha_pago = null } = data;
   const [result] = await pool.execute(
-    `INSERT INTO inscripcion_movimientos_pago (
-      id_inscripcion,
-      id_pago,
-      monto,
-      medio_pago,
-      tipo_registro,
-      estado,
-      observacion,
-      creado_por,
-      fecha_pago
-    )
+    `INSERT INTO inscripcion_movimientos_pago (id_inscripcion, id_pago, monto, medio_pago, tipo_registro, estado, observacion, creado_por, fecha_pago)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      id_inscripcion,
-      id_pago,
-      monto,
-      medio_pago,
-      tipo_registro,
-      estado,
-      observacion,
-      creado_por,
-      fecha_pago,
-    ]
+    [id_inscripcion, id_pago, monto, medio_pago, tipo_registro, estado, observacion, creado_por, fecha_pago]
   );
-
-  return {
-    id_movimiento: result.insertId,
-    ...data,
-  };
+  return { id_movimiento: result.insertId, ...data };
 }
 
 async function upsertMovimientoFlowDesdePago(data) {
-  const {
-    id_pago,
-    id_inscripcion,
-    monto,
-    estado = 'Pendiente',
-    observacion = null,
-  } = data;
-
-  if (!id_pago) {
-    throw new Error('id_pago es obligatorio para registrar un movimiento Flow.');
-  }
+  const { id_pago, id_inscripcion, monto, estado = 'Pendiente', observacion = null } = data;
+  if (!id_pago) throw new Error('id_pago es obligatorio.');
 
   const existente = await findByPagoId(id_pago);
-
   if (existente) {
     await pool.execute(
       `UPDATE inscripcion_movimientos_pago
-       SET monto = ?,
-           estado = ?,
-           observacion = COALESCE(?, observacion),
-           fecha_pago = CASE WHEN ? = 'Pagado' THEN NOW() ELSE fecha_pago END
+       SET monto = ?, estado = ?, observacion = COALESCE(?, observacion), fecha_pago = CASE WHEN ? = 'Pagado' THEN NOW() ELSE fecha_pago END
        WHERE id_pago = ?`,
-      [
-        monto,
-        mapEstadoMovimiento(estado),
-        observacion,
-        mapEstadoMovimiento(estado),
-        id_pago,
-      ]
+      [monto, mapEstadoMovimiento(estado), observacion, mapEstadoMovimiento(estado), id_pago]
     );
-
-    return {
-      ...existente,
-      monto,
-      estado: mapEstadoMovimiento(estado),
-    };
+    return { ...existente, monto, estado: mapEstadoMovimiento(estado) };
   }
 
   return createMovimiento({
-    id_inscripcion,
-    id_pago,
-    monto,
-    medio_pago: 'Flow',
-    tipo_registro: 'Flow',
-    estado: mapEstadoMovimiento(estado),
-    observacion,
+    id_inscripcion, id_pago, monto, medio_pago: 'Flow', tipo_registro: 'Flow', estado: mapEstadoMovimiento(estado), observacion,
     fecha_pago: mapEstadoMovimiento(estado) === 'Pagado' ? new Date() : null,
   });
 }
 
+// --- MODIFICACIÓN CLAVE: Priorizamos siempre el monto manual (Override) ---
 async function getCobroResumen(id_inscripcion) {
   const [rows] = await pool.execute(
     `SELECT
@@ -134,10 +69,7 @@ async function getCobroResumen(id_inscripcion) {
       i.monto_objetivo_manual,
       i.estado_asistencia,
       i.estado_pago AS estado_pago_actual,
-      CASE
-        WHEN i.id_tipo_entrada IS NOT NULL THEN COALESCE(te.precio, 0)
-        ELSE COALESCE(i.monto_objetivo_manual, 0)
-      END AS monto_objetivo,
+      COALESCE(i.monto_objetivo_manual, te.precio, 0) AS monto_objetivo,
       COALESCE(
         CASE
           WHEN COUNT(mp.id_movimiento) > 0 THEN SUM(CASE WHEN mp.estado = 'Pagado' THEN mp.monto ELSE 0 END)
@@ -155,10 +87,8 @@ async function getCobroResumen(id_inscripcion) {
         1
       ) AS ultimo_estado_movimiento
     FROM inscripciones i
-    LEFT JOIN tipos_de_entrada te
-      ON te.id_tipo_entrada = i.id_tipo_entrada
-    LEFT JOIN inscripcion_movimientos_pago mp
-      ON mp.id_inscripcion = i.id_inscripcion
+    LEFT JOIN tipos_de_entrada te ON te.id_tipo_entrada = i.id_tipo_entrada
+    LEFT JOIN inscripcion_movimientos_pago mp ON mp.id_inscripcion = i.id_inscripcion
     WHERE i.id_inscripcion = ?
     GROUP BY
       i.id_inscripcion,
@@ -171,9 +101,7 @@ async function getCobroResumen(id_inscripcion) {
     [id_inscripcion]
   );
 
-  if (!rows.length) {
-    return null;
-  }
+  if (!rows.length) return null;
 
   const row = rows[0];
   const montoObjetivo = normalizeNumber(row.monto_objetivo);
@@ -195,55 +123,29 @@ async function getCobroResumen(id_inscripcion) {
 
 async function recalculateInscripcionPayment(id_inscripcion) {
   const resumen = await getCobroResumen(id_inscripcion);
-
-  if (!resumen) {
-    return null;
-  }
+  if (!resumen) return null;
 
   let nuevoEstadoPago = 'Pendiente';
-
   if (resumen.montoObjetivo <= 0 && resumen.totalPagado <= 0) {
     nuevoEstadoPago = 'No Aplica';
   } else if (resumen.totalPagado >= resumen.montoObjetivo) {
     nuevoEstadoPago = 'Pagado';
-  } else if (
-    resumen.ultimoEstadoMovimiento === 'Reembolsado' &&
-    resumen.totalPagado <= 0
-  ) {
+  } else if (resumen.ultimoEstadoMovimiento === 'Reembolsado' && resumen.totalPagado <= 0) {
     nuevoEstadoPago = 'Reembolsado';
-  } else if (
-    ['Rechazado', 'Anulado'].includes(resumen.ultimoEstadoMovimiento || '') &&
-    resumen.totalPagado <= 0
-  ) {
+  } else if (['Rechazado', 'Anulado'].includes(resumen.ultimoEstadoMovimiento || '') && resumen.totalPagado <= 0) {
     nuevoEstadoPago = 'Rechazado';
   }
 
   let nuevoEstadoAsistencia = resumen.estadoAsistencia;
-
-  if (
-    nuevoEstadoPago === 'Pagado' &&
-    ['Registrado', 'Por Confirmar'].includes(resumen.estadoAsistencia)
-  ) {
+  if (nuevoEstadoPago === 'Pagado' && ['Registrado', 'Por Confirmar'].includes(resumen.estadoAsistencia)) {
     nuevoEstadoAsistencia = 'Confirmado';
-  } else if (
-    nuevoEstadoPago === 'Pendiente' &&
-    resumen.estadoAsistencia === 'Confirmado'
-  ) {
+  } else if (nuevoEstadoPago === 'Pendiente' && resumen.estadoAsistencia === 'Confirmado') {
     nuevoEstadoAsistencia = 'Registrado';
   }
 
   await pool.execute(
-    `UPDATE inscripciones
-     SET estado_pago = ?,
-         monto_pagado_manual = ?,
-         estado_asistencia = ?
-     WHERE id_inscripcion = ?`,
-    [
-      nuevoEstadoPago,
-      resumen.totalPagado,
-      nuevoEstadoAsistencia,
-      id_inscripcion,
-    ]
+    `UPDATE inscripciones SET estado_pago = ?, monto_pagado_manual = ?, estado_asistencia = ? WHERE id_inscripcion = ?`,
+    [nuevoEstadoPago, resumen.totalPagado, nuevoEstadoAsistencia, id_inscripcion]
   );
 
   return {
@@ -260,75 +162,39 @@ async function recalculateInscripcionPayment(id_inscripcion) {
 
 async function syncEstadoFromPago(id_pago, estadoPagoTabla) {
   const movimiento = await findByPagoId(id_pago);
-
-  if (!movimiento) {
-    return { synced: false };
-  }
+  if (!movimiento) return { synced: false };
 
   const estadoMovimiento = mapEstadoMovimiento(estadoPagoTabla);
-
   await pool.execute(
-    `UPDATE inscripcion_movimientos_pago
-     SET estado = ?,
-         fecha_pago = CASE
-           WHEN ? = 'Pagado' THEN NOW()
-           ELSE fecha_pago
-         END
-     WHERE id_pago = ?`,
+    `UPDATE inscripcion_movimientos_pago SET estado = ?, fecha_pago = CASE WHEN ? = 'Pagado' THEN NOW() ELSE fecha_pago END WHERE id_pago = ?`,
     [estadoMovimiento, estadoMovimiento, id_pago]
   );
 
   const recalculo = await recalculateInscripcionPayment(movimiento.id_inscripcion);
-
-  return {
-    synced: true,
-    estadoMovimiento,
-    ...recalculo,
-  };
+  return { synced: true, estadoMovimiento, ...recalculo };
 }
 
 async function registrarAbonoManual(data) {
-  const {
-    id_inscripcion,
-    monto,
-    medio_pago,
-    observacion = null,
-    creado_por = null,
-  } = data;
-
+  const { id_inscripcion, monto, medio_pago, observacion = null, creado_por = null } = data;
   await createMovimiento({
-    id_inscripcion,
-    monto,
-    medio_pago,
-    tipo_registro: 'Manual',
-    estado: 'Pagado',
-    observacion,
-    creado_por,
-    fecha_pago: new Date(),
+    id_inscripcion, monto, medio_pago, tipo_registro: 'Manual', estado: 'Pagado', observacion, creado_por, fecha_pago: new Date(),
   });
-
   return recalculateInscripcionPayment(id_inscripcion);
 }
 
-async function updateMontoObjetivoManual(id_inscripcion, monto_objetivo_manual) {
+// --- MODIFICACIÓN: Ahora guarda el ticket junto con el precio ---
+async function updateMontoObjetivoManual(id_inscripcion, monto_objetivo_manual, id_tipo_entrada = null) {
   const [result] = await pool.execute(
     `UPDATE inscripciones
-     SET monto_objetivo_manual = ?
-     WHERE id_inscripcion = ?
-       AND id_tipo_entrada IS NULL`,
-    [monto_objetivo_manual, id_inscripcion]
+     SET monto_objetivo_manual = ?,
+         id_tipo_entrada = ?
+     WHERE id_inscripcion = ?`,
+    [monto_objetivo_manual, id_tipo_entrada, id_inscripcion]
   );
 
   if (!result.affectedRows) {
     const resumen = await getCobroResumen(id_inscripcion);
-
-    if (!resumen) {
-      return null;
-    }
-
-    if (resumen.idTipoEntrada) {
-      return { blockedByTicket: true, resumen };
-    }
+    if (!resumen) return null;
   }
 
   const recalculo = await recalculateInscripcionPayment(id_inscripcion);
@@ -342,39 +208,19 @@ async function updateMontoObjetivoManual(id_inscripcion, monto_objetivo_manual) 
 async function getHistorialByInscripcion(id_inscripcion) {
   const [rows] = await pool.execute(
     `SELECT
-      mp.id_movimiento,
-      mp.id_inscripcion,
-      mp.id_pago,
-      mp.monto,
-      mp.medio_pago,
-      mp.tipo_registro,
-      mp.estado,
-      mp.observacion,
-      mp.fecha_pago,
-      mp.fecha_creado,
-      mp.fecha_actualizado,
-      p.orden_compra
+      mp.id_movimiento, mp.id_inscripcion, mp.id_pago, mp.monto, mp.medio_pago, mp.tipo_registro,
+      mp.estado, mp.observacion, mp.fecha_pago, mp.fecha_creado, mp.fecha_actualizado, p.orden_compra
     FROM inscripcion_movimientos_pago mp
-    LEFT JOIN pagos p
-      ON p.id_pago = mp.id_pago
+    LEFT JOIN pagos p ON p.id_pago = mp.id_pago
     WHERE mp.id_inscripcion = ?
-    ORDER BY
-      COALESCE(mp.fecha_pago, mp.fecha_creado) DESC,
-      mp.id_movimiento DESC`,
+    ORDER BY COALESCE(mp.fecha_pago, mp.fecha_creado) DESC, mp.id_movimiento DESC`,
     [id_inscripcion]
   );
-
   return rows;
 }
 
 module.exports = {
-  findByPagoId,
-  createMovimiento,
-  upsertMovimientoFlowDesdePago,
-  getCobroResumen,
-  recalculateInscripcionPayment,
-  syncEstadoFromPago,
-  registrarAbonoManual,
-  updateMontoObjetivoManual,
-  getHistorialByInscripcion,
+  findByPagoId, createMovimiento, upsertMovimientoFlowDesdePago, getCobroResumen,
+  recalculateInscripcionPayment, syncEstadoFromPago, registrarAbonoManual,
+  updateMontoObjetivoManual, getHistorialByInscripcion,
 };
