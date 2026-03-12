@@ -517,12 +517,7 @@ export default function AcreditarCampanaPage() {
                     <p className="text-2xl font-bold text-emerald-600">{stats.pagados}</p>
                   </div>
 
-                  <div className="p-4 border rounded-lg text-center">
-                    <p className="text-sm text-gray-500">Total recaudado</p>
-                    <p className="text-2xl font-bold text-blue-600">
-                      {formatCurrencyCLP(stats.totalRecaudado)}
-                    </p>
-                  </div>
+                  
                 </>
               )}
             </div>
