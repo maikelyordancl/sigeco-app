@@ -103,7 +103,6 @@ function ConfirmationContent() {
                     <span className="font-semibold">{formatDate(details.fecha_actualizado)}</span>
                 </div>
             </CardContent>
-            <Button onClick={() => router.push('/')} className="mt-4">Volver al Inicio</Button>
         </>
     );
 }

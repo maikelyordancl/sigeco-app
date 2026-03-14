@@ -85,6 +85,13 @@ exports.deleteById = async (id) => {
     return result;
 };
 
+// Modelo para encontrar un contacto por su ID.
+exports.findById = async (id) => {
+    const query = 'SELECT * FROM contactos WHERE id_contacto = ? LIMIT 1';
+    const [rows] = await pool.query(query, [id]);
+    return rows[0] || null;
+};
+
 // Modelo para encontrar un contacto por su email.
 exports.findByEmail = async (email) => {
     const query = 'SELECT * FROM contactos WHERE email = ?';

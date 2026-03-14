@@ -52,10 +52,11 @@ const permisosRoutes = require('./src/routes/permisosRoutes');
 const usuarioRoutes = require('./src/routes/usuarioRoutes');
 
 // -------------------------
-// RUTA DE UPLOADS (SE MONTA ANTES DE PARSERS)
+// RUTAS MULTIPART / UPLOADS (SE MONTAN ANTES DE PARSERS)
 // -------------------------
 // ⚠️ Esto evita que express.json() intente parsear el FormData
 app.use('/api/upload', uploadRoutes);
+app.use('/api/eventos', eventoArchivosRoutes);
 
 // -------------------------
 // MIDDLEWARES DE PARSING (solo JSON y x-www-form-urlencoded)
@@ -78,7 +79,6 @@ app.use('/api/campanas', campanasRoutes);
 app.use('/api/tickets', ticketsRoutes);
 app.use('/api/acreditacion', acreditacionRoutes);
 app.use('/api/public', publicRoutes);
-app.use('/api/eventos', eventoArchivosRoutes);
 app.use('/api/permisos', permisosRoutes);
 app.use('/api/usuarios', usuarioRoutes);
 

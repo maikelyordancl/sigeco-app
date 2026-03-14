@@ -48,14 +48,14 @@ const refreshTokenInterceptor = async (url: string, options: RequestInit): Promi
         const newAccessToken = await refreshPromise;
 
         if (newAccessToken) {
-            // Reintentar la solicitud original de forma transparente con el nuevo token
-            const newOptions = {
+            const headers = new Headers(options.headers || {});
+            headers.set('Authorization', `Bearer ${newAccessToken}`);
+
+            const newOptions: RequestInit = {
                 ...options,
-                headers: {
-                    ...options.headers,
-                    'Authorization': `Bearer ${newAccessToken}`,
-                },
+                headers,
             };
+
             response = await fetch(url, newOptions);
         }
     }
@@ -66,25 +66,34 @@ const refreshTokenInterceptor = async (url: string, options: RequestInit): Promi
 export const apiFetch = async (endpoint: string, options: RequestInit = {}): Promise<Response> => {
     const token = getAccessToken();
     const url = `${process.env.NEXT_PUBLIC_API_URL}${endpoint}`;
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
 
-    const defaultHeaders: HeadersInit = {
-        'Content-Type': 'application/json',
-        ...(token && { 'Authorization': `Bearer ${token}` }),
-    };
+    const headers = new Headers(options.headers || {});
+
+    if (token && !headers.has('Authorization')) {
+        headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    // Solo seteamos JSON si NO es FormData
+    if (!isFormData && !headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json');
+    }
+
+    // Si es FormData, JAMÁS forzar Content-Type
+    if (isFormData && headers.has('Content-Type')) {
+        headers.delete('Content-Type');
+    }
 
     const config: RequestInit = {
         ...options,
-        headers: {
-            ...defaultHeaders,
-            ...options.headers,
-        },
+        headers,
     };
 
     const response = await refreshTokenInterceptor(url, config);
     return response;
 };
 
-// ---- NUEVO: fetch específico para multipart/form-data (FormData) ----
+// ---- fetch específico para multipart/form-data (FormData) ----
 export const apiFetchImage = async (
   endpoint: string,
   formData: FormData,
@@ -102,13 +111,11 @@ export const apiFetchImage = async (
   }
 
   const config: RequestInit = {
+    ...options,
     method: options.method || 'POST',
     headers: h,
     body: formData,
-    ...options,
   };
-
-  config.body = formData;
 
   const response = await refreshTokenInterceptor(url, config);
   return response;

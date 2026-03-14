@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import { toast } from "react-hot-toast";
 import MainLayout from "@/components/Layout/MainLayout";
-import { Plus, Calendar, MapPin, Link } from "lucide-react";
+import { Plus, Calendar, MapPin, Link, Globe } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
 interface Evento {
@@ -43,9 +43,8 @@ interface Subevento {
 
 const formatDateForInput = (dateString?: string | null) => {
     if (!dateString) return "";
-    // Asegurarse de que la fecha se interpreta correctamente antes de formatear
     const date = new Date(dateString);
-    if (isNaN(date.getTime())) return ""; // Devolver vacío si la fecha no es válida
+    if (isNaN(date.getTime())) return "";
     return date.toISOString().split('T')[0];
 };
 
@@ -63,8 +62,6 @@ const validationSchema = Yup.object().shape({
         }),
     ciudad: Yup.string().nullable().optional(),
     lugar: Yup.string().nullable().optional(),
-    // --- CORRECCIÓN ---
-    // Se permite una cadena vacía o una URL válida.
     link_adicional: Yup.string().nullable().url("Debe ser una URL válida o estar vacío.").transform(value => value === '' ? null : value),
     texto_libre: Yup.string().nullable().optional(),
     nombre_evento_mailing: Yup.string().nullable().optional(),
@@ -89,8 +86,6 @@ const validationSchema = Yup.object().shape({
             }
         ),
 });
-
-
 
 export default function GestionSubeventos() {
     const [eventos, setEventos] = useState<Evento[]>([]);
@@ -128,8 +123,7 @@ export default function GestionSubeventos() {
     useEffect(() => {
         const fetchEventos = async () => {
             try {
-                const response = await apiFetch(`/eventos`, {
-                });
+                const response = await apiFetch(`/eventos`, {});
                 const data = await response.json();
 
                 if (response.ok && data.success) {
@@ -140,46 +134,43 @@ export default function GestionSubeventos() {
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : "Error desconocido";
                 setErrorGlobal("Error de red al obtener eventos. " + errorMessage);
-                console.error("❌ Error al obtener eventos:", errorMessage); // Maneja el error sin lanzarlo
+                console.error("❌ Error al obtener eventos:", errorMessage);
             }
         };
 
         fetchEventos().catch(error => {
             console.error("❌ Error al obtener eventos:", error);
-            // Aquí puedes manejar el error globalmente si lo deseas
         });
     }, []);
 
     useEffect(() => {
-    if (selectedEventoId) {
-        const fetchSubeventos = async () => {
-            // const token = localStorage.getItem("token"); // Ya no necesitas esto aquí
-            try {
-                // 👇 2. Reemplaza fetch con apiFetch
-                const response = await apiFetch(`/subeventos?id_evento=${selectedEventoId}`);
+        if (selectedEventoId) {
+            const fetchSubeventos = async () => {
+                try {
+                    const response = await apiFetch(`/subeventos?id_evento=${selectedEventoId}`);
 
-                if (!response.ok) {
-                    setErrorGlobal(`Error HTTP: ${response.status}`);
-                    return;
+                    if (!response.ok) {
+                        setErrorGlobal(`Error HTTP: ${response.status}`);
+                        return;
+                    }
+
+                    const data = await response.json();
+
+                    if (data.success) {
+                        setSubeventos(data.data);
+                    } else {
+                        setErrorGlobal(data.error || "Error al obtener los subeventos.");
+                    }
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+                    setErrorGlobal("Error al obtener subeventos: " + errorMessage);
+                    console.error("❌ Error al obtener subeventos:", errorMessage);
                 }
+            };
 
-                const data = await response.json();
-
-                if (data.success) {
-                    setSubeventos(data.data);
-                } else {
-                    setErrorGlobal(data.error || "Error al obtener los subeventos.");
-                }
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : "Error desconocido";
-                setErrorGlobal("Error al obtener subeventos: " + errorMessage);
-                console.error("❌ Error al obtener subeventos:", errorMessage);
-            }
-        };
-
-        fetchSubeventos();
-    }
-}, [selectedEventoId]);
+            fetchSubeventos();
+        }
+    }, [selectedEventoId]);
 
     const handleOpenModal = (subevento?: Subevento) => {
         setSelectedSubevento(subevento || null);
@@ -230,7 +221,6 @@ export default function GestionSubeventos() {
                 body: JSON.stringify(payload),
             });
 
-            
             const result = await response.json();
             console.log("📥 Respuesta del servidor:", result);
 
@@ -238,7 +228,6 @@ export default function GestionSubeventos() {
                 toast.success(isEditing ? "Subevento actualizado con éxito." : "Subevento creado con éxito.");
                 setIsModalOpen(false);
 
-                // Una forma más simple y segura de refrescar la lista
                 const fetchResponse = await apiFetch(`/subeventos?id_evento=${selectedEventoId}`);
                 const newData = await fetchResponse.json();
                 if (newData.success) {
@@ -246,17 +235,13 @@ export default function GestionSubeventos() {
                 }
 
             } else {
-                // --- MANEJO DE ERRORES MEJORADO ---
                 if (result.errors && Array.isArray(result.errors)) {
-                    // Si el backend envió un array de errores de validación, muéstralos.
                     result.errors.forEach((err: any) => {
-                        toast.error(err.msg, { duration: 3000 }); // Muestra un toast por cada error específico
+                        toast.error(err.msg, { duration: 3000 });
                     });
                 } else {
-                    // Si es otro tipo de error del servidor.
                     toast.error(result.error || "Ocurrió un error al guardar el subevento.");
                 }
-                // --- FIN DEL MANEJO DE ERRORES ---
             }
         } catch (error) {
             console.error("❌ Error de red:", error);
@@ -285,6 +270,7 @@ export default function GestionSubeventos() {
             toast.error("Error de red al intentar eliminar el subevento. " + error);
         }
     };
+
     const handleFormErrors = (errors: FieldErrors<Subevento>) => {
         console.error("❌ Errores del formulario:", errors);
 
@@ -295,8 +281,6 @@ export default function GestionSubeventos() {
             }
         });
     };
-
-
 
     return (
         <MainLayout>
@@ -337,20 +321,42 @@ export default function GestionSubeventos() {
                                                 {new Date(subevento.fecha_inicio).toLocaleDateString("es-ES")} - {new Date(subevento.fecha_fin).toLocaleDateString("es-ES")}
                                             </span>
                                         </div>
+
                                         <div className="flex items-center space-x-2 mb-2">
                                             <MapPin size={16} />
                                             <span>{subevento.ciudad || "-"} - {subevento.lugar || "-"}</span>
                                         </div>
-                                        <div className="flex items-center space-x-2 min-h-6">
+
+                                        <div className="space-y-2 min-h-6">
+                                            {subevento.sitio_web && (
+                                                <div className="flex items-center space-x-2">
+                                                    <Globe size={16} />
+                                                    <a
+                                                        href={subevento.sitio_web}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-blue-500 underline break-all"
+                                                    >
+                                                        Página Web
+                                                    </a>
+                                                </div>
+                                            )}
+
                                             {subevento.link_adicional && (
-                                                <>
+                                                <div className="flex items-center space-x-2">
                                                     <Link size={16} />
-                                                    <a href={subevento.link_adicional} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">
+                                                    <a
+                                                        href={subevento.link_adicional}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-blue-500 underline break-all"
+                                                    >
                                                         Link Adicional
                                                     </a>
-                                                </>
+                                                </div>
                                             )}
                                         </div>
+
                                         <div className="mt-4 flex justify-between">
                                             <Button size="sm" variant="outline" onClick={() => handleOpenModal(subevento)}>
                                                 Ver / Editar

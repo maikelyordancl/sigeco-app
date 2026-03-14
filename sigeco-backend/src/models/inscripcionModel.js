@@ -524,6 +524,7 @@ const Inscripcion = {
             etiquetasValidas.add(MEDIO_PAGO_HEADER);
             etiquetasValidas.add(normalizeHeader('Monto Pagado Manual (Opcional)'));
             etiquetasValidas.add(normalizeHeader('Monto Pagado Manual'));
+            etiquetasValidas.add(normalizeHeader('Participa'));
 
             const cabecerasRecibidas = new Set();
             contactos.forEach((fila) => {
@@ -563,6 +564,11 @@ const Inscripcion = {
                 for (const cabecera in fila) {
                     const cabeceraNormalizada = normalizeHeader(cabecera);
                     
+                    // Alias histórico de plantillas antiguas. Se acepta y se ignora para no romper la importación.
+                    if (cabeceraNormalizada === normalizeHeader('Participa')) {
+                         continue;
+                    }
+
                     // Capturamos el Monto
                     if (cabeceraNormalizada === MONTO_HEADER || cabeceraNormalizada.includes('montopagadomanual')) {
                          const rawMonto = String(fila[cabecera]).replace(/[^0-9]/g, '');
@@ -647,6 +653,10 @@ const Inscripcion = {
                 const respuestasParaInsertar = [];
                 for (const cabecera in fila) {
                     const cabeceraNormalizada = normalizeHeader(cabecera);
+                    if (cabeceraNormalizada === normalizeHeader('Participa')) {
+                        continue;
+                    }
+
                     const id_campo = mapaEtiquetaAId[cabeceraNormalizada];
                     let valor = fila[cabecera];
 
