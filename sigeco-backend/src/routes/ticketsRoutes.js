@@ -7,6 +7,15 @@ const ticketsController = require('../controllers/ticketsController');
 // y usamos llaves {} porque el archivo ahora exporta múltiples funciones.
 const { verificarToken } = require('../controllers/authController');
 
+const allowedSortOptions = [
+    'nombre_asc',
+    'nombre_desc',
+    'precio_asc',
+    'precio_desc',
+    'disponibles_asc',
+    'disponibles_desc',
+];
+
 // Proteger todas las rutas de tickets
 router.use(verificarToken);
 
@@ -18,7 +27,6 @@ router.get(
     [
         param('id_campana').isInt({ gt: 0 }).withMessage('El ID de la campaña debe ser un número válido.')
     ],
-    // CORREGIDO: Se ha estandarizado el nombre de la función sin la 'ñ'.
     ticketsController.obtenerTicketsPorCampana
 );
 
@@ -32,6 +40,19 @@ router.post(
         body('cantidad_total').optional({ nullable: true }).isInt({ gt: 0 }).withMessage('La cantidad debe ser un número entero positivo.')
     ],
     ticketsController.crearTicket
+);
+
+// PUT /api/tickets/campana/:id_campana/orden - Guardar el criterio de orden de los tickets
+router.put(
+    '/campana/:id_campana/orden',
+    [
+        param('id_campana').isInt({ gt: 0 }).withMessage('El ID de la campaña es inválido.'),
+        body('sort_order')
+            .isString()
+            .isIn(allowedSortOptions)
+            .withMessage('El criterio de orden es inválido.'),
+    ],
+    ticketsController.actualizarOrdenTicketsCampana
 );
 
 // PUT /api/tickets/:id_ticket - Actualizar un ticket

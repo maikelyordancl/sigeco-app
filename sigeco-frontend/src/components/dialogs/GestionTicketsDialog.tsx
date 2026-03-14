@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import * as yup from "yup";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -54,6 +54,22 @@ interface Ticket {
   cantidad_vendida: number;
 }
 
+type SortOption =
+  | "nombre_asc"
+  | "nombre_desc"
+  | "precio_asc"
+  | "precio_desc"
+  | "disponibles_asc"
+  | "disponibles_desc";
+
+interface TicketsResponse {
+  success: boolean;
+  data?: Ticket[];
+  sort_order?: SortOption;
+  error?: string;
+  message?: string;
+}
+
 // Esquema de validación para el formulario
 const ticketSchema = yup.object().shape({
   nombre: yup.string().required("El nombre es obligatorio."),
@@ -80,14 +96,6 @@ interface GestionTicketsDialogProps {
   onTicketChange: () => void;
 }
 
-type SortOption =
-  | "nombre_asc"
-  | "nombre_desc"
-  | "precio_asc"
-  | "precio_desc"
-  | "disponibles_asc"
-  | "disponibles_desc";
-
 export const GestionTicketsDialog = ({
   isOpen,
   onClose,
@@ -96,6 +104,7 @@ export const GestionTicketsDialog = ({
 }: GestionTicketsDialogProps) => {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(false);
+  const [savingSort, setSavingSort] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [editingTicketId, setEditingTicketId] = useState<number | null>(null);
@@ -118,14 +127,14 @@ export const GestionTicketsDialog = ({
     setError(null);
     try {
       const response = await apiFetch(`/tickets/campana/${id_campana}`);
-      if (!response.ok) throw new Error("No se pudieron cargar los tickets.");
-      const result = await response.json();
+      const result: TicketsResponse = await response.json();
 
-      if (result.success) {
-        setTickets(Array.isArray(result.data) ? result.data : []);
-      } else {
-        throw new Error(result.error || "Error al procesar la respuesta.");
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "No se pudieron cargar los tickets.");
       }
+
+      setTickets(Array.isArray(result.data) ? result.data : []);
+      setSortBy(result.sort_order || "nombre_asc");
     } catch (err: any) {
       setError(err.message);
       setTickets([]);
@@ -138,10 +147,43 @@ export const GestionTicketsDialog = ({
     if (isOpen) {
       fetchTickets();
       setEditingTicketId(null);
-      setSortBy("nombre_asc");
       reset({ nombre: "", precio: 0, cantidad_total: undefined });
     }
   }, [isOpen, fetchTickets, reset]);
+
+  const handleSortChange = async (value: SortOption) => {
+    if (!id_campana || value === sortBy) {
+      return;
+    }
+
+    const previousSort = sortBy;
+    setSortBy(value);
+    setSavingSort(true);
+
+    try {
+      const response = await apiFetch(`/tickets/campana/${id_campana}/orden`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sort_order: value }),
+      });
+
+      const result: TicketsResponse = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "No se pudo guardar el orden.");
+      }
+
+      setSortBy(result.sort_order || value);
+      setTickets(Array.isArray(result.data) ? result.data : []);
+      toast.success("Orden de tickets guardado. Este orden también se verá en la landing.");
+      onTicketChange();
+    } catch (err: any) {
+      setSortBy(previousSort);
+      toast.error(err.message || "No se pudo guardar el orden.");
+    } finally {
+      setSavingSort(false);
+    }
+  };
 
   const handleSaveTicket = async (data: TicketFormData) => {
     const isEditing = editingTicketId !== null;
@@ -174,7 +216,7 @@ export const GestionTicketsDialog = ({
 
       setEditingTicketId(null);
       reset({ nombre: "", precio: 0, cantidad_total: undefined });
-      fetchTickets();
+      await fetchTickets();
       onTicketChange();
     } catch (err: any) {
       toast.error(err.message, { id: toastId });
@@ -211,7 +253,7 @@ export const GestionTicketsDialog = ({
 
       toast.success("Ticket eliminado con éxito", { id: toastId });
       setTicketToDelete(null);
-      fetchTickets();
+      await fetchTickets();
       onTicketChange();
     } catch (err: any) {
       toast.error(err.message, { id: toastId });
@@ -224,42 +266,6 @@ export const GestionTicketsDialog = ({
       currency: "CLP",
       maximumFractionDigits: 0,
     }).format(value);
-
-  const getDisponibles = (ticket: Ticket) => {
-    if (ticket.cantidad_total === null) return Number.POSITIVE_INFINITY;
-    return ticket.cantidad_total - ticket.cantidad_vendida;
-  };
-
-  const ticketsOrdenados = useMemo(() => {
-    const copia = [...tickets];
-
-    copia.sort((a, b) => {
-      switch (sortBy) {
-        case "nombre_asc":
-          return a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" });
-
-        case "nombre_desc":
-          return b.nombre.localeCompare(a.nombre, "es", { sensitivity: "base" });
-
-        case "precio_asc":
-          return a.precio - b.precio;
-
-        case "precio_desc":
-          return b.precio - a.precio;
-
-        case "disponibles_asc":
-          return getDisponibles(a) - getDisponibles(b);
-
-        case "disponibles_desc":
-          return getDisponibles(b) - getDisponibles(a);
-
-        default:
-          return a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" });
-      }
-    });
-
-    return copia;
-  }, [tickets, sortBy]);
 
   return (
     <>
@@ -275,7 +281,6 @@ export const GestionTicketsDialog = ({
           </DialogHeader>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 py-4">
-            {/* Columna Izquierda: Formulario */}
             <div className="md:col-span-1 p-4 border rounded-lg h-fit">
               <h3 className="text-lg font-semibold mb-4">
                 {editingTicketId ? "Editando Ticket" : "Añadir Nuevo Ticket"}
@@ -354,15 +359,20 @@ export const GestionTicketsDialog = ({
               </form>
             </div>
 
-            {/* Columna Derecha: Lista de Tickets */}
             <div className="md:col-span-2">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
-                <h3 className="text-lg font-semibold">Tickets Actuales</h3>
+                <div>
+                  <h3 className="text-lg font-semibold">Tickets Actuales</h3>
+                  <p className="text-sm text-muted-foreground">
+                    El orden que definas aquí será el mismo que verá el cliente en la landing.
+                  </p>
+                </div>
 
-                <div className="w-full sm:w-[260px]">
+                <div className="w-full sm:w-[280px]">
                   <Select
                     value={sortBy}
-                    onValueChange={(value) => setSortBy(value as SortOption)}
+                    onValueChange={(value) => handleSortChange(value as SortOption)}
+                    disabled={savingSort}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Ordenar por..." />
@@ -384,19 +394,19 @@ export const GestionTicketsDialog = ({
               </div>
 
               <div className="border rounded-lg overflow-hidden">
-                {loading && (
+                {(loading || savingSort) && (
                   <div className="p-6 text-center text-sm text-muted-foreground">
-                    Cargando tickets...
+                    {savingSort ? "Guardando orden..." : "Cargando tickets..."}
                   </div>
                 )}
 
-                {!loading && error && (
+                {!loading && !savingSort && error && (
                   <div className="p-6 text-center text-sm text-red-500">
                     {error}
                   </div>
                 )}
 
-                {!loading && !error && (
+                {!loading && !savingSort && !error && (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -408,8 +418,8 @@ export const GestionTicketsDialog = ({
                     </TableHeader>
 
                     <TableBody>
-                      {ticketsOrdenados.length > 0 ? (
-                        ticketsOrdenados.map((ticket) => (
+                      {tickets.length > 0 ? (
+                        tickets.map((ticket) => (
                           <TableRow key={ticket.id_tipo_entrada}>
                             <TableCell className="font-medium">
                               {ticket.nombre}

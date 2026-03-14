@@ -6,6 +6,7 @@
  */
 const pool = require('../config/db');
 const FormularioModel = require('./formularioModel');
+const TicketModel = require('./ticketModel');
 
 const Campana = {
     create: async (campanaData) => {
@@ -189,8 +190,6 @@ const Campana = {
     },
 
     findPublicDataBySlug: async (slug) => {
-        const FormularioModel = require('./formularioModel');
-
         const campanaQuery = `
             SELECT
                 c.id_campana, c.id_subevento, c.nombre, c.estado, c.url_amigable,
@@ -200,6 +199,7 @@ const Campana = {
                 c.id_plantilla,
                 c.fecha_personalizada,
                 c.email_incluye_qr,
+                c.ticket_sort_order,
                 e.nombre AS evento_nombre, e.fecha_inicio, e.fecha_fin, e.ciudad, e.lugar,
                 s.nombre AS subevento_nombre, s.obligatorio_registro, s.obligatorio_pago
             FROM campanas c
@@ -219,7 +219,8 @@ const Campana = {
         campanaData.tipo_acceso = campanaData.obligatorio_pago ? 'De Pago' : 'Gratuito';
 
         if (campanaData.obligatorio_pago) {
-            const ticketsQuery = 'SELECT id_tipo_entrada, nombre, precio, cantidad_total, cantidad_vendida FROM tipos_de_entrada WHERE id_campana = ? ORDER BY precio ASC';
+            const orderByClause = TicketModel.getOrderByClause(campanaData.ticket_sort_order);
+            const ticketsQuery = `SELECT id_tipo_entrada, nombre, precio, cantidad_total, cantidad_vendida FROM tipos_de_entrada WHERE id_campana = ? ORDER BY ${orderByClause}`;
             const [ticketRows] = await pool.query(ticketsQuery, [campanaData.id_campana]);
             tickets = ticketRows;
         }
@@ -263,6 +264,7 @@ const Campana = {
             c.id_plantilla,
             c.fecha_personalizada,
             c.email_incluye_qr,
+            c.ticket_sort_order,
             e.nombre AS evento_nombre, e.fecha_inicio, e.fecha_fin, e.ciudad, e.lugar,
             s.nombre AS subevento_nombre, s.obligatorio_registro, s.obligatorio_pago
         FROM campanas c
@@ -284,7 +286,7 @@ const Campana = {
             SELECT id_tipo_entrada, nombre, precio, cantidad_total, cantidad_vendida
             FROM tipos_de_entrada
             WHERE id_campana = ?
-            ORDER BY precio ASC
+            ORDER BY ${TicketModel.getOrderByClause(campanaData.ticket_sort_order)}
         `;
             const [ticketRows] = await pool.query(ticketsQuery, [campanaData.id_campana]);
             tickets = ticketRows;

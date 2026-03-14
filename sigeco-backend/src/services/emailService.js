@@ -2,9 +2,7 @@
 
 const axios = require('axios');
 const Campana = require('../models/campanaModel');
-// const qrcode = require('qrcode'); // <-- Ya no se necesita
-// const fs = require('fs'); // <-- Ya no se necesita
-// const path = require('path'); // <-- Ya no se necesita
+const InscripcionModel = require('../models/inscripcionModel');
 
 const formatFechaES = (dateInput) => {
     const fecha = new Date(dateInput);
@@ -14,6 +12,60 @@ const formatFechaES = (dateInput) => {
         month: 'short',
         year: 'numeric'
     });
+};
+
+const formatCurrencyCL = (value) => {
+    const numericValue = Number(value);
+
+    if (!Number.isFinite(numericValue)) {
+        return '';
+    }
+
+    return new Intl.NumberFormat('es-CL', {
+        style: 'currency',
+        currency: 'CLP',
+        maximumFractionDigits: 0,
+    }).format(numericValue);
+};
+
+const buildMandatoryTicketHtml = (inscripcionEmailContext) => {
+    if (!inscripcionEmailContext?.ticket_nombre) {
+        return '';
+    }
+
+    const precioFormateado = formatCurrencyCL(inscripcionEmailContext.ticket_precio);
+    const detallePrecio = precioFormateado
+        ? `<p style="margin: 8px 0 0 0; color: #333;"><strong>Valor ticket:</strong> ${precioFormateado}</p>`
+        : '';
+
+    return `
+        <div data-sigeco-ticket="true" style="margin: 18px 0; padding: 16px; border: 1px solid #E5E7EB; border-radius: 10px; background-color: #F8FAFC;">
+            <p style="margin: 0; color: #333;"><strong>Ticket comprado:</strong> ${inscripcionEmailContext.ticket_nombre}</p>
+            ${detallePrecio}
+        </div>
+    `;
+};
+
+const insertMandatorySection = (html, mandatorySection, qrHtmlContent) => {
+    if (!mandatorySection) {
+        return html;
+    }
+
+    if (qrHtmlContent && html.includes(qrHtmlContent)) {
+        return html.replace(qrHtmlContent, `${mandatorySection}${qrHtmlContent}`);
+    }
+
+    const footerMarker = '<div style="border-top: 1px solid #DFE3E8;';
+    if (html.includes(footerMarker)) {
+        return html.replace(footerMarker, `${mandatorySection}${footerMarker}`);
+    }
+
+    const lastClosingDivIndex = html.lastIndexOf('</div>');
+    if (lastClosingDivIndex !== -1) {
+        return `${html.slice(0, lastClosingDivIndex)}${mandatorySection}${html.slice(lastClosingDivIndex)}`;
+    }
+
+    return `${html}${mandatorySection}`;
 };
 
 exports.sendConfirmationEmail = async (toEmail, toName, eventData, id_campana, id_inscripcion = null) => {
@@ -34,19 +86,13 @@ exports.sendConfirmationEmail = async (toEmail, toName, eventData, id_campana, i
             return;
         }
         
-        // --- INICIO DE LÓGICA QR (Modificada para API Externa) ---
         let qrHtmlContent = ''; 
 
         if (campana.email_incluye_qr === 1 && id_inscripcion) {
             try {
-                // 1. Preparamos el dato para la URL
                 const qrData = encodeURIComponent(String(id_inscripcion));
-                
-                // 2. Construimos la URL de la API de QR
-                // Usamos ecc=H (alta corrección de errores) y qzone=2 (margen)
                 const qrPublicUrl = `https://api.qr-server.com/v1/create-qr-code/?data=${qrData}&size=150x150&ecc=H&qzone=2`;
 
-                // 3. Crear el HTML (igual que antes, pero con la nueva URL)
                 qrHtmlContent = `
                     <div style="text-align: center; padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-top: 15px; background-color: #ffffff; max-width: 170px; margin-left: auto; margin-right: auto;">
                         <img src="${qrPublicUrl}" alt="Código QR para acreditación" style="width: 150px; height: 150px; display: block;">
@@ -58,10 +104,17 @@ exports.sendConfirmationEmail = async (toEmail, toName, eventData, id_campana, i
                 console.error(`Error al construir la URL del QR para ${id_inscripcion}:`, qrError);
             }
         }
-        // --- FIN DE LÓGICA QR ---
 
-        
-        // Reemplazo de placeholders (sin cambios)
+        let mandatoryTicketHtml = '';
+        if (id_inscripcion) {
+            try {
+                const inscripcionEmailContext = await InscripcionModel.findEmailContextById(id_inscripcion);
+                mandatoryTicketHtml = buildMandatoryTicketHtml(inscripcionEmailContext);
+            } catch (ticketError) {
+                console.error(`Error al obtener el ticket obligatorio para la inscripción ${id_inscripcion}:`, ticketError);
+            }
+        }
+
         const fechaFormateada = formatFechaES(event_start_date);
         finalHtml = finalHtml.replace(/{{nombre_asistente}}/g, toName || 'participante');
         finalHtml = finalHtml.replace(/{{email_asistente}}/g, toEmail);
@@ -69,15 +122,15 @@ exports.sendConfirmationEmail = async (toEmail, toName, eventData, id_campana, i
         finalHtml = finalHtml.replace(/{{fecha_evento}}/g, fechaFormateada);
         finalHtml = finalHtml.replace(/{{lugar_evento}}/g, event_location);
         finalHtml = finalHtml.replace(/{{codigo_qr_html}}/g, qrHtmlContent);
+        finalHtml = insertMandatorySection(finalHtml, mandatoryTicketHtml, qrHtmlContent);
         
-        // Lógica de envío de Brevo (sin cambios)
         const url = 'https://api.brevo.com/v3/smtp/email';
         const apiKey = process.env.BREVO_API_KEY;
 
         const senderName = campana.email_sender_name || 'Eventos Pais'; 
 
         const data = {
-            sender: { name: senderName, email: 'noreply@eventospais.cl' }, //
+            sender: { name: senderName, email: 'noreply@eventospais.cl' },
             to: [{ email: toEmail, name: toName || '' }],
             subject: subject,
             htmlContent: finalHtml,
@@ -91,12 +144,12 @@ exports.sendConfirmationEmail = async (toEmail, toName, eventData, id_campana, i
         
         await axios.post(url, data, { headers: headers });
 
-        console.log(`Correo de confirmación enviado a ${toEmail} para la campaña ${id_campana}. QR (externo) incluido: ${qrHtmlContent !== ''}`);
+        console.log(`Correo de confirmación enviado a ${toEmail} para la campaña ${id_campana}. QR (externo) incluido: ${qrHtmlContent !== ''}. Ticket obligatorio incluido: ${mandatoryTicketHtml !== ''}`);
 
     } catch (error) {
-        console.error("❌ Error en el proceso de envío de correo:", error.message);
+        console.error('❌ Error en el proceso de envío de correo:', error.message);
         if (error.response) {
-            console.error("Respuesta de Brevo:", error.response.data);
+            console.error('Respuesta de Brevo:', error.response.data);
         }
     }
 };

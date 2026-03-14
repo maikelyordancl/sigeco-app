@@ -47,6 +47,21 @@ const Inscripcion = {
         return rows[0] || null;
     },
 
+    findEmailContextById: async (id_inscripcion) => {
+        const query = `
+            SELECT
+                i.*,
+                te.nombre AS ticket_nombre,
+                te.precio AS ticket_precio
+            FROM inscripciones i
+            LEFT JOIN tipos_de_entrada te ON te.id_tipo_entrada = i.id_tipo_entrada
+            WHERE i.id_inscripcion = ?
+            LIMIT 1
+        `;
+        const [rows] = await pool.query(query, [id_inscripcion]);
+        return rows[0] || null;
+    },
+
     update: async (id_inscripcion, dataToUpdate) => {
         const query = 'UPDATE inscripciones SET ? WHERE id_inscripcion = ?';
         const [result] = await pool.query(query, [dataToUpdate, id_inscripcion]);
