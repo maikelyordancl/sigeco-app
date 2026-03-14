@@ -262,31 +262,6 @@ const GestionCampanasPage = () => {
           </Button>
         </div>
 
-        {!loading && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Sub-campañas</CardDescription>
-                <CardTitle className="text-2xl">{resumenHeader.totalSubCampanas}</CardTitle>
-              </CardHeader>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Pagados</CardDescription>
-                <CardTitle className="text-2xl text-green-700">{resumenHeader.totalPagados}</CardTitle>
-              </CardHeader>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardDescription>Total ingresos</CardDescription>
-                <CardTitle className="text-2xl text-emerald-700">{formatMoney(resumenHeader.totalIngresos)}</CardTitle>
-              </CardHeader>
-            </Card>
-          </div>
-        )}
-
         {loading ? (
           <p className="text-center py-10">Cargando campañas...</p>
         ) : (
