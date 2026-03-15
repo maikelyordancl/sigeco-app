@@ -14,10 +14,23 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "react-hot-toast";
 import MainLayout from "@/components/Layout/MainLayout";
-
-import { 
-  Plus, Calendar, MapPin, Search, Megaphone, Edit, Trash2, FolderArchive, 
-  LayoutGrid, List, ChevronLeft, ChevronRight 
+import {
+  Plus,
+  Calendar,
+  MapPin,
+  Search,
+  Megaphone,
+  Edit,
+  Trash2,
+  FolderArchive,
+  LayoutGrid,
+  List,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Mail,
+  Phone,
+  Users,
 } from "lucide-react";
 import { GestionArchivosDialog } from "@/components/dialogs/GestionArchivosDialog";
 
@@ -25,7 +38,17 @@ import { EstadoEvento, Evento, estadosEvento } from "./types";
 import { mapEstado, reverseMapEstado, getBadgeColor } from "./utils";
 import { apiFetch } from "@/lib/api";
 
-type ViewMode = 'grid' | 'list';
+type ViewMode = "grid" | "list";
+
+const nullableUrlField = Yup.string()
+  .nullable()
+  .transform((value) => (value === "" ? null : value))
+  .test("nullable-url", "Debe ser una URL válida.", (value) => !value || Yup.string().url().isValidSync(value));
+
+const nullableEmailField = Yup.string()
+  .nullable()
+  .transform((value) => (value === "" ? null : value))
+  .email("Debe ser un correo válido.");
 
 const validationSchema = Yup.object().shape({
   id_evento: Yup.number().optional(),
@@ -41,59 +64,99 @@ const validationSchema = Yup.object().shape({
   lugar: Yup.string().required("El lugar del evento es obligatorio."),
   presupuesto_marketing: Yup.number().optional(),
   estado: Yup.string().oneOf(estadosEvento, "Estado no válido.").required("El estado es obligatorio."),
+  link_drive: nullableUrlField,
+  contacto_1_nombre: Yup.string().nullable().optional(),
+  contacto_1_email: nullableEmailField,
+  contacto_1_telefono: Yup.string().nullable().optional(),
+  contacto_2_nombre: Yup.string().nullable().optional(),
+  contacto_2_email: nullableEmailField,
+  contacto_2_telefono: Yup.string().nullable().optional(),
 });
+
+const emptyToNull = (value?: string | null) => {
+  const trimmed = typeof value === "string" ? value.trim() : value;
+  return trimmed ? trimmed : null;
+};
+
+const hasContactData = (evento: Evento, contactNumber: 1 | 2) => {
+  const prefix = contactNumber === 1 ? "contacto_1" : "contacto_2";
+  return Boolean(
+    (evento as any)[`${prefix}_nombre`] ||
+      (evento as any)[`${prefix}_email`] ||
+      (evento as any)[`${prefix}_telefono`]
+  );
+};
+
+const ContactBlock = ({
+  title,
+  nombre,
+  email,
+  telefono,
+}: {
+  title: string;
+  nombre?: string | null;
+  email?: string | null;
+  telefono?: string | null;
+}) => {
+  if (!nombre && !email && !telefono) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+      <div className="space-y-1 text-sm text-slate-700">
+        {nombre && (
+          <div className="flex items-start gap-2">
+            <Users className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+            <span>{nombre}</span>
+          </div>
+        )}
+        {email && (
+          <div className="flex items-start gap-2 break-all">
+            <Mail className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+            <span>{email}</span>
+          </div>
+        )}
+        {telefono && (
+          <div className="flex items-start gap-2">
+            <Phone className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+            <span>{telefono}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export default function GestionEventos() {
   const router = useRouter();
-  
-  // Estados de datos
+
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [selectedEvento, setSelectedEvento] = useState<Evento | null>(null);
-  
-  // Estados de UI y Filtros
+
   const [searchTerm, setSearchTerm] = useState<string>("");
-  const [estadoFiltro, setEstadoFiltro] = useState<EstadoEvento | "Todos">("Activo"); // Activos por defecto
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  
-  // Estados de Paginación
+  const [estadoFiltro, setEstadoFiltro] = useState<EstadoEvento | "Todos">("Activo");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+
   const [paginaActual, setPaginaActual] = useState(1);
   const [eventosPorPagina, setEventosPorPagina] = useState(12);
 
-  // Estados de Modales
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isArchivosModalOpen, setIsArchivosModalOpen] = useState<boolean>(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  
-  // Estados auxiliares
+
   const [eventoParaArchivos, setEventoParaArchivos] = useState<Evento | null>(null);
   const [eventoToDelete, setEventoToDelete] = useState<Evento | null>(null);
   const [errorGlobal, setErrorGlobal] = useState<string | null>(null);
   const [errorModal, setErrorModal] = useState<string | null>(null);
   const [presupuesto, setPresupuesto] = useState("");
 
-  // Recordar vista seleccionada (Grid o Lista)
-  useEffect(() => {
-    const savedView = localStorage.getItem('eventosViewMode') as ViewMode;
-    if (savedView) setViewMode(savedView);
-  }, []);
-
-  const handleSetViewMode = (mode: ViewMode) => {
-    setViewMode(mode);
-    localStorage.setItem('eventosViewMode', mode);
-  };
-
-  useEffect(() => {
-    if (selectedEvento?.presupuesto_marketing !== undefined) {
-      setPresupuesto(new Intl.NumberFormat("es-CL").format(selectedEvento.presupuesto_marketing ?? 0));
-    }
-  }, [selectedEvento]);
-
-  const handlePresupuestoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, "");
-    setPresupuesto(new Intl.NumberFormat("es-CL").format(Number(value)));
-  };
-
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<Evento>({
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: { errors },
+  } = useForm<Evento>({
     resolver: yupResolver(validationSchema),
     defaultValues: selectedEvento || {
       id_evento: 0,
@@ -104,8 +167,36 @@ export default function GestionEventos() {
       lugar: "",
       presupuesto_marketing: 0,
       estado: "Activo",
+      link_drive: "",
+      contacto_1_nombre: "",
+      contacto_1_email: "",
+      contacto_1_telefono: "",
+      contacto_2_nombre: "",
+      contacto_2_email: "",
+      contacto_2_telefono: "",
     },
   });
+
+  useEffect(() => {
+    const savedView = localStorage.getItem("eventosViewMode") as ViewMode;
+    if (savedView) setViewMode(savedView);
+  }, []);
+
+  const handleSetViewMode = (mode: ViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem("eventosViewMode", mode);
+  };
+
+  useEffect(() => {
+    if (selectedEvento?.presupuesto_marketing !== undefined) {
+      setPresupuesto(new Intl.NumberFormat("es-CL").format(selectedEvento.presupuesto_marketing ?? 0));
+    }
+  }, [selectedEvento]);
+
+  const handlePresupuestoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/\D/g, "");
+    setPresupuesto(new Intl.NumberFormat("es-CL").format(Number(value || 0)));
+  };
 
   useEffect(() => {
     if (selectedEvento) reset(selectedEvento);
@@ -113,7 +204,7 @@ export default function GestionEventos() {
 
   const fetchEventos = useCallback(async () => {
     try {
-      const response = await apiFetch('/eventos');
+      const response = await apiFetch("/eventos");
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
@@ -126,6 +217,13 @@ export default function GestionEventos() {
             lugar: evento.lugar,
             presupuesto_marketing: evento.presupuesto_marketing,
             estado: mapEstado(Number(evento.estado)),
+            link_drive: evento.link_drive,
+            contacto_1_nombre: evento.contacto_1_nombre,
+            contacto_1_email: evento.contacto_1_email,
+            contacto_1_telefono: evento.contacto_1_telefono,
+            contacto_2_nombre: evento.contacto_2_nombre,
+            contacto_2_email: evento.contacto_2_email,
+            contacto_2_telefono: evento.contacto_2_telefono,
           }));
           setEventos(eventosMapeados);
           setErrorGlobal(null);
@@ -135,7 +233,7 @@ export default function GestionEventos() {
       } else {
         setErrorGlobal("Error al obtener los eventos desde el servidor.");
       }
-    } catch (error) {
+    } catch (_error) {
       setErrorGlobal("Error de red: No se pudo conectar al servidor.");
     }
   }, []);
@@ -144,49 +242,54 @@ export default function GestionEventos() {
     fetchEventos();
   }, [fetchEventos]);
 
-  // --- LÓGICA DE FILTRADO Y PAGINACIÓN LOCAL ---
   const eventosFiltrados = useMemo(() => {
     let filtrados = eventos;
 
-    // 1. Filtrar por Estado
     if (estadoFiltro !== "Todos") {
       filtrados = filtrados.filter((e) => e.estado === estadoFiltro);
     }
 
-    // 2. Filtrar por Búsqueda (Texto)
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtrados = filtrados.filter((e) =>
-        e.nombre.toLowerCase().includes(term) ||
-        e.ciudad.toLowerCase().includes(term) ||
-        e.lugar.toLowerCase().includes(term) ||
-        String(e.id_evento).includes(term)
+        [
+          e.nombre,
+          e.ciudad,
+          e.lugar,
+          e.link_drive,
+          e.contacto_1_nombre,
+          e.contacto_1_email,
+          e.contacto_1_telefono,
+          e.contacto_2_nombre,
+          e.contacto_2_email,
+          e.contacto_2_telefono,
+          String(e.id_evento),
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(term))
       );
     }
 
-    // 3. Ordenar
     return filtrados.sort((a, b) => {
       const prioridadEstado: Record<EstadoEvento, number> = {
-        "Activo": 1,
+        Activo: 1,
         "En Proceso": 2,
-        "Finalizado": 3,
-        "Cancelado": 4,
+        Finalizado: 3,
+        Cancelado: 4,
       };
       if (prioridadEstado[a.estado] === prioridadEstado[b.estado]) {
-        return (b.id_evento || 0) - (a.id_evento || 0); // Los más nuevos primero
+        return (b.id_evento || 0) - (a.id_evento || 0);
       }
       return prioridadEstado[a.estado] - prioridadEstado[b.estado];
     });
   }, [eventos, estadoFiltro, searchTerm]);
 
-  // Cálculos de Paginación
   const totalPaginas = Math.ceil(eventosFiltrados.length / eventosPorPagina) || 1;
   const eventosPaginados = eventosFiltrados.slice(
     (paginaActual - 1) * eventosPorPagina,
     paginaActual * eventosPorPagina
   );
 
-  // Reiniciar a la página 1 si cambian los filtros
   useEffect(() => {
     setPaginaActual(1);
   }, [searchTerm, estadoFiltro, eventosPorPagina]);
@@ -194,10 +297,9 @@ export default function GestionEventos() {
   const handleEventosPorPaginaChange = (value: string) => {
     setEventosPorPagina(Number(value));
   };
-  // ----------------------------------------------
 
   const handleOpenModal = (evento?: Evento) => {
-    setSelectedEvento(evento || {
+    const eventoBase: Evento = evento || {
       id_evento: 0,
       nombre: "",
       fecha_inicio: "",
@@ -206,12 +308,23 @@ export default function GestionEventos() {
       lugar: "",
       presupuesto_marketing: 0,
       estado: "Activo",
-    });
-    setPresupuesto(new Intl.NumberFormat("es-CL").format(evento ? evento.presupuesto_marketing ?? 0 : 0));
+      link_drive: "",
+      contacto_1_nombre: "",
+      contacto_1_email: "",
+      contacto_1_telefono: "",
+      contacto_2_nombre: "",
+      contacto_2_email: "",
+      contacto_2_telefono: "",
+    };
+
+    setSelectedEvento(eventoBase);
+    reset(eventoBase);
+    setValue("estado", eventoBase.estado);
+    setPresupuesto(new Intl.NumberFormat("es-CL").format(eventoBase.presupuesto_marketing ?? 0));
     setErrorModal(null);
     setIsModalOpen(true);
   };
-  
+
   const handleOpenArchivosModal = (evento: Evento) => {
     setEventoParaArchivos(evento);
     setIsArchivosModalOpen(true);
@@ -232,6 +345,13 @@ export default function GestionEventos() {
       lugar: data.lugar,
       presupuesto_marketing: presupuestoNumerico,
       estado: reverseMapEstado(data.estado),
+      link_drive: emptyToNull(data.link_drive),
+      contacto_1_nombre: emptyToNull(data.contacto_1_nombre),
+      contacto_1_email: emptyToNull(data.contacto_1_email),
+      contacto_1_telefono: emptyToNull(data.contacto_1_telefono),
+      contacto_2_nombre: emptyToNull(data.contacto_2_nombre),
+      contacto_2_email: emptyToNull(data.contacto_2_email),
+      contacto_2_telefono: emptyToNull(data.contacto_2_telefono),
     };
 
     try {
@@ -246,25 +366,23 @@ export default function GestionEventos() {
         setIsModalOpen(false);
         toast.success(isEditing ? "Evento actualizado con éxito." : "Evento creado con éxito.");
         await fetchEventos();
+      } else if (result.errors && Array.isArray(result.errors)) {
+        result.errors.forEach((err: any) => toast.error(err.msg, { duration: 2500 }));
       } else {
-        if (result.errors && Array.isArray(result.errors)) {
-          result.errors.forEach((err: any) => toast.error(err.msg, { duration: 2500 }));
-        } else {
-          toast.error(result.error || "Ocurrió un error al guardar el evento.");
-        }
+        toast.error(result.error || "Ocurrió un error al guardar el evento.");
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error("Error de red al intentar guardar el evento.");
     }
   };
 
   const handleDeleteEvento = async () => {
     if (!eventoToDelete) return;
-  
+
     try {
       const response = await apiFetch(`/eventos/${eventoToDelete.id_evento}`, { method: "DELETE" });
       const result = await response.json();
-  
+
       if (response.ok && result.success) {
         toast.success("Evento eliminado con éxito.");
         setIsDeleteConfirmOpen(false);
@@ -273,7 +391,7 @@ export default function GestionEventos() {
       } else {
         toast.error(result.error || "Error al eliminar el evento.");
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error("Error de red al intentar eliminar el evento.");
     }
   };
@@ -281,8 +399,7 @@ export default function GestionEventos() {
   return (
     <MainLayout title="Gestión de Eventos">
       <div className="p-6">
-        {/* ENCABEZADO */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="mb-6 flex items-center justify-between">
           <h1 className="text-3xl font-bold">Gestión de Eventos</h1>
           <Button onClick={() => handleOpenModal()} className="flex items-center space-x-2">
             <Plus size={20} />
@@ -290,8 +407,7 @@ export default function GestionEventos() {
           </Button>
         </div>
 
-        {/* BARRA DE FILTROS SUPERIOR (ESTADOS) */}
-        <div className="flex flex-wrap gap-2 mb-4">
+        <div className="mb-4 flex flex-wrap gap-2">
           {["Todos", "Activo", "En Proceso", "Finalizado", "Cancelado"].map((estado) => (
             <Button
               key={estado}
@@ -305,30 +421,29 @@ export default function GestionEventos() {
           ))}
         </div>
 
-        {/* BARRA DE BÚSQUEDA Y CONTROLES (Estilo Contactos) */}
-        <div className="flex justify-between items-center mb-6 gap-4 bg-white p-3 rounded-md border shadow-sm flex-wrap">
-          <div className="flex items-center gap-3 w-full md:w-auto flex-1">
-            <div className="flex flex-1 items-center space-x-2 max-w-md">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-md border bg-white p-3 shadow-sm">
+          <div className="flex w-full flex-1 items-center gap-3 md:w-auto">
+            <div className="flex max-w-md flex-1 items-center space-x-2">
               <Input
-                placeholder="Buscar por nombre, ciudad o lugar..."
+                placeholder="Buscar por nombre, ciudad, lugar, drive o contactos..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full bg-slate-50"
               />
-              <Button variant="outline" size="icon"><Search size={18} /></Button>
+              <Button variant="outline" size="icon">
+                <Search size={18} />
+              </Button>
             </div>
-            
-            {/* Toggle Grid/List */}
+
             <div className="flex items-center space-x-1 rounded-md border bg-slate-100 p-1">
-              <Button variant={viewMode === 'grid' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleSetViewMode('grid')}>
+              <Button variant={viewMode === "grid" ? "secondary" : "ghost"} size="sm" onClick={() => handleSetViewMode("grid")}>
                 <LayoutGrid size={16} />
               </Button>
-              <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="sm" onClick={() => handleSetViewMode('list')}>
+              <Button variant={viewMode === "list" ? "secondary" : "ghost"} size="sm" onClick={() => handleSetViewMode("list")}>
                 <List size={16} />
               </Button>
             </div>
 
-            {/* Eventos por página */}
             <Select value={String(eventosPorPagina)} onValueChange={handleEventosPorPaginaChange}>
               <SelectTrigger className="w-[140px]">
                 <SelectValue placeholder="Por página" />
@@ -341,82 +456,106 @@ export default function GestionEventos() {
               </SelectContent>
             </Select>
           </div>
-          
+
           <div className="flex items-center space-x-2 text-sm">
-            <span className="text-gray-600 font-medium">Total filtrados:</span>
-            <span className="bg-blue-600 text-white font-bold px-3 py-1 rounded-md">
-              {eventosFiltrados.length}
-            </span>
+            <span className="font-medium text-gray-600">Total filtrados:</span>
+            <span className="rounded-md bg-blue-600 px-3 py-1 font-bold text-white">{eventosFiltrados.length}</span>
           </div>
         </div>
 
-        {/* MANEJO DE ERRORES */}
         {errorGlobal && (
-          <div className="bg-red-50 text-red-600 border border-red-200 p-4 rounded-md text-center mb-6 font-medium shadow-sm">
+          <div className="mb-6 rounded-md border border-red-200 bg-red-50 p-4 text-center font-medium text-red-600 shadow-sm">
             {errorGlobal}
           </div>
         )}
 
-        {/* ÁREA DE CONTENIDO */}
         {!errorGlobal && eventosFiltrados.length === 0 ? (
-           <div className="text-center py-16 bg-white rounded-lg border border-dashed border-slate-300">
-             <Calendar className="mx-auto h-12 w-12 text-slate-300 mb-3" />
-             <h3 className="text-lg font-medium text-slate-900">No se encontraron eventos</h3>
-             <p className="text-slate-500">Prueba cambiando los filtros de búsqueda o estado.</p>
-           </div>
+          <div className="rounded-lg border border-dashed border-slate-300 bg-white py-16 text-center">
+            <Calendar className="mx-auto mb-3 h-12 w-12 text-slate-300" />
+            <h3 className="text-lg font-medium text-slate-900">No se encontraron eventos</h3>
+            <p className="text-slate-500">Prueba cambiando los filtros de búsqueda o estado.</p>
+          </div>
         ) : (
           <>
-            {/* VISTA GRID (TARJETAS) */}
-            {viewMode === 'grid' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {viewMode === "grid" && (
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {eventosPaginados.map((evento) => (
-                  <Card key={evento.id_evento} className="shadow-sm hover:shadow-md transition-shadow border-slate-200">
-                    <CardHeader className="pb-3 bg-slate-50 border-b">
-                      <CardTitle className="flex justify-between items-start gap-2">
-                        <span className="text-lg font-bold text-slate-800 leading-tight">
-                          <span className="text-xs text-slate-400 block mb-1">ID: {evento.id_evento}</span>
+                  <Card key={evento.id_evento} className="border-slate-200 shadow-sm transition-shadow hover:shadow-md">
+                    <CardHeader className="border-b bg-slate-50 pb-3">
+                      <CardTitle className="flex items-start justify-between gap-2">
+                        <span className="text-lg font-bold leading-tight text-slate-800">
+                          <span className="mb-1 block text-xs text-slate-400">ID: {evento.id_evento}</span>
                           {evento.nombre}
                         </span>
                         <Badge className={getBadgeColor(evento.estado)}>{evento.estado}</Badge>
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-4">
-                      <div className="space-y-3 mb-5 text-sm">
+                      <div className="mb-5 space-y-3 text-sm">
                         <div className="flex items-center space-x-3 text-slate-600">
-                          <div className="bg-blue-100 p-1.5 rounded text-blue-700"><Calendar size={16} /></div>
+                          <div className="rounded bg-blue-100 p-1.5 text-blue-700">
+                            <Calendar size={16} />
+                          </div>
                           <span className="font-medium">
-                            {new Date(evento.fecha_inicio).toLocaleDateString("es-ES")} <span className="text-slate-400 mx-1">al</span> {new Date(evento.fecha_fin).toLocaleDateString("es-ES")}
+                            {new Date(evento.fecha_inicio).toLocaleDateString("es-ES")} <span className="mx-1 text-slate-400">al</span>{" "}
+                            {new Date(evento.fecha_fin).toLocaleDateString("es-ES")}
                           </span>
                         </div>
                         <div className="flex items-center space-x-3 text-slate-600">
-                          <div className="bg-amber-100 p-1.5 rounded text-amber-700"><MapPin size={16} /></div>
-                          <span className="font-medium">{evento.ciudad} <span className="text-slate-400">·</span> {evento.lugar}</span>
+                          <div className="rounded bg-amber-100 p-1.5 text-amber-700">
+                            <MapPin size={16} />
+                          </div>
+                          <span className="font-medium">
+                            {evento.ciudad} <span className="text-slate-400">·</span> {evento.lugar}
+                          </span>
                         </div>
+                        {evento.link_drive && (
+                          <div className="flex items-start space-x-3 text-slate-600">
+                            <div className="rounded bg-indigo-100 p-1.5 text-indigo-700">
+                              <ExternalLink size={16} />
+                            </div>
+                            <a
+                              href={evento.link_drive}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="break-all font-medium text-blue-600 underline"
+                            >
+                              Link Drive
+                            </a>
+                          </div>
+                        )}
                       </div>
-                      
+
                       <div className="flex flex-col gap-2">
                         <div className="grid grid-cols-2 gap-2">
                           <Button size="sm" variant="outline" className="w-full text-slate-700" onClick={() => handleOpenModal(evento)}>
                             <Edit className="mr-2 h-4 w-4" /> Editar
                           </Button>
-                          <Button size="sm" variant="secondary" className="w-full bg-blue-50 text-blue-700 hover:bg-blue-100" onClick={() => router.push(`/eventos/${evento.id_evento}/campanas`)}>
-                              <Megaphone className="mr-2 h-4 w-4" /> Campañas
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="w-full bg-blue-50 text-blue-700 hover:bg-blue-100"
+                            onClick={() => router.push(`/eventos/${evento.id_evento}/campanas`)}
+                          >
+                            <Megaphone className="mr-2 h-4 w-4" /> Campañas
                           </Button>
                         </div>
                         <div className="flex gap-2">
                           <Button size="sm" variant="outline" className="flex-1 text-slate-700" onClick={() => handleOpenArchivosModal(evento)}>
-                              <FolderArchive className="mr-2 h-4 w-4" /> Archivos
+                            <FolderArchive className="mr-2 h-4 w-4" /> Archivos
                           </Button>
-                          {/* Botón de Eliminar pequeño y cuadrado (size="icon") */}
-                          <Button 
-                            size="icon" 
-                            variant="outline" 
-                            className="shrink-0 text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200" 
-                            onClick={() => { setEventoToDelete(evento); setIsDeleteConfirmOpen(true); }} 
-                            disabled 
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            className="shrink-0 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                            onClick={() => {
+                              setEventoToDelete(evento);
+                              setIsDeleteConfirmOpen(true);
+                            }}
+                            disabled
                             title="Eliminar Evento"
                           >
-                              <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
@@ -426,9 +565,8 @@ export default function GestionEventos() {
               </div>
             )}
 
-            {/* VISTA LISTA (TABLA) */}
-            {viewMode === 'list' && (
-              <div className="rounded-md border bg-white shadow-sm overflow-hidden">
+            {viewMode === "list" && (
+              <div className="overflow-hidden rounded-md border bg-white shadow-sm">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-100 hover:bg-slate-100">
@@ -437,6 +575,7 @@ export default function GestionEventos() {
                       <TableHead className="font-bold">Estado</TableHead>
                       <TableHead className="font-bold">Fechas</TableHead>
                       <TableHead className="font-bold">Ubicación</TableHead>
+                      <TableHead className="font-bold">Drive / Contactos</TableHead>
                       <TableHead className="text-right font-bold">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -449,24 +588,59 @@ export default function GestionEventos() {
                           <Badge className={getBadgeColor(evento.estado)}>{evento.estado}</Badge>
                         </TableCell>
                         <TableCell className="text-slate-600">
-                           {new Date(evento.fecha_inicio).toLocaleDateString("es-ES")} - {new Date(evento.fecha_fin).toLocaleDateString("es-ES")}
+                          {new Date(evento.fecha_inicio).toLocaleDateString("es-ES")} - {new Date(evento.fecha_fin).toLocaleDateString("es-ES")}
                         </TableCell>
                         <TableCell className="text-slate-600">
                           {evento.ciudad}, {evento.lugar}
+                        </TableCell>
+                        <TableCell className="text-sm text-slate-600">
+                          <div className="space-y-1">
+                            {evento.link_drive ? (
+                              <a
+                                href={evento.link_drive}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block break-all text-blue-600 underline"
+                              >
+                                Link Drive
+                              </a>
+                            ) : (
+                              <span className="text-slate-400">Sin drive</span>
+                            )}
+                            <div className="text-xs text-slate-500">
+                              {[evento.contacto_1_nombre, evento.contacto_2_nombre].filter(Boolean).join(" · ") || "Sin contactos"}
+                            </div>
+                          </div>
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button size="icon" variant="outline" title="Editar Evento" onClick={() => handleOpenModal(evento)}>
                               <Edit className="h-4 w-4 text-slate-600" />
                             </Button>
-                            <Button size="icon" variant="secondary" title="Ir a Campañas" className="bg-blue-50 hover:bg-blue-100" onClick={() => router.push(`/eventos/${evento.id_evento}/campanas`)}>
-                                <Megaphone className="h-4 w-4 text-blue-700" />
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              title="Ir a Campañas"
+                              className="bg-blue-50 hover:bg-blue-100"
+                              onClick={() => router.push(`/eventos/${evento.id_evento}/campanas`)}
+                            >
+                              <Megaphone className="h-4 w-4 text-blue-700" />
                             </Button>
                             <Button size="icon" variant="outline" title="Gestionar Archivos" onClick={() => handleOpenArchivosModal(evento)}>
-                                <FolderArchive className="h-4 w-4 text-slate-600" />
+                              <FolderArchive className="h-4 w-4 text-slate-600" />
                             </Button>
-                            <Button size="icon" variant="outline" title="Eliminar Evento" className="text-red-500 hover:bg-red-50" onClick={() => { setEventoToDelete(evento); setIsDeleteConfirmOpen(true); }} disabled>
-                                <Trash2 className="h-4 w-4" />
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              title="Eliminar Evento"
+                              className="text-red-500 hover:bg-red-50"
+                              onClick={() => {
+                                setEventoToDelete(evento);
+                                setIsDeleteConfirmOpen(true);
+                              }}
+                              disabled
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </TableCell>
@@ -476,9 +650,8 @@ export default function GestionEventos() {
                 </Table>
               </div>
             )}
-            
-            {/* PAGINACIÓN INFERIOR */}
-            <div className="flex justify-center items-center space-x-4 mt-8">
+
+            <div className="mt-8 flex items-center justify-center space-x-4">
               <Button
                 variant="outline"
                 disabled={paginaActual === 1}
@@ -486,7 +659,7 @@ export default function GestionEventos() {
               >
                 <ChevronLeft size={20} className="mr-1" /> Anterior
               </Button>
-              <span className="text-sm font-medium text-slate-600 bg-white px-4 py-2 rounded-md border">
+              <span className="rounded-md border bg-white px-4 py-2 text-sm font-medium text-slate-600">
                 Página {paginaActual} de {totalPaginas}
               </span>
               <Button
@@ -500,98 +673,121 @@ export default function GestionEventos() {
           </>
         )}
 
-        {/* MODAL CREAR/EDITAR EVENTO */}
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <DialogContent className="sm:max-w-xl">
+          <DialogContent className="sm:max-w-3xl">
             <DialogHeader>
               <DialogTitle className="text-xl">{selectedEvento?.id_evento ? "Editar Evento" : "Crear Nuevo Evento"}</DialogTitle>
             </DialogHeader>
 
-            <form onSubmit={handleSubmit(handleSaveEvento)} className="space-y-4 mt-2">
-                {(errorModal || Object.keys(errors).length > 0) && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded-md text-sm">
-                    {errorModal && <p>{errorModal}</p>}
-                    {errors.nombre && <p>• {errors.nombre.message}</p>}
-                    {errors.fecha_inicio && <p>• {errors.fecha_inicio.message}</p>}
-                    {errors.fecha_fin && <p>• {errors.fecha_fin.message}</p>}
-                    {errors.ciudad && <p>• {errors.ciudad.message}</p>}
-                    {errors.lugar && <p>• {errors.lugar.message}</p>}
-                  </div>
-                )}
-                
+            <form onSubmit={handleSubmit(handleSaveEvento)} className="mt-2 space-y-4">
+              {(errorModal || Object.keys(errors).length > 0) && (
+                <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {errorModal && <p>{errorModal}</p>}
+                  {errors.nombre && <p>• {errors.nombre.message}</p>}
+                  {errors.fecha_inicio && <p>• {errors.fecha_inicio.message}</p>}
+                  {errors.fecha_fin && <p>• {errors.fecha_fin.message}</p>}
+                  {errors.ciudad && <p>• {errors.ciudad.message}</p>}
+                  {errors.lugar && <p>• {errors.lugar.message}</p>}
+                  {errors.link_drive && <p>• {errors.link_drive.message}</p>}
+                  {errors.contacto_1_email && <p>• {errors.contacto_1_email.message}</p>}
+                  {errors.contacto_2_email && <p>• {errors.contacto_2_email.message}</p>}
+                </div>
+              )}
+
               <div>
-                <label className="text-sm font-semibold text-slate-700 mb-1 block">Nombre del Evento</label>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Nombre del Evento</label>
                 <Input {...register("nombre")} placeholder="Ej. Congreso Anual de Tecnología" />
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-semibold text-slate-700 mb-1 block">Fecha de Inicio</label>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700">Fecha de Inicio</label>
                   <Input type="date" {...register("fecha_inicio")} />
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-slate-700 mb-1 block">Fecha de Fin</label>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700">Fecha de Fin</label>
                   <Input type="date" {...register("fecha_fin")} />
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-semibold text-slate-700 mb-1 block">Ciudad</label>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700">Ciudad</label>
                   <Input {...register("ciudad")} placeholder="Ej. Santiago" />
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-slate-700 mb-1 block">Lugar / Recinto</label>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700">Lugar / Recinto</label>
                   <Input {...register("lugar")} placeholder="Ej. Espacio Riesco" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-semibold text-slate-700 mb-1 block">Presupuesto MKT ($)</label>
-                  <Input
-                      type="text"
-                      value={presupuesto}
-                      onChange={handlePresupuestoChange}
-                      placeholder="0"
-                  />
+                  <label className="mb-1 block text-sm font-semibold text-slate-700">Presupuesto MKT ($)</label>
+                  <Input type="text" value={presupuesto} onChange={handlePresupuestoChange} placeholder="0" />
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-slate-700 mb-1 block">Estado</label>
+                  <label className="mb-1 block text-sm font-semibold text-slate-700">Estado</label>
                   <Select
-                      {...register("estado")}
-                      value={selectedEvento?.estado}
-                      onValueChange={(value) => setSelectedEvento((prev) => prev ? { ...prev, estado: value as EstadoEvento } : null)}
-                      disabled={!selectedEvento?.id_evento}
+                    value={selectedEvento?.estado}
+                    onValueChange={(value) => {
+                      setSelectedEvento((prev) => (prev ? { ...prev, estado: value as EstadoEvento } : null));
+                      setValue("estado", value as EstadoEvento, { shouldValidate: true, shouldDirty: true });
+                    }}
+                    disabled={!selectedEvento?.id_evento}
                   >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Selecciona un estado" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {estadosEvento.map((estado) => (
-                          <SelectItem key={estado} value={estado}>{estado}</SelectItem>
-                        ))}
-                      </SelectContent>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Selecciona un estado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {estadosEvento.map((estado) => (
+                        <SelectItem key={estado} value={estado}>
+                          {estado}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              <DialogFooter className="pt-4 border-t mt-6">
-                <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-                <Button type="submit" className="bg-blue-600 hover:bg-blue-700">Guardar Evento</Button>
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">Link Drive</label>
+                <Input {...register("link_drive")} placeholder="https://drive.google.com/..." />
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <h3 className="mb-3 font-semibold text-slate-800">Contacto 1</h3>
+                  <div className="space-y-3">
+                    <Input {...register("contacto_1_nombre")} placeholder="Nombre contacto 1" />
+                    <Input {...register("contacto_1_email")} placeholder="Correo contacto 1" />
+                    <Input {...register("contacto_1_telefono")} placeholder="Teléfono contacto 1" />
+                  </div>
+                </div>
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <h3 className="mb-3 font-semibold text-slate-800">Contacto 2</h3>
+                  <div className="space-y-3">
+                    <Input {...register("contacto_2_nombre")} placeholder="Nombre contacto 2" />
+                    <Input {...register("contacto_2_email")} placeholder="Correo contacto 2" />
+                    <Input {...register("contacto_2_telefono")} placeholder="Teléfono contacto 2" />
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter className="mt-6 border-t pt-4">
+                <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
+                  Guardar Evento
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>
         </Dialog>
-        
-        {/* MODAL DE ARCHIVOS */}
-        <GestionArchivosDialog 
-            isOpen={isArchivosModalOpen}
-            onClose={() => setIsArchivosModalOpen(false)}
-            evento={eventoParaArchivos}
-        />
 
-        {/* MODAL DE ELIMINACIÓN */}
+        <GestionArchivosDialog isOpen={isArchivosModalOpen} onClose={() => setIsArchivosModalOpen(false)} evento={eventoParaArchivos} />
+
         <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
           <DialogContent>
             <DialogHeader>
@@ -599,12 +795,16 @@ export default function GestionEventos() {
             </DialogHeader>
             <div className="py-4 text-slate-700">
               <p>¿Estás seguro de que deseas eliminar este evento y todo lo asociado a él?</p>
-              <p className="font-bold mt-2">{eventoToDelete?.nombre}</p>
-              <p className="text-sm text-red-500 mt-2 italic">Esta acción no se puede deshacer.</p>
+              <p className="mt-2 font-bold">{eventoToDelete?.nombre}</p>
+              <p className="mt-2 text-sm italic text-red-500">Esta acción no se puede deshacer.</p>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDeleteConfirmOpen(false)}>Cancelar</Button>
-              <Button variant="destructive" onClick={handleDeleteEvento}>Sí, Eliminar Evento</Button>
+              <Button variant="outline" onClick={() => setIsDeleteConfirmOpen(false)}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={handleDeleteEvento}>
+                Sí, Eliminar Evento
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

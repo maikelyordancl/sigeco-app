@@ -1,11 +1,20 @@
 const pool = require('../config/db');
 
-// Ajusta los nombres de columnas reales si difieren:
 const TABLE = 'usuarios';
-const FIELDS_PUBLIC = 'id_usuario, nombre, email'; // lo que expones al front
+const FIELDS_PUBLIC = 'id_usuario, nombre, email';
 
-exports.findAll = async () => {
-  const [rows] = await pool.query(`SELECT ${FIELDS_PUBLIC} FROM ${TABLE} ORDER BY id_usuario DESC`);
+exports.findAll = async (search = null) => {
+  let query = `SELECT ${FIELDS_PUBLIC} FROM ${TABLE}`;
+  const params = [];
+
+  if (search && String(search).trim()) {
+    query += ' WHERE nombre LIKE ? OR email LIKE ?';
+    params.push(`%${String(search).trim()}%`, `%${String(search).trim()}%`);
+  }
+
+  query += ' ORDER BY id_usuario DESC';
+
+  const [rows] = await pool.query(query, params);
   return rows;
 };
 
@@ -18,7 +27,7 @@ exports.findByEmail = async (email) => {
 };
 
 exports.create = async ({ nombre, email, password_hash }) => {
-  const [result] = await pool.query( 
+  const [result] = await pool.query(
     `INSERT INTO ${TABLE} (nombre, email, password) VALUES (?, ?, ?)`,
     [nombre, email, password_hash]
   );
@@ -41,10 +50,6 @@ exports.deleteById = async (id) => {
   return result;
 };
 
-/**
- * Actualiza solo la contraseña de un usuario por su ID.
- * La columna en la BD se llama 'password' pero almacena el hash.
- */
 exports.updatePasswordById = async (id, password_hash) => {
   const [result] = await pool.query(
     `UPDATE ${TABLE} SET password = ? WHERE id_usuario = ?`,

@@ -27,8 +27,13 @@ exports.createRole = async (req, res) => {
   if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
 
   try {
+    const existing = await rolesModel.findByName(req.body.name);
+    if (existing) {
+      return res.json({ success: true, data: existing, message: 'El rol ya existía.' });
+    }
+
     const nuevo = await rolesModel.create(req.body.name);
-    res.status(201).json({ success: true, data: nuevo });
+    res.status(201).json({ success: true, data: nuevo, message: 'Rol creado correctamente.' });
   } catch (e) {
     console.error('createRole', e);
     res.status(500).json({ success: false, error: 'Error al crear rol.' });

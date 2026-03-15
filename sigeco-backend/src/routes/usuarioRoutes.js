@@ -6,23 +6,11 @@ const { verificarToken } = require('../controllers/authController');
 const authorize = require('../middleware/authorize');
 const usuarioController = require('../controllers/usuarioController');
 
-// Autenticación
 router.use(verificarToken);
-
-// Solo SUPER ADMIN (o módulo permisos)
 router.use(authorize('permisos', 'update'));
 
-/**
- * GET /api/usuarios
- * Lista todos los usuarios
- */
 router.get('/', usuarioController.getUsuarios);
 
-/**
- * POST /api/usuarios
- * Crear usuario
- * body: { nombre, email, password, role_id? }
- */
 router.post(
   '/',
   [
@@ -34,11 +22,6 @@ router.post(
   usuarioController.createUsuario
 );
 
-/**
- * PUT /api/usuarios/:id
- * Actualizar datos básicos (no password)
- * body: { nombre, email }
- */
 router.put(
   '/:id',
   [
@@ -49,30 +32,19 @@ router.put(
   usuarioController.updateUsuario
 );
 
-/**
- * PUT /api/usuarios/:id/password
- * Actualizar solo la contraseña
- * body: { password }
- */
 router.put(
   '/:id/password',
   [
     param('id').isInt({ gt: 0 }).withMessage('ID de usuario inválido.'),
     body('password').isLength({ min: 6 }).withMessage('Password mínimo 6 caracteres.')
   ],
-  usuarioController.updatePassword // Usamos el nuevo controlador
+  usuarioController.updatePassword
 );
 
-/**
- * DELETE /api/usuarios/:id
- * Eliminar usuario
- */
 router.delete(
   '/:id',
   [param('id').isInt({ gt: 0 }).withMessage('ID de usuario inválido.')],
   usuarioController.deleteUsuario
 );
-
-router.get('/', usuarioController.getAllUsers); 
 
 module.exports = router;

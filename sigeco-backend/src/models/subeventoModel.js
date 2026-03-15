@@ -1,27 +1,43 @@
 const pool = require('../config/db');
 
-// Modelo para encontrar todos los subeventos de un evento específico
 exports.findByEventId = async (id_evento) => {
     const [rows] = await pool.query('SELECT * FROM subeventos WHERE id_evento = ? ORDER BY fecha_inicio ASC', [id_evento]);
     return rows;
 };
 
-// Modelo para encontrar un subevento por su ID
 exports.findById = async (id_subevento) => {
     const [rows] = await pool.query('SELECT * FROM subeventos WHERE id_subevento = ?', [id_subevento]);
     return rows[0] || null;
 };
 
-// Modelo para crear un nuevo subevento
 exports.create = async (subeventoData) => {
     const {
-        id_evento, nombre, fecha_inicio, fecha_fin, ciudad, lugar,
-        link_adicional, texto_libre, nombre_evento_mailing, fecha_hora_mailing,
-        asunto_mailing, remitente_mailing, ruta_texto_mailing, ruta_imagen_mailing,
-        ruta_formulario, sitio_web, obligatorio_registro, obligatorio_pago
+        id_evento,
+        nombre,
+        fecha_inicio,
+        fecha_fin,
+        ciudad,
+        lugar,
+        link_adicional,
+        texto_libre,
+        nombre_evento_mailing,
+        fecha_hora_mailing,
+        asunto_mailing,
+        remitente_mailing,
+        ruta_texto_mailing,
+        ruta_imagen_mailing,
+        ruta_formulario,
+        sitio_web,
+        contacto_1_nombre = null,
+        contacto_1_email = null,
+        contacto_1_telefono = null,
+        contacto_2_nombre = null,
+        contacto_2_email = null,
+        contacto_2_telefono = null,
+        obligatorio_registro,
+        obligatorio_pago
     } = subeventoData;
 
-    // 👇 evita el '' que rompe MySQL
     const fechaMailingParaDB = fecha_hora_mailing && fecha_hora_mailing.trim() !== ''
         ? fecha_hora_mailing
         : null;
@@ -31,30 +47,69 @@ exports.create = async (subeventoData) => {
             id_evento, nombre, fecha_inicio, fecha_fin, ciudad, lugar, link_adicional,
             texto_libre, nombre_evento_mailing, fecha_hora_mailing, asunto_mailing,
             remitente_mailing, ruta_texto_mailing, ruta_imagen_mailing, ruta_formulario,
-            sitio_web, obligatorio_registro, obligatorio_pago
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            sitio_web, contacto_1_nombre, contacto_1_email, contacto_1_telefono,
+            contacto_2_nombre, contacto_2_email, contacto_2_telefono,
+            obligatorio_registro, obligatorio_pago
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const [result] = await pool.query(query, [
-        id_evento, nombre, fecha_inicio, fecha_fin, ciudad, lugar, link_adicional,
-        texto_libre, nombre_evento_mailing, fechaMailingParaDB, asunto_mailing,
-        remitente_mailing, ruta_texto_mailing, ruta_imagen_mailing, ruta_formulario,
-        sitio_web, obligatorio_registro, obligatorio_pago
+        id_evento,
+        nombre,
+        fecha_inicio,
+        fecha_fin,
+        ciudad,
+        lugar,
+        link_adicional,
+        texto_libre,
+        nombre_evento_mailing,
+        fechaMailingParaDB,
+        asunto_mailing,
+        remitente_mailing,
+        ruta_texto_mailing,
+        ruta_imagen_mailing,
+        ruta_formulario,
+        sitio_web,
+        contacto_1_nombre,
+        contacto_1_email,
+        contacto_1_telefono,
+        contacto_2_nombre,
+        contacto_2_email,
+        contacto_2_telefono,
+        obligatorio_registro,
+        obligatorio_pago
     ]);
 
     return { id_subevento: result.insertId, ...subeventoData };
 };
 
-// Modelo para actualizar un subevento
 exports.updateById = async (id, subeventoData) => {
     const {
-        nombre, fecha_inicio, fecha_fin, ciudad, lugar, link_adicional,
-        texto_libre, nombre_evento_mailing, fecha_hora_mailing, asunto_mailing,
-        remitente_mailing, ruta_texto_mailing, ruta_imagen_mailing, ruta_formulario,
-        sitio_web, obligatorio_registro, obligatorio_pago
+        nombre,
+        fecha_inicio,
+        fecha_fin,
+        ciudad,
+        lugar,
+        link_adicional,
+        texto_libre,
+        nombre_evento_mailing,
+        fecha_hora_mailing,
+        asunto_mailing,
+        remitente_mailing,
+        ruta_texto_mailing,
+        ruta_imagen_mailing,
+        ruta_formulario,
+        sitio_web,
+        contacto_1_nombre = null,
+        contacto_1_email = null,
+        contacto_1_telefono = null,
+        contacto_2_nombre = null,
+        contacto_2_email = null,
+        contacto_2_telefono = null,
+        obligatorio_registro,
+        obligatorio_pago
     } = subeventoData;
 
-    // 👇 evita el '' que rompe MySQL
     const fechaMailingParaDB = fecha_hora_mailing && fecha_hora_mailing.trim() !== ''
         ? fecha_hora_mailing
         : null;
@@ -65,26 +120,47 @@ exports.updateById = async (id, subeventoData) => {
             link_adicional = ?, texto_libre = ?, nombre_evento_mailing = ?,
             fecha_hora_mailing = ?, asunto_mailing = ?, remitente_mailing = ?,
             ruta_texto_mailing = ?, ruta_imagen_mailing = ?, ruta_formulario = ?,
-            sitio_web = ?, obligatorio_registro = ?, obligatorio_pago = ?
+            sitio_web = ?, contacto_1_nombre = ?, contacto_1_email = ?, contacto_1_telefono = ?,
+            contacto_2_nombre = ?, contacto_2_email = ?, contacto_2_telefono = ?,
+            obligatorio_registro = ?, obligatorio_pago = ?
         WHERE id_subevento = ?
     `;
 
     const [result] = await pool.query(query, [
-        nombre, fecha_inicio, fecha_fin, ciudad, lugar, link_adicional,
-        texto_libre, nombre_evento_mailing, fechaMailingParaDB, asunto_mailing,
-        remitente_mailing, ruta_texto_mailing, ruta_imagen_mailing, ruta_formulario,
-        sitio_web, obligatorio_registro, obligatorio_pago, id
+        nombre,
+        fecha_inicio,
+        fecha_fin,
+        ciudad,
+        lugar,
+        link_adicional,
+        texto_libre,
+        nombre_evento_mailing,
+        fechaMailingParaDB,
+        asunto_mailing,
+        remitente_mailing,
+        ruta_texto_mailing,
+        ruta_imagen_mailing,
+        ruta_formulario,
+        sitio_web,
+        contacto_1_nombre,
+        contacto_1_email,
+        contacto_1_telefono,
+        contacto_2_nombre,
+        contacto_2_email,
+        contacto_2_telefono,
+        obligatorio_registro,
+        obligatorio_pago,
+        id
     ]);
 
     return result;
 };
-// Modelo para eliminar un subevento por su ID
+
 exports.deleteById = async (id) => {
     const [result] = await pool.query('DELETE FROM subeventos WHERE id_subevento = ?', [id]);
     return result;
 };
 
-// Modelo para encontrar subeventos sin campaña asociada
 exports.findSubeventosSinCampana = async (id_evento) => {
     const query = `
         SELECT s.id_subevento, s.nombre

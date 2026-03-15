@@ -25,6 +25,7 @@ import {
 import { ArrowLeft, Copy, ExternalLink, Ticket } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { apiFetch } from "@/lib/api";
+import { formatCLPCurrency, parseMoneyLikeValue } from "@/lib/money";
 
 type EstadoPago =
   | "No Aplica"
@@ -187,19 +188,9 @@ export default function TesoreriaCampanaPage() {
 
   const columnsStorageKey = `tesoreria-columns-${id_campana}`;
 
-  const toNumber = (value: number | string | null | undefined) => {
-    const num = Number(value ?? 0);
-    return Number.isFinite(num) ? num : 0;
-  };
+  const toNumber = (value: number | string | null | undefined) => parseMoneyLikeValue(value);
 
-  const formatMoney = (value: number | string | null | undefined) => {
-    const num = toNumber(value);
-    return new Intl.NumberFormat("es-CL", {
-      style: "currency",
-      currency: "CLP",
-      maximumFractionDigits: 0,
-    }).format(num);
-  };
+  const formatMoney = (value: number | string | null | undefined) => formatCLPCurrency(value);
 
   const formatDate = (value: string | null | undefined) => {
     if (!value) return "-";

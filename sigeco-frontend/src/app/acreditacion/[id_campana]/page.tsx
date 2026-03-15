@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast, type Toast } from "react-hot-toast";
 import { ArrowLeft, PlusCircle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { formatCLPCurrency, parseMoneyLikeValue } from "@/lib/money";
 
 import AcreditacionContainer from "./components/AcreditacionContainer";
 import { Asistente, CampoFormulario, TipoCampo } from "./types";
@@ -106,24 +107,11 @@ function isPagadoValue(value: any): boolean {
 }
 
 function normalizeMoneyNumber(value: any): number {
-  if (value === null || typeof value === "undefined" || value === "") return 0;
-
-  const parsed =
-    typeof value === "number"
-      ? value
-      : Number(String(value).replace(/\./g, "").replace(",", "."));
-
-  return Number.isFinite(parsed) ? parsed : 0;
+  return parseMoneyLikeValue(value);
 }
 
 function formatCurrencyCLP(value: any): string {
-  const num = normalizeMoneyNumber(value);
-
-  return new Intl.NumberFormat("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0,
-  }).format(num);
+  return formatCLPCurrency(value);
 }
 
 function deriveMontoPagadoActual(asistente: any): number {

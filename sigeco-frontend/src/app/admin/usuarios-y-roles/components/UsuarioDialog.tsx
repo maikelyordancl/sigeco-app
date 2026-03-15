@@ -4,10 +4,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-// 1. Importar componentes de Select
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState, useEffect } from "react";
-// 2. Importar getRoles
 import { createUsuario, updateUsuario, getRoles } from "@/lib/api";
 import { toast } from "react-hot-toast";
 
@@ -17,9 +15,8 @@ interface Usuario {
   email: string;
 }
 
-// 3. Definir tipo para los roles
 interface Role {
-  id_role: number;
+  id: number;
   name: string;
 }
 
@@ -30,64 +27,81 @@ interface Props {
   onSuccess: () => void;
 }
 
+const ROLE_NONE = "__none__";
+
 export function UsuarioDialog({ isOpen, setIsOpen, user, onSuccess }: Props) {
-  const [nombre, setNombre] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [nombre, setNombre] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  
-  // 4. Estados para los roles
   const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
-  const [selectedRole, setSelectedRole] = useState<string | undefined>(undefined);
+  const [selectedRole, setSelectedRole] = useState<string>(ROLE_NONE);
 
   useEffect(() => {
+    const fetchRoles = async () => {
+      try {
+        const res = await getRoles();
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "No se pudieron cargar los roles.");
+        }
+        setAvailableRoles(data.data);
+      } catch (e: any) {
+        toast.error(e.message || "No se pudieron cargar los roles.");
+      }
+    };
+
     if (user) {
-      // Editando
       setNombre(user.nombre);
       setEmail(user.email);
-      setPassword('');
-      setSelectedRole(undefined); // La gestión de roles se hace en el otro diálogo
+      setPassword("");
+      setSelectedRole(ROLE_NONE);
     } else {
-      // Creando
-      setNombre('');
-      setEmail('');
-      setPassword('');
-      setSelectedRole(undefined);
-      
-      // 5. Cargar roles disponibles al abrir para crear
-      const fetchRoles = async () => {
-        if (isOpen) {
-          try {
-            const res = await getRoles();
-            const data = await res.json();
-            if (data.success) {
-              setAvailableRoles(data.data);
-            }
-          } catch (e) {
-            toast.error("No se pudieron cargar los roles.");
-          }
-        }
-      };
-      fetchRoles();
+      setNombre("");
+      setEmail("");
+      setPassword("");
+      setSelectedRole(ROLE_NONE);
+      if (isOpen) {
+        fetchRoles();
+      }
     }
   }, [user, isOpen]);
 
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      if (user) { // Editando
-        await updateUsuario(user.id_usuario, { nombre, email });
+      if (user) {
+        const response = await updateUsuario(user.id_usuario, { nombre, email });
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || "No se pudo actualizar el usuario.");
+        }
+
         toast.success("Usuario actualizado con éxito.");
-      } else { // Creando
-        // 6. Añadir role_id (opcional) a la data
-        const role_id = selectedRole ? parseInt(selectedRole, 10) : undefined;
-        await createUsuario({ nombre, email, password, role_id });
+      } else {
+        const role_id = selectedRole !== ROLE_NONE ? parseInt(selectedRole, 10) : undefined;
+        const payload = {
+          nombre,
+          email,
+          password,
+          ...(role_id ? { role_id } : {}),
+        };
+
+        const response = await createUsuario(payload);
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || "No se pudo crear el usuario.");
+        }
+
         toast.success("Usuario creado con éxito.");
       }
+
       onSuccess();
       setIsOpen(false);
-    } catch (error) {
-      toast.error(`No se pudo ${user ? 'actualizar' : 'crear'} el usuario.`);
+    } catch (error: any) {
+      toast.error(error.message || `No se pudo ${user ? "actualizar" : "crear"} el usuario.`);
     } finally {
       setLoading(false);
     }
@@ -108,16 +122,14 @@ export function UsuarioDialog({ isOpen, setIsOpen, user, onSuccess }: Props) {
             <Label htmlFor="email">Email</Label>
             <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
-          
-          {/* 7. Mostrar campos solo al crear */}
+
           {!user && (
             <>
               <div className="space-y-2">
                 <Label htmlFor="password">Contraseña</Label>
                 <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
               </div>
-              
-              {/* 8. Selector de Rol */}
+
               <div className="space-y-2">
                 <Label htmlFor="role">Rol Inicial (Opcional)</Label>
                 <Select value={selectedRole} onValueChange={setSelectedRole}>
@@ -125,11 +137,9 @@ export function UsuarioDialog({ isOpen, setIsOpen, user, onSuccess }: Props) {
                     <SelectValue placeholder="Sin rol inicial" />
                   </SelectTrigger>
                   <SelectContent>
-                    {/* Opción para "ninguno" */}
-                    <SelectItem value="undefined">Sin rol inicial</SelectItem>
-                    
+                    <SelectItem value={ROLE_NONE}>Sin rol inicial</SelectItem>
                     {availableRoles.map((role) => (
-                      <SelectItem key={role.id_role} value={String(role.id_role)}>
+                      <SelectItem key={role.id} value={String(role.id)}>
                         {role.name}
                       </SelectItem>
                     ))}
@@ -140,8 +150,12 @@ export function UsuarioDialog({ isOpen, setIsOpen, user, onSuccess }: Props) {
           )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => setIsOpen(false)}>Cancelar</Button>
-          <Button onClick={handleSubmit} disabled={loading}>{loading ? 'Guardando...' : 'Guardar'}</Button>
+          <Button variant="outline" onClick={() => setIsOpen(false)}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSubmit} disabled={loading}>
+            {loading ? "Guardando..." : "Guardar"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

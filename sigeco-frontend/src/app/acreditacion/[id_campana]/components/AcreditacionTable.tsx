@@ -9,6 +9,7 @@ import {
   Clock3,
 } from "lucide-react";
 import { useMemo } from "react";
+import { formatCLPCurrency } from "@/lib/money";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -257,20 +258,7 @@ export function AcreditacionTable({
     });
   };
 
-  const formatCurrencyCLP = (value: any) => {
-    const numeric =
-      typeof value === "number"
-        ? value
-        : Number(String(value ?? "0").replace(/\./g, "").replace(",", "."));
-
-    const amount = Number.isFinite(numeric) ? numeric : 0;
-
-    return new Intl.NumberFormat("es-CL", {
-      style: "currency",
-      currency: "CLP",
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  const formatCurrencyCLP = (value: any) => formatCLPCurrency(value);
 
   const resolveFechaCreacionContacto = (asistente: Asistente) => {
     const raw: any = asistente;
