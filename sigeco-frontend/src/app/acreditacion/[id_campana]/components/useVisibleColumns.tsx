@@ -7,7 +7,7 @@ export const useVisibleColumns = (
   camposFormulario: CampoFormulario[],
   idCampana: string
 ) => {
-  const storageKey = `visibleColumns_${idCampana}`;
+  const storageKey = `visibleColumns_${idCampana}_v2`;
 
   // NUNCA se pueden ocultar
   const unhideableColumns = ["nombre", "email", "nivel", "estado_acreditacion"];
@@ -20,7 +20,7 @@ export const useVisibleColumns = (
     "estado_acreditacion",
     "estado_pago",
     "monto_pagado_actual",
-    "fecha_creacion_contacto",
+    "fecha_acreditacion",
   ];
 
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {

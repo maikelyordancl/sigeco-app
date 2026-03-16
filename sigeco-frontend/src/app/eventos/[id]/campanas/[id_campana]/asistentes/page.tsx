@@ -7,7 +7,6 @@ import { AsistenteDetalleSheet } from "./AsistenteDetalleSheet";
 import { apiFetch } from "@/lib/api";
 import { Asistente, CampoFormulario, EstadoAsistencia } from "./types";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft } from "lucide-react";
 import toast from "react-hot-toast";
 import MainLayout from "@/components/Layout/MainLayout";
@@ -209,24 +208,6 @@ export default function AsistentesPage() {
           </Button>
         </div>
 
-        {campanaInfo?.obligatorio_pago && (
-          <Card className="mb-4 border-emerald-200 bg-emerald-50">
-            <CardContent className="py-4">
-              <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <p className="text-sm font-medium text-emerald-800">Acumulado visible en la lista</p>
-                  <p className="text-2xl font-bold text-emerald-900">
-                    {formatCurrency(montoAcumuladoVisible)}
-                  </p>
-                </div>
-                <div className="text-sm text-emerald-700">
-                  Calculado con los asistentes cargados en la vista actual y sus pagos registrados.
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         <AsistentesTable
           data={asistentes}
           onEdit={handleEditAsistente}
@@ -250,6 +231,7 @@ export default function AsistentesPage() {
           onEstadoFiltroChange={setEstadoFiltro}
           isRefreshing={isRefreshing}
           esCampanaDePago={!!campanaInfo?.obligatorio_pago}
+          resumenPagoVisible={campanaInfo?.obligatorio_pago ? `Valor acumulado visible: ${formatCurrency(montoAcumuladoVisible)}` : undefined}
         />
 
         {selectedAsistente && campanaInfo && (

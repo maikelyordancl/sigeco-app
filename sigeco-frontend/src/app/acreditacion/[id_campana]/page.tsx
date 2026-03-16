@@ -470,56 +470,39 @@ export default function AcreditarCampanaPage() {
         </div>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-2">
             <CardTitle>Panel de Control</CardTitle>
           </CardHeader>
 
-          <CardContent className="flex flex-col lg:flex-row gap-4">
-            <div
-              className="grid gap-4 flex-1"
-              style={{
-                gridTemplateColumns: campanaInfo?.obligatorio_pago
-                  ? "repeat(5, minmax(0, 1fr))"
-                  : "repeat(3, minmax(0, 1fr))",
-              }}
-            >
-              <div className="p-4 border rounded-lg text-center">
-                <p className="text-sm text-gray-500">Total</p>
-                <p className="text-2xl font-bold">{stats.total}</p>
+          <CardContent className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="rounded-md border px-3 py-2 text-sm font-medium">
+                Total: <span className="font-bold">{stats.total}</span>
               </div>
 
-              <div className="p-4 border rounded-lg text-center">
-                <p className="text-sm text-gray-500">Acreditados</p>
-                <p className="text-2xl font-bold text-green-600">{stats.acreditados}</p>
+              <div className="rounded-md border px-3 py-2 text-sm font-medium text-green-700">
+                Acreditados: <span className="font-bold">{stats.acreditados}</span>
               </div>
 
-              <div className="p-4 border rounded-lg text-center">
-                <p className="text-sm text-gray-500">Pendientes</p>
-                <p className="text-2xl font-bold text-gray-600">{stats.pendientes}</p>
+              <div className="rounded-md border px-3 py-2 text-sm font-medium text-gray-700">
+                Pendientes: <span className="font-bold">{stats.pendientes}</span>
               </div>
 
               {campanaInfo?.obligatorio_pago && (
-                <>
-                  <div className="p-4 border rounded-lg text-center">
-                    <p className="text-sm text-gray-500">Pagados</p>
-                    <p className="text-2xl font-bold text-emerald-600">{stats.pagados}</p>
-                  </div>
-
-                  
-                </>
+                <div className="rounded-md border px-3 py-2 text-sm font-medium text-emerald-700">
+                  Pagados: <span className="font-bold">{stats.pagados}</span>
+                </div>
               )}
             </div>
 
-            <div className="flex flex-col flex-1 gap-2">
-              <div className="flex gap-2">
-                <Button
-                  onClick={() => setIsModalOpen(true)}
-                  className="bg-blue-600 hover:bg-blue-700 w-full"
-                  disabled={!campanaInfo}
-                >
-                  <PlusCircle className="mr-2 h-4 w-4" /> Registrar en Puerta
-                </Button>
-              </div>
+            <div className="flex w-full gap-2 lg:w-auto">
+              <Button
+                onClick={() => setIsModalOpen(true)}
+                className="bg-blue-600 hover:bg-blue-700 w-full lg:w-auto"
+                disabled={!campanaInfo}
+              >
+                <PlusCircle className="mr-2 h-4 w-4" /> Registrar en Puerta
+              </Button>
             </div>
           </CardContent>
         </Card>

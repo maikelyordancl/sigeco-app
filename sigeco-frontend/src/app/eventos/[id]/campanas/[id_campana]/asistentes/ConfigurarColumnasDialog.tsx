@@ -18,6 +18,27 @@ interface Props {
 
 const capitalizar = (texto: string) => texto.charAt(0).toUpperCase() + texto.slice(1);
 
+const columnasOcultasSiempre = new Set(["monto_pagado_manual", "estado_transaccion", "monto_pagado_actual"]);
+
+const getColumnLabel = (columna: string, campoEtiquetaMap: Map<string, string>) => {
+    const fixedLabels: Record<string, string> = {
+        monto: "Valor",
+        tipo_entrada: "Tipo de ticket",
+        estado_pago: "Estado pago",
+    };
+
+    if (fixedLabels[columna]) {
+        return fixedLabels[columna];
+    }
+
+    const fromForm = campoEtiquetaMap.get(columna);
+    if (fromForm) {
+        return fromForm.replace(/\bmonto\b/gi, "Valor");
+    }
+
+    return capitalizar(columna.replace(/_/g, ' ').replace(/\bmonto\b/gi, 'valor'));
+};
+
 const ConfigurarColumnasDialog = ({ isOpen, onClose, columnasDisponibles, columnasSeleccionadas, onGuardarColumnas, camposFormulario }: Props) => {
     const [selection, setSelection] = useState<string[]>(columnasSeleccionadas);
 
@@ -51,7 +72,7 @@ const ConfigurarColumnasDialog = ({ isOpen, onClose, columnasDisponibles, column
                 </DialogHeader>
                 <div className="flex-grow overflow-y-auto space-y-3 pr-4">
                     <p className="text-sm text-gray-600">Selecciona los campos que deseas ver en la tabla.</p>
-                    {columnasDisponibles.map(columna => (
+                    {columnasDisponibles.filter(columna => !columnasOcultasSiempre.has(columna)).map(columna => (
                         <div key={columna} className="flex items-center space-x-2">
                             <Checkbox
                                 id={`col-${columna}`}
@@ -59,10 +80,7 @@ const ConfigurarColumnasDialog = ({ isOpen, onClose, columnasDisponibles, column
                                 onCheckedChange={() => handleToggle(columna)}
                             />
                             <Label htmlFor={`col-${columna}`} className="cursor-pointer">
-                                {
-                                    campoEtiquetaMap.get(columna)
-                                    || capitalizar(columna.replace(/_/g, ' '))
-                                }
+                                {getColumnLabel(columna, campoEtiquetaMap)}
                             </Label>
                         </div>
                     ))}

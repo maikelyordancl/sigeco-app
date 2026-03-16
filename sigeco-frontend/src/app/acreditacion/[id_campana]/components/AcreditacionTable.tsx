@@ -56,7 +56,22 @@ export function AcreditacionTable({
       if (!base.includes(col)) base.push(col);
     });
 
-    return base
+    const preferredOrder = [
+      "nombre",
+      "email",
+      "nivel",
+      "estado_acreditacion",
+      "estado_pago",
+      "monto_pagado_actual",
+      "fecha_acreditacion",
+    ];
+
+    const orderedNames = [
+      ...preferredOrder.filter((col) => base.includes(col)),
+      ...base.filter((col) => !preferredOrder.includes(col)),
+    ];
+
+    return orderedNames
       .map((nombre_interno) => camposMap.get(nombre_interno))
       .filter((campo): campo is CampoFormulario => campo !== undefined);
   }, [visibleColumns, camposMap]);
@@ -249,13 +264,17 @@ export function AcreditacionTable({
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return "-";
 
-    return d.toLocaleString("es-CL", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return d
+      .toLocaleString("es-CL", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      })
+      .replace(/a\.\s*m\./gi, "am")
+      .replace(/p\.\s*m\./gi, "pm");
   };
 
   const formatCurrencyCLP = (value: any) => formatCLPCurrency(value);
